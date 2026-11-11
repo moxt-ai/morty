@@ -15,7 +15,7 @@ export default defineConfig({
     testMatch: ["*.e2e.test.ts", "*.browser-contract.test.ts"],
     globalSetup: "./infra/global-setup.ts",
     fullyParallel: true,
-    // Each journey starts two Wrangler Workers and a local Runtime.
+    // Each journey starts two Wrangler Workers and a local Computer.
     workers: 1,
     // A journey fails on its first failure: a retry would turn an intermittent defect into a green run.
     retries: 0,

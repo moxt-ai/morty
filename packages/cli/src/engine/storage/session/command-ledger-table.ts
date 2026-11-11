@@ -11,7 +11,7 @@ const OUTCOMES_PER_SESSION = 1_024;
 /**
  * What became of a command. A settled command's outcome is the content-free terminal event it recorded, or null once
  * retention dropped it; a command that settled before it started without being cancelled is forgotten with its outcome.
- * `interrupted-before-start`: a Runtime restart settled the command before it started.
+ * `interrupted-before-start`: a Computer restart settled the command before it started.
  */
 export type CommandFate =
     | { readonly kind: "pending" }
@@ -143,7 +143,7 @@ export class CommandLedgerTable {
     };
 
     /**
-     * Admits again, after every other, a command a Runtime restart interrupted before it started, replacing that
+     * Admits again, after every other, a command a Computer restart interrupted before it started, replacing that
      * admission and its outcome. Fails when the identifier holds no such admission.
      */
     readonly readmitInterrupted = (identity: CommandIdentity): void => {

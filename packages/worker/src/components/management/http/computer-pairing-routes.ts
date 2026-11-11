@@ -11,7 +11,7 @@ import type { ManagementHttpEnvironment } from "./management-http-environment.ts
 
 const pairingInput = v.strictObject({ idempotencyKey: relayIdentifier });
 
-export function createRuntimePairingRoutes() {
+export function createComputerPairingRoutes() {
     return new Hono<ManagementHttpEnvironment>()
         .use("/pairing", async (context, next) => {
             context.header("Cache-Control", "no-store");
@@ -25,14 +25,14 @@ export function createRuntimePairingRoutes() {
                     throw new ManagementError("INVALID_REQUEST", "The request is too large.", 413);
                 },
             }),
-            localSession("pairRuntime"),
+            localSession("pairComputer"),
             bodyParser<ManagementHttpEnvironment, typeof pairingInput>(pairingInput),
             async (context) => {
                 const session = context.get("session");
                 using deadline = new RequestDeadline(context.req.raw.signal, 15000);
                 const signal = deadline.signal;
                 const input = context.req.valid("json");
-                const pairing = await context.env.services.management.createRuntimePairing(
+                const pairing = await context.env.services.management.createComputerPairing(
                     session.userId,
                     input.idempotencyKey,
                     signal,
@@ -45,6 +45,6 @@ export function createRuntimePairingRoutes() {
             const session = context.get("session");
             using deadline = new RequestDeadline(context.req.raw.signal, 15000);
             const signal = deadline.signal;
-            return json(await context.env.services.management.readRuntimePairing(session.userId, signal));
+            return json(await context.env.services.management.readComputerPairing(session.userId, signal));
         });
 }

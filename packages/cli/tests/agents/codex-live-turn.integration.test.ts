@@ -5,6 +5,9 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
+    COMPUTER_HEARTBEAT_ACK_MESSAGE,
+    COMPUTER_HEARTBEAT_MESSAGE,
+    COMPUTER_LIVENESS_READY_KIND,
     decodeContentChunkFrame,
     decodeMessageKind,
     decodeNativeSessionResult,
@@ -13,9 +16,9 @@ import {
     decodeSessionOperationFailedEvent,
     decodeSessionPromptCommand,
     decodeSessionReadyEvent,
+    encodeComputerLivenessReadyEvent,
     encodeFileReadCommand,
     encodeNativeSessionCommand,
-    encodeRuntimeLivenessReadyEvent,
     encodeSessionCancelCommand,
     encodeSessionCreateCommand,
     encodeSessionHistoryPageLoad,
@@ -24,9 +27,6 @@ import {
     FILE_FAILED_KIND,
     MORTY_API_PREFIX,
     NATIVE_SESSION_RESULT_KIND,
-    RUNTIME_HEARTBEAT_ACK_MESSAGE,
-    RUNTIME_HEARTBEAT_MESSAGE,
-    RUNTIME_LIVENESS_READY_KIND,
     SESSION_CANCEL_KIND,
     SESSION_EVENT_KIND,
     SESSION_HISTORY_PAGE_LOADED_KIND,
@@ -41,8 +41,8 @@ import { RuntimeAgentDependencies } from "../../src/engine/agent/runtime-agents.
 import { createRuntimeConfig, RuntimeLocalContext } from "../../src/engine/runtime/config.ts";
 import { runRuntime } from "../../src/engine/runtime/run.ts";
 import { CodexFixture } from "../support/agents/codex.ts";
+import { memoryComputerCredentials } from "../support/computer-credentials.ts";
 import { FakeOpenAiProvider } from "../support/llm/openai.ts";
-import { memoryRuntimeCredentials } from "../support/runtime-credentials.ts";
 
 class Messages {
     readonly #closed = Promise.withResolvers<never>();
@@ -55,8 +55,8 @@ class Messages {
         socket.on("message", (value, isBinary) => {
             const message = isBinary ? Buffer.from(value as Buffer) : value.toString();
             // Like the Relay's host, answer exactly the heartbeat text without the application.
-            if (message === RUNTIME_HEARTBEAT_MESSAGE) {
-                socket.send(RUNTIME_HEARTBEAT_ACK_MESSAGE);
+            if (message === COMPUTER_HEARTBEAT_MESSAGE) {
+                socket.send(COMPUTER_HEARTBEAT_ACK_MESSAGE);
                 return;
             }
             const resolve = this.#waiting.shift();
@@ -66,7 +66,7 @@ class Messages {
                 resolve(message);
             }
         });
-        socket.send(encodeRuntimeLivenessReadyEvent({ kind: RUNTIME_LIVENESS_READY_KIND }));
+        socket.send(encodeComputerLivenessReadyEvent({ kind: COMPUTER_LIVENESS_READY_KIND }));
     }
 
     readonly nextFrame = (): Promise<string | Buffer> => {
@@ -111,7 +111,7 @@ test("Given real Codex streams commentary after a tool, When clients watch and r
     const agent = new AcpAgentDefinition("codex", "Codex", codex.executable, null, codex.environment);
     const config = createRuntimeConfig(
         {
-            credentials: memoryRuntimeCredentials("r".repeat(43)),
+            credentials: memoryComputerCredentials("r".repeat(43)),
             computerId: "real-codex",
             defaultWorkspace: workspace,
             relayUrl,

@@ -38,7 +38,7 @@ async function runCli(
     return { code, stderr };
 }
 
-/** A Relay that accepts the Runtime and records every Agent catalog the daemon publishes. */
+/** A Relay that accepts the Computer and records every Agent catalog the daemon publishes. */
 async function catalogRelay() {
     const published: string[] = [];
     const firstPublication = Promise.withResolvers<void>();
@@ -60,7 +60,7 @@ async function catalogRelay() {
     });
     const sockets = new WebSocketServer({ server: relay });
     sockets.on("connection", (socket) => {
-        socket.send(JSON.stringify({ kind: "runtime.liveness.ready" }));
+        socket.send(JSON.stringify({ kind: "computer.liveness.ready" }));
     });
     await new Promise<void>((resolve_, reject) => {
         relay.once("error", reject);
@@ -106,7 +106,7 @@ it("Given a running daemon with a long temporary directory whose Agent catalog w
             computerId: "start-catalog-channel",
             defaultWorkspace: directory,
             relayOrigin: relay.origin,
-            runtimeCredential: "r".repeat(43),
+            computerCredential: "r".repeat(43),
         },
         AbortSignal.timeout(10_000),
     );

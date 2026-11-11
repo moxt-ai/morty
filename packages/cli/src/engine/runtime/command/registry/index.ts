@@ -3,6 +3,7 @@ import type { CommandContext } from "../context.ts";
 import type { RuntimeCommand } from "../definition.ts";
 import { createAgentCatalogCommands } from "./agent-catalog.ts";
 import { createAgentSettingsCommands } from "./agent-settings.ts";
+import { computerDiagnosticsCommand, computerPingCommand } from "./computer.ts";
 import { createContentWriteCommands } from "./content-write/index.ts";
 import { fileReadCommand } from "./file-read/index.ts";
 import { previewHistoryPageLoadCommand, sessionHistoryPageLoadCommand } from "./history.ts";
@@ -17,7 +18,6 @@ import {
 } from "./interactions.ts";
 import { createNativeSessionCommands } from "./native-sessions.ts";
 import { sessionPromptCommand } from "./prompt.ts";
-import { runtimeDiagnosticsCommand, runtimePingCommand } from "./runtime.ts";
 import {
     sessionConfigReadCommand,
     sessionConfigureCommand,
@@ -36,8 +36,8 @@ export function createCommandRegistry(context: CommandContext): {
 } {
     const contentWrites = createContentWriteCommands(context);
     const commands: readonly RuntimeCommand[] = [
-        runtimeDiagnosticsCommand,
-        runtimePingCommand,
+        computerDiagnosticsCommand,
+        computerPingCommand,
         sessionHistoryPageLoadCommand,
         previewHistoryPageLoadCommand,
         ...createNativeSessionCommands(context),

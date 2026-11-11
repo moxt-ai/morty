@@ -1,15 +1,15 @@
 import type { ComputerIdentityCredential } from "../entity/pairing-identity.ts";
 import type {
+    ComputerCredentialRotation,
     ComputerDirectoryRow,
+    ComputerPairingDirectoryRow,
+    ComputerPairingRow,
     PairingClaimRow,
     PairingComputerRow,
     PairingScopeRow,
-    RuntimeCredentialRotation,
-    RuntimeDirectoryRow,
-    RuntimePairingRow,
 } from "../entity/pairing-records.ts";
 
-export interface RequestRuntimePairing {
+export interface RequestComputerPairing {
     readonly computerId: string;
     readonly codeHash: string;
     readonly pollHash: string;
@@ -24,9 +24,9 @@ export interface RequestRuntimePairing {
 }
 
 /** The pairing request stored under the idempotency key, or the quota that refused a new one. */
-export type RuntimePairingRequest =
+export type ComputerPairingRequest =
     | { readonly kind: "created" }
-    | { readonly kind: "existing"; readonly request: RuntimePairingRow }
+    | { readonly kind: "existing"; readonly request: ComputerPairingRow }
     | { readonly kind: "quota_exceeded" };
 
 export interface ClaimPairing {
@@ -41,7 +41,7 @@ export interface ClaimPairing {
     readonly rejectionAuditId: string;
 }
 
-export interface RevokeRuntime {
+export interface RevokeComputer {
     readonly computerId: string;
     readonly now: number;
     readonly actorKind: string;
@@ -63,17 +63,17 @@ export interface ComputerRelayStore {
     ) => Promise<boolean>;
     /** The pairing generation whose daemon may act for the computer now; null while none may. */
     readonly readActiveGeneration: (computerId: string, signal: AbortSignal) => Promise<number | null>;
-    readonly readRuntime: (computerId: string, signal: AbortSignal) => Promise<RuntimeDirectoryRow | null>;
-    readonly listRuntimes: (signal: AbortSignal) => Promise<readonly ComputerDirectoryRow[]>;
+    readonly readComputer: (computerId: string, signal: AbortSignal) => Promise<ComputerPairingDirectoryRow | null>;
+    readonly listComputers: (signal: AbortSignal) => Promise<readonly ComputerDirectoryRow[]>;
     /**
-     * Returns the pairing request created under the idempotency key, or creates one within the Runtime quota. A
+     * Returns the pairing request created under the idempotency key, or creates one within the Computer quota. A
      * refused request is audited.
      */
-    readonly requestRuntimePairing: (
-        value: RequestRuntimePairing,
+    readonly requestComputerPairing: (
+        value: RequestComputerPairing,
         signal: AbortSignal,
-    ) => Promise<RuntimePairingRequest>;
-    readonly readRuntimePairing: (computerId: string, signal: AbortSignal) => Promise<PairingComputerRow | null>;
+    ) => Promise<ComputerPairingRequest>;
+    readonly readComputerPairing: (computerId: string, signal: AbortSignal) => Promise<PairingComputerRow | null>;
     readonly readPairingCode: (codeHash: string, signal: AbortSignal) => Promise<PairingClaimRow | null>;
     /**
      * Claims a pairing for a daemon. A replay with the credential it committed succeeds while the pairing is
@@ -81,20 +81,23 @@ export interface ComputerRelayStore {
      */
     readonly claimPairing: (value: ClaimPairing, signal: AbortSignal) => Promise<boolean>;
     /**
-     * Revokes a Runtime and returns its committed revocation; null when the Project has no such Runtime. Ending its
+     * Revokes a Computer and returns its committed revocation; null when the Project has no such Computer. Ending its
      * pairing generation also ends the Session credentials issued under it.
      */
-    readonly revokeRuntime: (value: RevokeRuntime, signal: AbortSignal) => Promise<RuntimeDirectoryRow | null>;
+    readonly revokeComputer: (
+        value: RevokeComputer,
+        signal: AbortSignal,
+    ) => Promise<ComputerPairingDirectoryRow | null>;
     /** The Projects whose stored credential matches; the caller decides what a match authorizes. */
     readonly findCredential: (
         credential: ComputerIdentityCredential,
         signal: AbortSignal,
     ) => Promise<readonly PairingScopeRow[]>;
-    readonly rotateRuntimeCredential: (
+    readonly rotateComputerCredential: (
         presentedHash: string,
         successorHash: string,
         signal: AbortSignal,
-    ) => Promise<RuntimeCredentialRotation>;
+    ) => Promise<ComputerCredentialRotation>;
 }
 
 export interface ComputerRelayStoreResolver {

@@ -6,7 +6,7 @@ import {
 } from "@morty-build/client/protocol";
 import { expect, it } from "vitest";
 
-it("Given a permission request without its execution context, When it crosses the Runtime boundary, Then the retired form is rejected", () => {
+it("Given a permission request without its execution context, When it crosses the Computer boundary, Then the retired form is rejected", () => {
     const permission = {
         kind: "session.permission.requested",
         commandId: "command-1",

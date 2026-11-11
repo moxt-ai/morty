@@ -2,7 +2,7 @@ import { isIdentifier } from "@morty-build/client/protocol";
 import { Hono, type MiddlewareHandler } from "hono";
 import { validateIdentifier } from "../../management/entity/pairing.ts";
 import { ComputerScope } from "../entity/session.ts";
-import type { RuntimeAdmission, RuntimeService } from "../service/runtime-service.ts";
+import type { ComputerAdmission, ComputerService } from "../service/computer-service.ts";
 
 type Environment = { readonly Variables: { readonly scope: ComputerScope } };
 const webSocketUpgrade: MiddlewareHandler<Environment> = async (context, next) => {
@@ -12,22 +12,22 @@ const webSocketUpgrade: MiddlewareHandler<Environment> = async (context, next) =
     return await next();
 };
 const revoked = () =>
-    Response.json({ error: { code: "runtime_revoked", message: "The Runtime has been revoked" } }, { status: 401 });
-const admitted = (result: RuntimeAdmission) => (result.kind === "accepted" ? result.response : revoked());
+    Response.json({ error: { code: "computer_revoked", message: "The Computer has been revoked" } }, { status: 401 });
+const admitted = (result: ComputerAdmission) => (result.kind === "accepted" ? result.response : revoked());
 
 /** These routes are reachable only through the deployment's Durable Object capability. */
-export function createRuntimeRoutes(runtime: RuntimeService) {
+export function createComputerRoutes(runtime: ComputerService) {
     return new Hono<Environment>()
         .basePath("/computers/:computerId")
         .use("*", async (context, next) => {
             context.set("scope", new ComputerScope(validateIdentifier(context.req.param("computerId"), "computer_id")));
             await next();
         })
-        .delete("/runtime/revoke", async (context) => {
-            await runtime.revokeRuntime(context.var.scope, context.req.raw.signal);
+        .delete("/computer/revoke", async (context) => {
+            await runtime.revokeComputer(context.var.scope, context.req.raw.signal);
             return new Response(null, { status: 204 });
         })
-        .get("/runtime-status", async (context) => {
+        .get("/computer-status", async (context) => {
             await runtime.expireSilentDaemons();
             return Response.json({ online: runtime.isOnline(context.var.scope.computerId) });
         })

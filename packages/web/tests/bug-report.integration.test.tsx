@@ -118,7 +118,7 @@ test("Given an Agent with a known CLI version and private model metadata, When r
         expect(draft.chat).toMatchObject({
             kind: "available",
             view: "draft",
-            runtimeOnline: true,
+            computerOnline: true,
             agent: { version: "0.153.4" },
             catalog: {
                 source: "agent-settings",
@@ -388,13 +388,13 @@ test("Given Morty cannot load and no daemon is connected, When a user reports a 
         expect(envelope).toContain('"type":"feedback"');
         expect(envelope).toContain('"filename":"diagnostics.json"');
         expect(envelope).toContain('"description":"The conversation never opened"');
-        expect(envelope).toContain('"code":"NO_ACTIVE_RUNTIME"');
+        expect(envelope).toContain('"code":"NO_ACTIVE_COMPUTER"');
         const report = JSON.parse(envelope.trim().split("\n").at(-1) ?? "null");
         expect(report.network).toMatchObject({
             online: navigator.onLine,
             measurements: {
                 browserMorty: { kind: "unavailable" },
-                mortyRuntime: { kind: "unavailable", code: "NO_ACTIVE_RUNTIME" },
+                mortyComputer: { kind: "unavailable", code: "NO_ACTIVE_COMPUTER" },
             },
         });
         expect(report.network).not.toHaveProperty("vpn");
@@ -465,7 +465,7 @@ test("Given a native handoff cannot find its Agent, When the user reports the di
             network: {
                 measurements: {
                     browserMorty: { kind: "available", latencyMs: expect.any(Number) },
-                    mortyRuntime: { kind: "unavailable" },
+                    mortyComputer: { kind: "unavailable" },
                 },
             },
         });
@@ -497,7 +497,7 @@ test("Given a native handoff cannot find its Agent, When the user reports the di
         expect(afterUnmount).toMatchObject({
             computerId: null,
             sessionId: null,
-            daemon: { kind: "unavailable", code: "NO_ACTIVE_RUNTIME" },
+            daemon: { kind: "unavailable", code: "NO_ACTIVE_COMPUTER" },
         });
     } finally {
         await inbox.close();
@@ -505,7 +505,7 @@ test("Given a native handoff cannot find its Agent, When the user reports the di
     }
 });
 
-test("Given two Runtime views are mounted, When a user reports from the first view, Then diagnostics identify that view's Runtime instead of the last mounted Runtime", {
+test("Given two Computer views are mounted, When a user reports from the first view, Then diagnostics identify that view's Computer instead of the last mounted Computer", {
     timeout: 30_000,
 }, async () => {
     const inbox = await createReportInbox();
@@ -523,14 +523,14 @@ test("Given two Runtime views are mounted, When a user reports from the first vi
         );
         await first.user.click(reportButton);
         const dialog = getByRole(document.body, "dialog", { name: "Report a bug" });
-        await first.user.type(getByRole(dialog, "textbox", { name: "What went wrong?" }), "The first Runtime is slow");
+        await first.user.type(getByRole(dialog, "textbox", { name: "What went wrong?" }), "The first Computer is slow");
         await first.user.click(getByRole(dialog, "button", { name: "Send report" }));
         await visibleMessage(dialog, "status", "Report sent");
         const report = JSON.parse((inbox.envelopes[0] ?? "").trim().split("\n").at(-1) ?? "null");
         expect(report.computerId).toBe(first.computerId);
         expect(report.computerId).not.toBe(second.computerId);
         expect(report.daemon.kind).toBe("available");
-        expect(report.network.measurements.mortyRuntime.kind).toBe("available");
+        expect(report.network.measurements.mortyComputer.kind).toBe("available");
     } finally {
         await inbox.close();
     }

@@ -7,7 +7,7 @@ import {
 } from "@morty-build/relay";
 import { type Context, Hono, type MiddlewareHandler } from "hono";
 import { routeComputerDurableObject } from "../gateway/computer-durable-object-routing.ts";
-import { routeRuntimeSessionRequest } from "../gateway/runtime-session-routing.ts";
+import { routeComputerSessionRequest } from "../gateway/computer-session-routing.ts";
 import type { CloudBindings } from "../infra/cloud-bindings.ts";
 import { relayAuthenticationFromEnvironment } from "./relay-authentication-environment.ts";
 import { type ConfiguredRelayBindings, relayBindings } from "./relay-bindings.ts";
@@ -58,7 +58,7 @@ export function createPublicRelayRoutes() {
         const bindings = relayBindings(context.env);
         const authentication = relayAuthenticationFromEnvironment(bindings);
         const routed =
-            (await routeRuntimeSessionRequest(context.req.raw, bindings)) ??
+            (await routeComputerSessionRequest(context.req.raw, bindings)) ??
             (await routeComputerDurableObject(context.req.raw, bindings, authentication.allowedOrigins));
         if (routed !== null) {
             return routed;

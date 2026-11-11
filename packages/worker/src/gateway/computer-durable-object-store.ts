@@ -1,5 +1,5 @@
 import type { ProjectLocationHint } from "@morty-build/client/protocol";
-import { PairingDirectoryError, type RuntimePairingRequest } from "@morty-build/relay/contracts";
+import { type ComputerPairingRequest, PairingDirectoryError } from "@morty-build/relay/contracts";
 import { DatabaseError } from "@morty-build/relay/database";
 import { logger } from "@morty-build/relay/logging";
 import { decodeComputerPlacement } from "../../../relay/src/components/computer/entity/computer-id.ts";
@@ -93,22 +93,22 @@ class ComputerDurableObjectStore implements ComputerManagementStore {
     readonly readActiveGeneration: ComputerManagementStore["readActiveGeneration"] = (computerId, signal) =>
         this.call("readActiveGeneration", (stub) => stub.readActiveGeneration(computerId), signal);
 
-    readonly readRuntime: ComputerManagementStore["readRuntime"] = (computerId, signal) =>
-        this.call("readRuntime", (stub) => stub.readRuntime(computerId), signal);
+    readonly readComputer: ComputerManagementStore["readComputer"] = (computerId, signal) =>
+        this.call("readComputer", (stub) => stub.readComputer(computerId), signal);
 
-    readonly listRuntimes: ComputerManagementStore["listRuntimes"] = (signal) =>
-        this.call("listRuntimes", (stub, computerId) => stub.listRuntimes(computerId), signal);
+    readonly listComputers: ComputerManagementStore["listComputers"] = (signal) =>
+        this.call("listComputers", (stub, computerId) => stub.listComputers(computerId), signal);
 
-    readonly requestRuntimePairing: ComputerManagementStore["requestRuntimePairing"] = (value, signal) =>
+    readonly requestComputerPairing: ComputerManagementStore["requestComputerPairing"] = (value, signal) =>
         this.call(
-            "requestRuntimePairing",
-            async (stub, computerId): Promise<RuntimePairingRequest> =>
-                await stub.requestRuntimePairing(computerId, value),
+            "requestComputerPairing",
+            async (stub, computerId): Promise<ComputerPairingRequest> =>
+                await stub.requestComputerPairing(computerId, value),
             signal,
         );
 
-    readonly readRuntimePairing: ComputerManagementStore["readRuntimePairing"] = (computerId, signal) =>
-        this.call("readRuntimePairing", (stub) => stub.readRuntimePairing(computerId), signal);
+    readonly readComputerPairing: ComputerManagementStore["readComputerPairing"] = (computerId, signal) =>
+        this.call("readComputerPairing", (stub) => stub.readComputerPairing(computerId), signal);
 
     readonly readPairingCode: ComputerManagementStore["readPairingCode"] = (codeHash, signal) =>
         this.call("readPairingCode", (stub, computerId) => stub.readPairingCode(computerId, codeHash), signal);
@@ -116,20 +116,20 @@ class ComputerDurableObjectStore implements ComputerManagementStore {
     readonly claimPairing: ComputerManagementStore["claimPairing"] = (value, signal) =>
         this.call("claimPairing", (stub, computerId) => stub.claimPairing(computerId, value), signal);
 
-    readonly revokeRuntime: ComputerManagementStore["revokeRuntime"] = (value, signal) =>
-        this.call("revokeRuntime", (stub, computerId) => stub.revokeRuntime(computerId, value), signal);
+    readonly revokeComputer: ComputerManagementStore["revokeComputer"] = (value, signal) =>
+        this.call("revokeComputer", (stub, computerId) => stub.revokeComputer(computerId, value), signal);
 
     readonly findCredential: ComputerManagementStore["findCredential"] = (credential, signal) =>
         this.call("findCredential", (stub, computerId) => stub.findCredential(computerId, credential), signal);
 
-    readonly rotateRuntimeCredential: ComputerManagementStore["rotateRuntimeCredential"] = (
+    readonly rotateComputerCredential: ComputerManagementStore["rotateComputerCredential"] = (
         presentedHash,
         successorHash,
         signal,
     ) =>
-        this.call<Awaited<ReturnType<ComputerManagementStore["rotateRuntimeCredential"]>>>(
-            "rotateRuntimeCredential",
-            (stub, computerId) => stub.rotateRuntimeCredential(computerId, presentedHash, successorHash),
+        this.call<Awaited<ReturnType<ComputerManagementStore["rotateComputerCredential"]>>>(
+            "rotateComputerCredential",
+            (stub, computerId) => stub.rotateComputerCredential(computerId, presentedHash, successorHash),
             signal,
         );
 

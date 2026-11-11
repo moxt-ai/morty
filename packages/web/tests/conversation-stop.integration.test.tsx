@@ -50,7 +50,7 @@ test("Given an Agent takes longer than the Stop deadline, When its cancelled tur
     expect(queryByRole(document.body, "alert")).toBeNull();
 });
 
-test("Given a follow-up the Runtime rejected while a reply runs, When I ask to stop that reply, Then retrying the follow-up waits like the composer does", {
+test("Given a follow-up the Computer rejected while a reply runs, When I ask to stop that reply, Then retrying the follow-up waits like the composer does", {
     timeout: 30_000,
 }, async () => {
     const cancellation = Promise.withResolvers<void>();
@@ -71,7 +71,7 @@ test("Given a follow-up the Runtime rejected while a reply runs, When I ask to s
     });
     await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "answer then hold");
     await app.waitForView(() => expect(document.body.textContent).toContain("Partial answer before stopping."));
-    // Production validation rejects the oversized follow-up before it enters the Runtime's queue.
+    // Production validation rejects the oversized follow-up before it enters the Computer's queue.
     await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "x".repeat(100_001));
     const retry = (): HTMLElement =>
         getByRole(app.elementByTestId(dataTestId.queuedMessage), "button", { name: "Retry message" });

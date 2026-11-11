@@ -19,22 +19,22 @@ import {
 import { PairingDirectoryError } from "../../management/entity/pairing.ts";
 import type { ProjectPermission } from "../../management/entity/project-authentication.ts";
 import {
+    computerControlPermission,
+    computerControlRegistry,
     nativeSessionRequestPermission,
-    runtimeControlPermission,
-    runtimeControlRegistry,
-} from "./runtime-control-registry.ts";
-import type { RuntimeControlCommand, RuntimeControlResult } from "./runtime-control-request.ts";
+} from "./computer-control-registry.ts";
+import type { ComputerControlCommand, ComputerControlResult } from "./computer-control-request.ts";
 
 /**
- * Runs one command of a Session operation on a Runtime once the caller is authorized for `permission`, the operation's
- * own, and returns the Runtime's answer.
+ * Runs one command of a Session operation on a Computer once the caller is authorized for `permission`, the operation's
+ * own, and returns the Computer's answer.
  */
-export type RuntimeControl = (
-    command: RuntimeControlCommand,
+export type ComputerControl = (
+    command: ComputerControlCommand,
     permission: ProjectPermission,
-) => Promise<RuntimeControlResult>;
+) => Promise<ComputerControlResult>;
 
-/** A Turn for an existing Session. The Runtime runs it with the Agent and directory of the Session it holds. */
+/** A Turn for an existing Session. The Computer runs it with the Agent and directory of the Session it holds. */
 export interface TurnSubmission {
     readonly commandId: string;
     readonly content: string;
@@ -45,8 +45,8 @@ export interface TurnSubmission {
 }
 
 /**
- * Where a submitted Turn's command stands when the Runtime answers its submission. `settled` answers a retried command
- * that had already ended: the Runtime states neither how nor when it ended, so the command's own lifecycle events
+ * Where a submitted Turn's command stands when the Computer answers its submission. `settled` answers a retried command
+ * that had already ended: the Computer states neither how nor when it ended, so the command's own lifecycle events
  * carry its outcome.
  */
 export interface TurnAdmission {
@@ -67,23 +67,23 @@ export interface SessionConfiguration {
 }
 
 /**
- * The operations every Session API offers on one Session. Each builds the Runtime command for the Session's target
+ * The operations every Session API offers on one Session. Each builds the Computer command for the Session's target
  * alone, runs it through the caller's authorized control and checks that the answer belongs to that command. The
- * Runtime resolves the Session's Agent and directory from the Session it holds. An operation needs the permission of
+ * Computer resolves the Session's Agent and directory from the Session it holds. An operation needs the permission of
  * the command it performs. Routes authenticate, decode their own request format and shape their own response; they do
  * not repeat these rules.
  */
 export class SessionControl {
-    readonly #control: RuntimeControl;
+    readonly #control: ComputerControl;
     readonly #target: NativeSessionTarget;
 
-    constructor(control: RuntimeControl, target: NativeSessionTarget) {
+    constructor(control: ComputerControl, target: NativeSessionTarget) {
         this.#control = control;
         this.#target = decodeNativeSessionTarget(target);
     }
 
     readonly submitTurn = async (turn: TurnSubmission): Promise<TurnAdmission> => {
-        const permission = runtimeControlRegistry["session.prompt"].permission;
+        const permission = computerControlRegistry["session.prompt"].permission;
         let command: SessionPromptCommand;
         try {
             command = decodeSessionPromptCommand(
@@ -107,7 +107,7 @@ export class SessionControl {
         }
         const result = await this.#control(command, permission);
         if (result.kind !== "session.prompt.accepted" || result.requestId !== command.commandId) {
-            throw new PairingDirectoryError("invalid_request", "The Runtime returned an invalid Turn");
+            throw new PairingDirectoryError("invalid_request", "The Computer returned an invalid Turn");
         }
         return { commandId: result.requestId, state: result.state };
     };
@@ -124,7 +124,7 @@ export class SessionControl {
             ),
         );
         if (stopped.kind !== "session.turn.stopped" || stopped.commandId !== turnId) {
-            throw new PairingDirectoryError("invalid_request", "The Runtime returned an invalid cancellation");
+            throw new PairingDirectoryError("invalid_request", "The Computer returned an invalid cancellation");
         }
         return { stopReason: stopped.stopReason };
     };
@@ -142,7 +142,7 @@ export class SessionControl {
             ),
         );
         if (withdrawn.kind !== "session.turn.withdrawn" || withdrawn.commandId !== turnId) {
-            throw new PairingDirectoryError("invalid_request", "The Runtime returned an invalid cancellation");
+            throw new PairingDirectoryError("invalid_request", "The Computer returned an invalid cancellation");
         }
     };
 
@@ -159,7 +159,7 @@ export class SessionControl {
             ),
         );
         if (steered.kind !== "session.prompt.steered" || steered.commandId !== turnId) {
-            throw new PairingDirectoryError("invalid_request", "The Runtime returned an invalid steered Turn");
+            throw new PairingDirectoryError("invalid_request", "The Computer returned an invalid steered Turn");
         }
     };
 
@@ -189,7 +189,7 @@ export class SessionControl {
                   ),
         );
         if (answered.kind !== "session.interaction.answered" || answered.interactionId !== interactionId) {
-            throw new PairingDirectoryError("invalid_request", "The Runtime returned an invalid answer");
+            throw new PairingDirectoryError("invalid_request", "The Computer returned an invalid answer");
         }
     };
 
@@ -204,7 +204,7 @@ export class SessionControl {
             ),
         );
         if (result.kind !== "session.config.read.result") {
-            throw new PairingDirectoryError("invalid_request", "The Runtime returned invalid Session settings");
+            throw new PairingDirectoryError("invalid_request", "The Computer returned invalid Session settings");
         }
         return result;
     };
@@ -248,7 +248,7 @@ export class SessionControl {
             nativeSessionRequestPermission("active-turn"),
         );
         if (result.kind !== "native.session.result" || result.action !== "active-turn") {
-            throw new PairingDirectoryError("invalid_request", "The Runtime returned an invalid active Turn");
+            throw new PairingDirectoryError("invalid_request", "The Computer returned an invalid active Turn");
         }
         return result;
     };
@@ -271,7 +271,7 @@ export class SessionControl {
             ),
         );
         if (result.kind !== "session.preview-history.page.loaded") {
-            throw new PairingDirectoryError("invalid_request", "The Runtime returned invalid V2 Session events");
+            throw new PairingDirectoryError("invalid_request", "The Computer returned invalid V2 Session events");
         }
         return result.events;
     };
@@ -290,12 +290,12 @@ export class SessionControl {
             ),
         );
         if (result.kind !== "session.live-history.v2.page.loaded") {
-            throw new PairingDirectoryError("invalid_request", "The Runtime returned invalid V2 Session events");
+            throw new PairingDirectoryError("invalid_request", "The Computer returned invalid V2 Session events");
         }
         return result.events.events;
     };
 
     /** Runs an operation that is one command, under that command's own permission. */
-    readonly #run = async (command: RuntimeControlCommand): Promise<RuntimeControlResult> =>
-        await this.#control(command, runtimeControlPermission(command));
+    readonly #run = async (command: ComputerControlCommand): Promise<ComputerControlResult> =>
+        await this.#control(command, computerControlPermission(command));
 }

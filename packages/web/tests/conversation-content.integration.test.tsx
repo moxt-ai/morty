@@ -845,7 +845,7 @@ test("Given an expanded process segment whose tool is still generating, When the
     expect(getAllByLabelText(document.body, "Tool running")).toHaveLength(2);
 });
 
-test("Given an Agent response references a local image, When the user reads it and reopens the conversation, Then the image is fetched through Runtime and remains visible without base64 text", {
+test("Given an Agent response references a local image, When the user reads it and reopens the conversation, Then the image is fetched through Computer and remains visible without base64 text", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({ connectAgent: true });

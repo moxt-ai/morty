@@ -64,6 +64,6 @@ test("Given a new conversation draft, When its Agent is renamed on the computer,
 
     await daemon.replaceAgents([{ harness: "codex", label: "Codex Pro" }]);
 
-    // The open details follow the Runtime configuration the page follows.
+    // The open details follow the Computer configuration the page follows.
     await app.waitForView(() => expect(details.textContent).toContain("Codex Pro"));
 });

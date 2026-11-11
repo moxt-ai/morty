@@ -112,7 +112,7 @@ describe("native session identity", () => {
         },
     );
 
-    it("Given an imported native conversation that the Runtime closed, When it is imported again, Then the same Session reopens", async () => {
+    it("Given an imported native conversation that the Computer closed, When it is imported again, Then the same Session reopens", async () => {
         const f = await fixture("Claude Code", "supported");
         const signal = new AbortController().signal;
         try {
@@ -209,7 +209,7 @@ describe("native session identity", () => {
     });
 
     it.each(["import", "fork"] satisfies readonly ("import" | "fork")[])(
-        "Given a %s returns its harness-owned native pair, When the Runtime restarts, Then that conversation remains discoverable and can continue",
+        "Given a %s returns its harness-owned native pair, When the Computer restarts, Then that conversation remains discoverable and can continue",
         async (action) => {
             const f = await fixture("Claude Code", "supported");
             try {
@@ -248,7 +248,7 @@ describe("native session identity", () => {
     );
 
     it.each(["Claude Code", "Pi"] as const)(
-        "Given a new %s chat, When the Runtime restarts, Then its native ID resumes the saved thread and history",
+        "Given a new %s chat, When the Computer restarts, Then its native ID resumes the saved thread and history",
         async (agentName) => {
             const f = await fixture(agentName, "supported");
             const signal = new AbortController().signal;
@@ -301,7 +301,7 @@ describe("native session identity", () => {
         },
     );
 
-    it("Given Chat forks a native conversation, When a post-fork turn completes and Chat reloads, Then Runtime history contains that turn", async () => {
+    it("Given Chat forks a native conversation, When a post-fork turn completes and Chat reloads, Then Computer history contains that turn", async () => {
         const f = await fixture("Claude Code");
         const signal = new AbortController().signal;
         try {

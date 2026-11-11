@@ -7,7 +7,7 @@ import { expect, it } from "vitest";
 import { startTestRelay } from "../support/relay.ts";
 
 for (const client of ["SDK", "HTTP"] as const) {
-    it(`Given a new Session, When ${client} creates and prompts it, Then its conversation uses the Runtime title and workspace`, async () => {
+    it(`Given a new Session, When ${client} creates and prompts it, Then its conversation uses the Computer title and workspace`, async () => {
         const cancellation = new AbortController();
         await using relay = await startTestRelay();
         try {
@@ -75,7 +75,7 @@ for (const client of ["SDK", "HTTP"] as const) {
                 }),
             ]);
         } finally {
-            cancellation.abort(new Error("Runtime Session directory test completed"));
+            cancellation.abort(new Error("Computer Session directory test completed"));
         }
     });
 }
@@ -163,7 +163,7 @@ it("Given a deeply nested multibyte project path, When the SDK browses it and ru
     }
 });
 
-it("Given a Session in a selected workspace, When the App prompts it and reads its execution naming only the Session, Then the Runtime runs the Turn in the Session's own workspace", async () => {
+it("Given a Session in a selected workspace, When the App prompts it and reads its execution naming only the Session, Then the Computer runs the Turn in the Session's own workspace", async () => {
     const workspace = await mkdtemp(join(tmpdir(), "morty-session-workspace-"));
     try {
         const directoryLabel = await realpath(workspace);

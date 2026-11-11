@@ -2,7 +2,7 @@ import { resolve } from "node:path";
 import { waitForSharedOperation } from "../session/manager/operation-drain.ts";
 import type { VerifiedComputerConnection } from "./connection/computer-connection.ts";
 import { RuntimeInstallationStore } from "./connection/runtime-installation-store.ts";
-import { type MortyRuntimePairingOptions, pairRuntimeConnection, prepareRuntimeConnection } from "./pairing.ts";
+import { type MortyComputerPairingOptions, pairComputerConnection, prepareComputerConnection } from "./pairing.ts";
 import { RuntimeLoop, type RuntimeLoopOptions } from "./runtime-loop.ts";
 
 export interface MortyRuntimeEngineParams {
@@ -70,10 +70,10 @@ export class MortyRuntimeEngine {
     };
 
     readonly pair = async (
-        input: MortyRuntimePairingOptions,
+        input: MortyComputerPairingOptions,
         signal: AbortSignal,
     ): Promise<VerifiedComputerConnection> =>
-        await pairRuntimeConnection(
+        await pairComputerConnection(
             await this.#ensureInstallation(signal),
             input,
             signal,
@@ -84,7 +84,7 @@ export class MortyRuntimeEngine {
         const loop = new RuntimeLoop(async (preparationSignal) => {
             const installation = await this.#ensureInstallation(preparationSignal);
             const saved = await installation.readConnection(pairingGeneration, preparationSignal);
-            return await prepareRuntimeConnection(
+            return await prepareComputerConnection(
                 installation,
                 saved,
                 preparationSignal,
@@ -98,4 +98,4 @@ export class MortyRuntimeEngine {
 
 export type { VerifiedComputerConnection } from "./connection/computer-connection.ts";
 
-export type { MortyRuntimePairingOptions } from "./pairing.ts";
+export type { MortyComputerPairingOptions } from "./pairing.ts";

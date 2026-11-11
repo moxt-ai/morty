@@ -9,7 +9,8 @@ import type { Clock } from "../../services/time/clock.ts";
 import type { BugReportDialogStore } from "../bug-report-dialog-store.ts";
 import { reportApplicationError } from "../report-error.ts";
 import { type AccessExpiryStore, createAccessExpiryStore } from "./access-expiry-store.ts";
-import { type BotChatHomeStoreApi, createBotChatHomeStore, homeWaitsForRuntime } from "./bot-chat-home-store.ts";
+import { type BotChatHomeStoreApi, createBotChatHomeStore, homeWaitsForComputer } from "./bot-chat-home-store.ts";
+import { createComputerRecovery } from "./computer-recovery.ts";
 import type { ComputerSwitcherModel } from "./computer-switcher-store.ts";
 import { connectionPresentation } from "./connection-presentation.ts";
 import { type ConversationDirectoryStore, createConversationDirectoryStore } from "./conversation-directory-store.ts";
@@ -22,8 +23,7 @@ import { createLinkedDevicesStore, type LinkedDevicesStore } from "./linked-devi
 import { createNetworkDiagnosticStore, type NetworkDiagnosticStore } from "./network-diagnostic-store.ts";
 import type { SelectedMortySession } from "./open-session.ts";
 import { createRemoteAccessStore, type RemoteAccessStore } from "./remote-access-store.ts";
-import { createRuntimeRecovery } from "./runtime-recovery.ts";
-import { connectionWaitsForRuntime } from "./session-connection.ts";
+import { connectionWaitsForComputer } from "./session-connection.ts";
 import { createSessionPageState, type SessionPageState } from "./session-page-state.ts";
 import { createSessionPaneModel, type SessionPaneModel } from "./session-pane-store.ts";
 import { createSessionTitlesStore, type SessionTitlesStore } from "./session-titles-store.ts";
@@ -118,8 +118,8 @@ function historyNavigation(onDraft: () => void) {
  */
 export function createChatWorkspace(options: {
     readonly clock: Clock;
-    /** Starts the page over once its Machine's revoked Runtime was replaced; see the home store's announcement. */
-    readonly onRuntimeReplaced: () => void;
+    /** Starts the page over once its Computer is paired again after revocation; see the home store's announcement. */
+    readonly onComputerReplaced: () => void;
     readonly rememberedIdentity?: IdentityScope;
     readonly computers?: ComputerSwitcherModel;
     readonly accessNotice?: string | null;
@@ -159,15 +159,15 @@ export function createChatWorkspace(options: {
         draftConfiguration: () => draftConfiguration(draftControls.getState().settings),
         connectionAvailable: () => connectionPresentation(home.getState(), null).available,
         clock: options.clock,
-        onWaitingForRuntime: () => runtimeRecovery.failed(),
+        onWaitingForComputer: () => computerRecovery.failed(),
         createId: () => crypto.randomUUID(),
         navigation: historyNavigation(recordHome),
         entry: options.entry ?? "address",
-        onRuntimeConfiguration: (configuration, observation) => {
-            sidebar.dialogs.getState().runtimeChanged();
+        onComputerConfiguration: (configuration, observation) => {
+            sidebar.dialogs.getState().computerChanged();
             void draftControls
                 .getState()
-                .runtimeChanged(configuration, operationsLifetime.signal)
+                .computerChanged(configuration, operationsLifetime.signal)
                 .catch(() => undefined);
             if (initialVisitPending) {
                 initialVisitPending = false;
@@ -176,28 +176,28 @@ export function createChatWorkspace(options: {
                 }
             }
             if (options.rememberedIdentity !== undefined) {
-                rememberComputerName(options.rememberedIdentity, configuration.runtime.machineName);
+                rememberComputerName(options.rememberedIdentity, configuration.computer.machineName);
             }
-            runtimeRecovery.observe(configuration.runtime.online, observation);
+            computerRecovery.observe(configuration.computer.online, observation);
         },
         onDraftSelected: () => enterDraft(),
         onRestart: () => {
             startHomeLoad();
             startDirectoryLoad();
         },
-        onRuntimeReplaced: () => {
-            // A Session belongs to the Runtime that held it, so the page starts over on the Machine's new conversation.
+        onComputerReplaced: () => {
+            // A Session belongs to the Computer that held it, so the page starts over on the Machine's new conversation.
             const url = new URL(window.location.href);
             url.searchParams.delete("harness");
             url.searchParams.delete("sessionId");
             window.history.replaceState(window.history.state, "", url);
-            options.onRuntimeReplaced();
+            options.onComputerReplaced();
         },
         onDirectoryRefreshed: () => startDirectoryLoad(),
         onFirstMessage: (sessionTarget, message) =>
             sessionState(sessionTarget).delivery.getState().awaitConnection(message),
         onSelectionReady: (selection) => {
-            runtimeRecovery.working();
+            computerRecovery.working();
             replacePane(selection);
         },
         onSelectionTargeted: (conversationId) => {
@@ -239,8 +239,8 @@ export function createChatWorkspace(options: {
     const draftControls = createDraftControlsStore(
         computerId,
         requests,
-        () => home.getState().runtimeConfiguration,
-        () => runtimeRecovery.failed(),
+        () => home.getState().computerConfiguration,
+        () => computerRecovery.failed(),
     );
     // Sidebar stores live with the workspace, outside React: dialogs (native
     // session import, identity sharing, expanded state), remote access, and
@@ -250,7 +250,7 @@ export function createChatWorkspace(options: {
             clock: options.clock,
             signal: () => operationsLifetime.signal,
             requests,
-            runtime: () => home.getState().runtimeConfiguration?.runtime ?? null,
+            computer: () => home.getState().computerConfiguration?.computer ?? null,
             createTransfer: (terms, signal) => {
                 if (options.createTransfer === undefined) {
                     return Promise.reject(new Error("Identity sharing is unavailable."));
@@ -328,45 +328,47 @@ export function createChatWorkspace(options: {
                 if (signal.aborted) {
                     return;
                 }
-                if (listWaitsForRuntime()) {
-                    runtimeRecovery.failed();
+                if (listWaitsForComputer()) {
+                    computerRecovery.failed();
                 } else {
-                    runtimeRecovery.working();
+                    computerRecovery.working();
                 }
             });
     };
-    const listWaitsForRuntime = (): boolean => {
+    const listWaitsForComputer = (): boolean => {
         const listed = directory.getState().state.kind;
         return listed === "failed" || listed === "stale";
     };
-    const draftWaitsForRuntime = (): boolean => draftControls.getState().settings.kind === "unreachable";
-    /** The live pane, when its connection used up its automatic retries and waits for the Runtime. */
-    const paneWaitingForRuntime = (): ChatWorkspacePaneEntry | null =>
-        paneEntry !== null && connectionWaitsForRuntime(paneEntry.model.store.getState().connection) ? paneEntry : null;
+    const draftWaitsForComputer = (): boolean => draftControls.getState().settings.kind === "unreachable";
+    /** The live pane, when its connection used up its automatic retries and waits for the Computer. */
+    const paneWaitingForComputer = (): ChatWorkspacePaneEntry | null =>
+        paneEntry !== null && connectionWaitsForComputer(paneEntry.model.store.getState().connection)
+            ? paneEntry
+            : null;
     /** Retry pending reads once the computer is reachable again. */
-    const runtimeRecovery = createRuntimeRecovery({
+    const computerRecovery = createComputerRecovery({
         clock: options.clock,
         lifetime: operationsLifetime.signal,
         waiting: () =>
-            homeWaitsForRuntime(home.getState()) ||
-            listWaitsForRuntime() ||
-            draftWaitsForRuntime() ||
-            paneWaitingForRuntime() !== null,
+            homeWaitsForComputer(home.getState()) ||
+            listWaitsForComputer() ||
+            draftWaitsForComputer() ||
+            paneWaitingForComputer() !== null,
         retry: () => {
-            if (homeWaitsForRuntime(home.getState())) {
+            if (homeWaitsForComputer(home.getState())) {
                 home.getState().retry();
-            } else if (listWaitsForRuntime()) {
+            } else if (listWaitsForComputer()) {
                 startDirectoryLoad();
             }
             // A late offline response can arrive after the online watch snapshot.
             // Draft settings need the same bounded recovery as the list and statuses.
-            if (draftWaitsForRuntime()) {
+            if (draftWaitsForComputer()) {
                 void draftControls
                     .getState()
                     .retry(operationsLifetime.signal)
                     .catch(() => undefined);
             }
-            paneWaitingForRuntime()?.model.reconnect();
+            paneWaitingForComputer()?.model.reconnect();
         },
     });
     // The single live pane model. It lives while its session record is the
@@ -439,8 +441,8 @@ export function createChatWorkspace(options: {
             onReleased: (activity) => statuses.getState().paneReleased(sessionTarget, activity),
             titles,
             connectionAvailable: (connection) => connectionPresentation(home.getState(), connection).available,
-            onConnected: () => runtimeRecovery.working(),
-            onWaitingForRuntime: () => runtimeRecovery.failed(),
+            onConnected: () => computerRecovery.working(),
+            onWaitingForComputer: () => computerRecovery.failed(),
         });
         paneEntry = { model, session: selection.session };
         model.start();

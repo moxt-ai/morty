@@ -2,9 +2,9 @@ import { PROJECT_HOST_PERMISSIONS, ProjectPermission } from "../../management/en
 import type { BackendProjectAccess } from "../../management/service/backend-project-access.ts";
 import type { ComputerManagementStorageDirectory } from "../../management/service/computer-management-storage-directory.ts";
 import type { ComputerRelayStoreResolver } from "../../management/storage/computer-relay-store.ts";
-import type { RuntimeSocketIdentity } from "./runtime-service.ts";
+import type { ComputerSocketIdentity } from "./computer-service.ts";
 
-export class RuntimeCredentialService {
+export class ComputerCredentialService {
     readonly #stores: ComputerRelayStoreResolver;
     readonly #projects: Pick<ComputerManagementStorageDirectory, "resolve">;
     readonly #access: Pick<BackendProjectAccess, "grants" | "grantsSessionCredential">;
@@ -40,7 +40,7 @@ export class RuntimeCredentialService {
     };
 
     readonly authorizeHostMessage = async (
-        identity: Extract<RuntimeSocketIdentity, { readonly role: "host" }>,
+        identity: Extract<ComputerSocketIdentity, { readonly role: "host" }>,
         permission: ProjectPermission | null,
         signal: AbortSignal,
     ): Promise<"granted" | "revoked" | "denied"> => {
@@ -57,7 +57,7 @@ export class RuntimeCredentialService {
     };
 
     readonly authorizeViewer = async (
-        identity: Extract<RuntimeSocketIdentity, { readonly role: "viewer" }>,
+        identity: Extract<ComputerSocketIdentity, { readonly role: "viewer" }>,
         signal: AbortSignal,
     ): Promise<"granted" | "revoked"> =>
         (await this.#access.grantsSessionCredential(

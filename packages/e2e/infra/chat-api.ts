@@ -91,7 +91,7 @@ export class ChatApi {
             !Array.isArray(paired["agents"]) ||
             !paired["agents"].some((agent) => object(agent, "agent")["harness"] === harness)
         ) {
-            throw new Error(`The paired Runtime does not expose ${harness}`);
+            throw new Error(`The paired Computer does not expose ${harness}`);
         }
         return { computerId: text(paired["computerId"], "computerId") };
     }
@@ -109,11 +109,11 @@ export class ChatApi {
             `/morty/api/chat/computers/${encodeURIComponent(identity.computerId)}/workspace`,
             { body: {} },
         );
-        const runtime = object(configuration["runtime"], "runtime");
+        const computer = object(configuration["computer"], "computer");
         if (
-            runtime["online"] !== true ||
-            !Array.isArray(runtime["agents"]) ||
-            !runtime["agents"].some((agent) => object(agent, "agent")["harness"] === harness)
+            computer["online"] !== true ||
+            !Array.isArray(computer["agents"]) ||
+            !computer["agents"].some((agent) => object(agent, "agent")["harness"] === harness)
         ) {
             throw new Error(`The configured Bot does not expose ${harness}`);
         }

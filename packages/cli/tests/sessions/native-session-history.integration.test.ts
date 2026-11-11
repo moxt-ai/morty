@@ -87,7 +87,7 @@ describe("native session history", () => {
             await f.close();
         }
     });
-    it("Given Codex already owns a native session writer, When Chat previews that session, Then Runtime reads history without requesting another writer", async () => {
+    it("Given Codex already owns a native session writer, When Chat previews that session, Then Computer reads history without requesting another writer", async () => {
         const f = await fixture("Codex", "exclusive-writer", cannedHistoryAdapter);
         const signal = new AbortController().signal;
         try {
@@ -258,7 +258,7 @@ describe("native session history", () => {
         }
     });
 
-    it("Given ACP replays committed native updates, When Runtime loads V2 source facts, Then every accepted notification is exposed once without V1 activity folding", async () => {
+    it("Given ACP replays committed native updates, When Computer loads V2 source facts, Then every accepted notification is exposed once without V1 activity folding", async () => {
         const f = await fixture("Pi");
         try {
             const sessionId = await f.seed("Preserve this update");
@@ -333,7 +333,7 @@ describe("native session history", () => {
         }
     });
 
-    it("Given Pi emits persisted history only on the first session load, When Chat requests history after preparation, Then Runtime returns messages from that load", async () => {
+    it("Given Pi emits persisted history only on the first session load, When Chat requests history after preparation, Then Computer returns messages from that load", async () => {
         const f = await fixture("Pi", "replay-history-once");
         const signal = new AbortController().signal;
         try {
@@ -486,7 +486,7 @@ describe("native session history", () => {
         }
     });
     it.each(["import", "fork"] satisfies readonly ("import" | "fork")[])(
-        "Given native history loading is unavailable, When a saved conversation is %sed, Then Runtime opens it without loading history",
+        "Given native history loading is unavailable, When a saved conversation is %sed, Then Computer opens it without loading history",
         async (action) => {
             const f = await fixture("Claude Code");
             try {

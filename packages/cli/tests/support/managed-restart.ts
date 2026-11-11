@@ -20,7 +20,7 @@ import { prepareNewRealSession, type RealDaemonPeer, withRealDaemon } from "../s
 import { FakeAnthropicProvider } from "../support/llm/anthropic.ts";
 import { FakeOpenAiProvider } from "../support/llm/openai.ts";
 
-const interruptedPrompt = "Begin work that will be interrupted by the runtime restart";
+const interruptedPrompt = "Begin work that will be interrupted by the computer restart";
 
 async function journey(peer: RealDaemonPeer, harness: string, reply: string): Promise<void> {
     const sessionTarget = await prepareNewRealSession(peer, harness);
@@ -183,7 +183,7 @@ async function interruptedJourney(
         sendPrompt(commandId, interruptedPrompt);
         stage = "waiting for the original provider request";
         await awaitPeerOperation(entered, peer.signal);
-        stage = "restarting the managed runtime";
+        stage = "restarting the managed computer";
         await peer.restart("crash");
         stage = "waiting for the old Agent request to disconnect";
         await awaitPeerOperation(disconnected, peer.signal);
@@ -252,7 +252,7 @@ async function interruptedJourney(
         const continuation = randomUUID();
         sendPrompt(
             continuation,
-            "The runtime restarted. Review the native conversation and continue unfinished work. Check before repeating side effects.",
+            "The computer restarted. Review the native conversation and continue unfinished work. Check before repeating side effects.",
         );
         for (;;) {
             const event = decodeSessionLiveEvent(JSON.parse(await peer.nextEvent()));
@@ -315,7 +315,7 @@ function firstRequestGate() {
 export function registerManagedCrashScenarios(harness: "codex" | "claude" | "pi"): void {
     if (harness === "codex") {
         // @no-uc: Compatibility; a real Codex native session remains resumable after an interrupted request.
-        test("Given a running real Codex request, When SIGKILL restarts its managed runtime, Then a continuation completes in the native session", async () => {
+        test("Given a running real Codex request, When SIGKILL restarts its managed computer, Then a continuation completes in the native session", async () => {
             const gate = firstRequestGate();
             await using provider = await FakeOpenAiProvider.start("gpt-5.4", "RESTART_CONTINUED", {
                 beforeFirstText: gate.beforeFirstText,
@@ -335,7 +335,7 @@ export function registerManagedCrashScenarios(harness: "codex" | "claude" | "pi"
     }
     if (harness === "claude") {
         // @no-uc: Compatibility; a real Claude native session remains resumable after an interrupted request.
-        test("Given a running real Claude request, When SIGKILL restarts its managed runtime, Then a continuation completes in the native session", async () => {
+        test("Given a running real Claude request, When SIGKILL restarts its managed computer, Then a continuation completes in the native session", async () => {
             const gate = firstRequestGate();
             await using provider = await FakeAnthropicProvider.start("claude-sonnet-4-5", "RESTART_CONTINUED", {
                 beforeFirstText: async (_scenario, signal, conversation) => {
@@ -361,7 +361,7 @@ export function registerManagedCrashScenarios(harness: "codex" | "claude" | "pi"
     }
     if (harness === "pi") {
         // @no-uc: Compatibility; a real Pi native session remains resumable after an interrupted request.
-        test("Given a running real Pi request, When SIGKILL restarts its managed runtime, Then a continuation completes in the native session", async () => {
+        test("Given a running real Pi request, When SIGKILL restarts its managed computer, Then a continuation completes in the native session", async () => {
             const gate = firstRequestGate();
             await using provider = await FakeOpenAiProvider.start("gpt-5.4", "RESTART_CONTINUED", {
                 beforeFirstText: gate.beforeFirstText,

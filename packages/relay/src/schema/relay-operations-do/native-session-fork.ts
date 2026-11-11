@@ -1,6 +1,6 @@
 import { primaryKey, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
-/** Retained records of the Relay's former Fork receipts; nothing reads them. The Runtime keeps each Fork's receipt. */
+/** Retained records of the Relay's former Fork receipts; nothing reads them. The Computer keeps each Fork's receipt. */
 export const nativeSessionFork = sqliteTable(
     "native_session_forks",
     {

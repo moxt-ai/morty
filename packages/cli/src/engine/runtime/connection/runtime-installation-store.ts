@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { join, resolve } from "node:path";
-import { isIdentifier, runtimeCredentialSuccessor } from "@morty-build/client/protocol";
+import { computerCredentialSuccessor, isIdentifier } from "@morty-build/client/protocol";
 import { ensurePrivateDirectory } from "../../storage/files/local-files.ts";
 import {
     type InstallationDirectory,
@@ -16,11 +16,11 @@ import {
     type ComputerConnectionInput,
     VerifiedComputerConnection,
 } from "./computer-connection.ts";
-import type { HeldRuntimeCredentials, RuntimeCredentials } from "./runtime-credentials.ts";
+import type { ComputerCredentials, HeldComputerCredentials } from "./computer-credentials.ts";
 
 const PAIRING_RECORD_VERSION = 9;
 const PAIRING_GENERATION_PATTERN = /^mcn_[a-f0-9]{32}$/;
-const RUNTIME_CREDENTIAL_PATTERN = /^[a-zA-Z0-9_-]{32,256}$/;
+const COMPUTER_CREDENTIAL_PATTERN = /^[a-zA-Z0-9_-]{32,256}$/;
 const VERIFIED_CONNECTION_KEYS: readonly string[] = [
     "activation",
     "computerId",
@@ -65,8 +65,8 @@ function validateIdentifier(value: string, code: string): string {
     return value;
 }
 
-function validateRuntimeCredential(value: string): string {
-    if (!RUNTIME_CREDENTIAL_PATTERN.test(value)) {
+function validateComputerCredential(value: string): string {
+    if (!COMPUTER_CREDENTIAL_PATTERN.test(value)) {
         throw new RuntimeInstallationStoreError("invalid_connection", "The saved Runtime connection is invalid");
     }
     return value;
@@ -136,8 +136,8 @@ function decodeVerifiedConnection(value: Readonly<Record<string, unknown>>): Ver
         defaultWorkspace,
         parseRelayOrigin(relayOrigin),
         {
-            current: validateRuntimeCredential(credentials["current"]),
-            successor: credentials["successor"] === null ? null : validateRuntimeCredential(credentials["successor"]),
+            current: validateComputerCredential(credentials["current"]),
+            successor: credentials["successor"] === null ? null : validateComputerCredential(credentials["successor"]),
         },
     );
 }
@@ -160,7 +160,7 @@ async function readJsonFile(path: string, signal: AbortSignal, missingCode: stri
         case "unopenable":
             throw new RuntimeInstallationStoreError(
                 "connection_unavailable",
-                "The saved Runtime connection cannot be read",
+                "The saved Computer connection cannot be read",
                 {
                     cause: read.cause,
                 },
@@ -260,7 +260,7 @@ export class RuntimeInstallationStore {
             validateIdentifier(input.computerId, "invalid_connection"),
             input.defaultWorkspace,
             parseRelayOrigin(input.relayOrigin.toString()),
-            { current: validateRuntimeCredential(input.runtimeCredential), successor: null },
+            { current: validateComputerCredential(input.computerCredential), successor: null },
         );
         await this.changePairing(async () => {
             await this.overwriteConnection(stored, signal);
@@ -306,17 +306,17 @@ export class RuntimeInstallationStore {
 
     /**
      * Pairing identity and its rotating credentials commit together. Every writer holds the same process-safe lock
-     * and re-reads the selected pairing, so activation cannot restore old credentials and an old Runtime cannot
+     * and re-reads the selected pairing, so activation cannot restore old credentials and an old Computer cannot
      * overwrite a replacement. A rejected completion leaves the prepared successor durable for a safe retry.
      */
-    readonly runtimeCredentials = (pairingGeneration: string): RuntimeCredentials => ({
+    readonly computerCredentials = (pairingGeneration: string): ComputerCredentials => ({
         prepare: async (signal) =>
             await this.changePairing(async () => {
                 const connection = await this.readConnection(pairingGeneration, signal);
                 const saved = connection.credentials;
                 const rotation = {
                     current: saved.current,
-                    successor: saved.successor ?? runtimeCredentialSuccessor(saved.current),
+                    successor: saved.successor ?? computerCredentialSuccessor(saved.current),
                 };
                 if (saved.successor === null) {
                     await this.overwriteCredentials(connection, rotation, signal);
@@ -333,7 +333,7 @@ export class RuntimeInstallationStore {
                 if (saved.current !== rotation.current || saved.successor !== rotation.successor) {
                     throw new RuntimeInstallationStoreError(
                         "credential_conflict",
-                        "The saved Runtime credential changed during its rotation",
+                        "The saved Computer credential changed during its rotation",
                     );
                 }
                 await this.overwriteCredentials(connection, { current: rotation.successor, successor: null }, signal);
@@ -343,7 +343,7 @@ export class RuntimeInstallationStore {
 
     private readonly overwriteCredentials = async (
         connection: VerifiedComputerConnection,
-        credentials: HeldRuntimeCredentials,
+        credentials: HeldComputerCredentials,
         signal: AbortSignal,
     ): Promise<void> => {
         await this.overwriteConnection(

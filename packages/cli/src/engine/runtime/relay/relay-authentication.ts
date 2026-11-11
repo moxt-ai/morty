@@ -1,14 +1,14 @@
-import { RUNTIME_SUCCESSOR_CREDENTIAL_HEADER } from "@morty-build/client/protocol";
-import type { HeldRuntimeCredentials } from "../connection/runtime-credentials.ts";
+import { COMPUTER_SUCCESSOR_CREDENTIAL_HEADER } from "@morty-build/client/protocol";
+import type { HeldComputerCredentials } from "../connection/computer-credentials.ts";
 
 /**
- * Presents the Runtime's credentials: the current one, and the saved successor a connection makes current as the
+ * Presents the Computer's credentials: the current one, and the saved successor a connection makes current as the
  * Relay accepts it.
  */
-export function relayCredentialHeaders(credentials: HeldRuntimeCredentials): Readonly<Record<string, string>> {
+export function relayCredentialHeaders(credentials: HeldComputerCredentials): Readonly<Record<string, string>> {
     return {
         authorization: `Bearer ${credentials.current}`,
-        ...(credentials.successor === null ? {} : { [RUNTIME_SUCCESSOR_CREDENTIAL_HEADER]: credentials.successor }),
+        ...(credentials.successor === null ? {} : { [COMPUTER_SUCCESSOR_CREDENTIAL_HEADER]: credentials.successor }),
     };
 }
 

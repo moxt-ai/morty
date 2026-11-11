@@ -151,7 +151,7 @@ async function collectBugReport(
     signal.throwIfAborted();
     async function collectDaemon(): Promise<BugReport["daemon"]> {
         if (source === null) {
-            return { kind: "unavailable", code: "NO_ACTIVE_RUNTIME" };
+            return { kind: "unavailable", code: "NO_ACTIVE_COMPUTER" };
         }
         const deadline = AbortSignal.any([signal, AbortSignal.timeout(10_000)]);
         try {

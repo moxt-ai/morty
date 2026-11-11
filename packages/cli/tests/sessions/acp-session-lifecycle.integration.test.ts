@@ -237,7 +237,7 @@ describe("ACP conversation sessions", () => {
                 if (!(active instanceof FoundStoredSession)) {
                     throw new Error("Expected the active conversation to remain stored");
                 }
-                // Activity preserves the Agent's reported modification time rather than the Runtime clock.
+                // Activity preserves the Agent's reported modification time rather than the Computer clock.
                 expect(active.session.updatedAt).toBe("2026-09-05T00:00:00Z");
             } finally {
                 await reopenedManager.close();
@@ -700,7 +700,7 @@ describe("ACP conversation sessions", () => {
         }
     });
 
-    it("Given a managed Claude Code conversation, When the Runtime restarts, Then its Session remains discoverable", async () => {
+    it("Given a managed Claude Code conversation, When the Computer restarts, Then its Session remains discoverable", async () => {
         const temporaryDirectory = await mkdtemp(join(tmpdir(), "morty-acp-session-store-"));
         const databasePath = join(temporaryDirectory, "sessions.sqlite");
         const agent = new AcpAgentDefinition(
@@ -1001,7 +1001,7 @@ child.once("exit", (code) => process.exit(code ?? 84));
         }
     });
 
-    it("Given a conversation closed after its prompt was prepared, When the prompt runs, Then the Runtime reports session_closed without reporting the conversation working", async () => {
+    it("Given a conversation closed after its prompt was prepared, When the prompt runs, Then the Computer reports session_closed without reporting the conversation working", async () => {
         const statuses: SessionStatusChangedEvent[] = [];
         const manager = new SessionManager({
             observer: new NullSessionObserver(),
@@ -1485,7 +1485,7 @@ child.once("exit", (code) => process.exit(code ?? 84));
         }
     });
 
-    it("Given an ACP Agent has a tool subprocess, When the turn is cancelled, Then Morty retains the process tree until Runtime shutdown", async () => {
+    it("Given an ACP Agent has a tool subprocess, When the turn is cancelled, Then Morty retains the process tree until Computer shutdown", async () => {
         const temporaryDirectory = await mkdtemp(join(tmpdir(), "morty-acp-cancel-tree-"));
         const observer = new RecordingObserver();
         const manager = new SessionManager({

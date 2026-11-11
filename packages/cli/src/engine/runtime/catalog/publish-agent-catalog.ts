@@ -2,7 +2,7 @@ import { MORTY_API_PREFIX } from "@morty-build/client/protocol";
 import { fetch } from "undici";
 import { environmentProxyDispatcher } from "../../util/network/environment-proxy.ts";
 import type { RuntimeConfig } from "../config.ts";
-import type { HeldRuntimeCredentials } from "../connection/runtime-credentials.ts";
+import type { HeldComputerCredentials } from "../connection/computer-credentials.ts";
 import { relayCredentialHeaders, relayHttpEndpoint } from "../relay/relay-authentication.ts";
 
 const CATALOG_UPDATE_TIMEOUT_MILLISECONDS = 20_000;
@@ -80,7 +80,7 @@ export async function publishAgentCatalog(config: RuntimeConfig, signal: AbortSi
             label: agent.label,
         })),
     });
-    const send = async (credentials: HeldRuntimeCredentials): Promise<FetchResponse> => {
+    const send = async (credentials: HeldComputerCredentials): Promise<FetchResponse> => {
         try {
             return await fetch(catalogEndpoint(config), {
                 body,
@@ -102,7 +102,7 @@ export async function publishAgentCatalog(config: RuntimeConfig, signal: AbortSi
     const presented = await config.credentials.held(requestSignal);
     let response = await send(presented);
     if (response.status === 401) {
-        // A connection can rotate the credential while this request is in flight. Presenting what the Runtime holds
+        // A connection can rotate the credential while this request is in flight. Presenting what the Computer holds
         // now, once, settles that; a refusal of current credentials stays a refusal.
         const held = await config.credentials.held(requestSignal);
         if (held.current !== presented.current || held.successor !== presented.successor) {

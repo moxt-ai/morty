@@ -17,7 +17,7 @@ updates:
     # Groups follow risk, so a breaking change in one area never holds back the others. A dependency joins the first
     # group whose patterns match it.
     groups:
-      # Agent and protocol SDKs change behavior the Runtime adapts to.
+      # Agent and protocol SDKs change behavior the Computer adapts to.
       agent-sdks:
         patterns:
           - "@anthropic-ai/*"

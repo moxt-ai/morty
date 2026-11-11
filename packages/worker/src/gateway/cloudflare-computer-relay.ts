@@ -34,7 +34,7 @@ export class CloudflareComputerRelay implements ComputerRelayGateway {
     readonly refuseRevokedDaemon = (): Response => {
         const pair = new WebSocketPair();
         pair[1].accept();
-        pair[1].close(1008, "Runtime revoked");
+        pair[1].close(1008, "Computer revoked");
         return new Response(null, { status: 101, webSocket: pair[0] });
     };
 
@@ -50,39 +50,42 @@ export class CloudflareComputerRelay implements ComputerRelayGateway {
         return await this.forward(access, new Request(endpoint, { headers, method: request.method, signal }), signal);
     };
 
-    readonly disconnectRuntime = async (access: VerifiedComputerAccess, signal: AbortSignal): Promise<void> => {
+    readonly disconnectComputer = async (access: VerifiedComputerAccess, signal: AbortSignal): Promise<void> => {
         signal.throwIfAborted();
         const headers = new Headers();
 
-        const response = await this.fetchRuntime(
+        const response = await this.fetchComputer(
             access,
-            new Request(`https://runtime.internal/computers/${encodeURIComponent(access.computerId)}/runtime/revoke`, {
-                headers,
-                method: "DELETE",
-                signal,
-            }),
+            new Request(
+                `https://computer-relay.internal/computers/${encodeURIComponent(access.computerId)}/computer/revoke`,
+                {
+                    headers,
+                    method: "DELETE",
+                    signal,
+                },
+            ),
             signal,
         );
         signal.throwIfAborted();
         if (response.status !== 204) {
-            throw new Error("The Runtime connection could not be revoked");
+            throw new Error("The Computer connection could not be revoked");
         }
     };
 
-    readonly readRuntimeStatus = async (
+    readonly readComputerStatus = async (
         access: VerifiedComputerAccess,
         signal: AbortSignal,
     ): Promise<ComputerStatus> => {
         const response = await this.forward(
             access,
-            new Request("https://runtime.internal/runtime-status", {
+            new Request("https://computer-relay.internal/computer-status", {
                 method: "GET",
                 signal,
             }),
             signal,
         );
         if (!response.ok) {
-            throw new Error("The Runtime status could not be read");
+            throw new Error("The Computer status could not be read");
         }
         const value: unknown = await response.json();
         if (
@@ -91,7 +94,7 @@ export class CloudflareComputerRelay implements ComputerRelayGateway {
             Array.isArray(value) ||
             typeof Reflect.get(value, "online") !== "boolean"
         ) {
-            throw new Error("The Runtime returned an invalid status");
+            throw new Error("The Computer returned an invalid status");
         }
         return new ComputerStatus(Reflect.get(value, "online"));
     };
@@ -107,10 +110,10 @@ export class CloudflareComputerRelay implements ComputerRelayGateway {
         const endpoint = new URL(request.url);
         endpoint.pathname = `/computers/${encodeURIComponent(access.computerId)}${endpoint.pathname}`;
         const forwarded = new Request(endpoint, { method: request.method, headers, signal });
-        return await this.fetchRuntime(access, forwarded, signal);
+        return await this.fetchComputer(access, forwarded, signal);
     };
 
-    private readonly fetchRuntime = async (
+    private readonly fetchComputer = async (
         access: VerifiedComputerAccess,
         request: Request,
         signal: AbortSignal,
@@ -126,13 +129,13 @@ export class CloudflareComputerRelay implements ComputerRelayGateway {
             logger.error(
                 {
                     ...requestLogContext(request),
-                    event: "runtime_relay_request_failed",
+                    event: "computer_relay_request_failed",
                     durableObjectClass: "ComputerRelay",
                     durableObjectId: objectId.toString(),
                     computerId: access.computerId,
                     err: error,
                 },
-                "Runtime Relay request failed",
+                "Computer Relay request failed",
             );
             throw error;
         }

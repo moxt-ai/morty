@@ -262,7 +262,7 @@ test("Given a reply is streaming, When Chat loses its connection and recovers, T
     });
 });
 
-test("Given a reply is streaming, When the Runtime restarts, Then the partial reply stays once and the turn is reported as failed rather than complete", {
+test("Given a reply is streaming, When the Computer restarts, Then the partial reply stays once and the turn is reported as failed rather than complete", {
     timeout: 30_000,
 }, async () => {
     const clock = new TestClock(CLOCK_ORIGIN);

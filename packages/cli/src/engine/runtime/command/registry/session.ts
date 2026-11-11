@@ -46,7 +46,7 @@ interface SessionPreparationRequest {
     readonly transient?: boolean | undefined;
 }
 
-/** Resolves the Session this Runtime holds for `target`, measured as part of the preparation. */
+/** Resolves the Session this Computer holds for `target`, measured as part of the preparation. */
 const resolveMeasuredHeldSession = async (
     target: NativeSessionTarget,
     resolveAgent: ResolveAgent,
@@ -386,7 +386,7 @@ async function executeSessionCreate(context: CommandContext, command: SessionCre
                     );
                 } catch (cause) {
                     if (!signal.aborted) {
-                        // A refused creation leaves no Session behind in the Sessions this Runtime holds.
+                        // A refused creation leaves no Session behind in the Sessions this Computer holds.
                         await context.sessions.archiveSession(target, signal);
                     }
                     throw cause;

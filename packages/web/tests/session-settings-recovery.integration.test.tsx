@@ -58,10 +58,10 @@ test("Given a configured conversation, When the user reopens it, Then the conver
         (element) => element instanceof HTMLTextAreaElement && !element.disabled,
     );
     expect(reloaded.elementByTestId(dataTestId.agentConfiguration).textContent).toContain("Test Large");
-    await sendPrompt(reloaded, composer, "Continue on this Runtime");
+    await sendPrompt(reloaded, composer, "Continue on this Computer");
     await reloaded.waitForView(() =>
         expect(getByRole(document.body, "log", { name: "Messages" }).textContent).toContain(
-            "Settings Agent: Continue on this Runtime",
+            "Settings Agent: Continue on this Computer",
         ),
     );
     expect(reloaded.elementByTestId(dataTestId.agentConfiguration).textContent).toContain("Test Large");
@@ -72,7 +72,7 @@ test("Given the Agent changed its model during a turn and the user then picked a
 }, async () => {
     const app = await createTestApp({ connectAgent: true });
     if (app.daemon === null) {
-        throw new Error("Expected the connected Runtime");
+        throw new Error("Expected the connected Computer");
     }
     const composer = await app.queryElementByTestId(
         dataTestId.messageComposer,

@@ -5,20 +5,20 @@ import type { ComputerScope } from "../../runtime/entity/session.ts";
 export type ProjectPermission = ProjectPermissionName;
 
 export const ProjectPermission = {
-    RuntimePair: "runtime:pair",
-    RuntimeRead: "runtime:read",
-    RuntimeRevoke: "runtime:revoke",
+    ComputerPair: "computer:pair",
+    ComputerRead: "computer:read",
+    ComputerRevoke: "computer:revoke",
     SessionRead: "session:read",
     SessionWrite: "session:write",
 } as const satisfies Readonly<Record<string, ProjectPermission>>;
 
 /**
- * What a project credential must grant to open a Runtime host connection and to keep using it. The connection
- * receives the Runtime's status and every Session's traffic, so it needs to read both. Each command the connection
+ * What a project credential must grant to open a Computer host connection and to keep using it. The connection
+ * receives the Computer's status and every Session's traffic, so it needs to read both. Each command the connection
  * sends additionally needs that command's own permission.
  */
 export const PROJECT_HOST_PERMISSIONS: readonly ProjectPermission[] = Object.freeze([
-    ProjectPermission.RuntimeRead,
+    ProjectPermission.ComputerRead,
     ProjectPermission.SessionRead,
 ]);
 

@@ -2,7 +2,7 @@ import type { MortyClient } from "@morty-build/client";
 import { connectionReadiness, type SessionConnection } from "./session-connection.ts";
 
 /**
- * The pane that follows the Session, as the Session's operations reach the Runtime through it. Its connection is read
+ * The pane that follows the Session, as the Session's operations reach the Computer through it. Its connection is read
  * as it is now, never copied, so the pane's state is the only account of the connection.
  */
 interface SessionFollowingPane {
@@ -22,7 +22,7 @@ export interface SessionConnectionFollower {
 }
 
 /**
- * How the Session's operations reach the Runtime, whichever pane follows the Session. An operation waits while no
+ * How the Session's operations reach the Computer, whichever pane follows the Session. An operation waits while no
  * following pane's connection is ready, so switching panes delays an operation instead of ending it. A request already
  * sent keeps the client it started with: closing a client ends only its live subscriptions.
  */

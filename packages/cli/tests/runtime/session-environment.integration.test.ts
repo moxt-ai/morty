@@ -4,6 +4,8 @@ import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+    COMPUTER_HEARTBEAT_ACK_MESSAGE,
+    COMPUTER_HEARTBEAT_MESSAGE,
     decodeDaemonToServiceMessage,
     decodeNativeSessionResult,
     decodeSessionReadyEvent,
@@ -18,8 +20,6 @@ import {
     encodeSessionRestoreCommand,
     NATIVE_SESSION_REQUEST_KIND,
     type NativeSessionTarget,
-    RUNTIME_HEARTBEAT_ACK_MESSAGE,
-    RUNTIME_HEARTBEAT_MESSAGE,
     SessionPromptDisposition,
 } from "@morty-build/client/protocol";
 import { expect, test, vi } from "vitest";
@@ -29,10 +29,10 @@ import { type RuntimeConfig, RuntimeLocalContext } from "../../src/engine/runtim
 import { runRuntime } from "../../src/engine/runtime/run.ts";
 import { fakeAgentHarness } from "../support/agent-harness.ts";
 import { ControlledAcpConnection } from "../support/agents/controlled-acp-connection.ts";
+import { memoryComputerCredentials } from "../support/computer-credentials.ts";
 import { createControlledRuntimeConfig } from "../support/controlled-runtime-config.ts";
-import { memoryRuntimeCredentials } from "../support/runtime-credentials.ts";
 
-// @no-uc: Compatibility; public Runtime commands and real ACP children verify embedding context isolation.
+// @no-uc: Compatibility; public Computer commands and real ACP children verify embedding context isolation.
 test("Given scoped environments, When Sessions run concurrently and restore, Then their children retain the right identity", async ({
     signal,
 }) => {
@@ -50,7 +50,7 @@ test("Given scoped environments, When Sessions run concurrently and restore, The
         expect((await peer.launches()).filter((launch) => launch.context !== null)).toEqual(
             expect.arrayContaining(targets.map((target) => ({ context: JSON.stringify(target) }))),
         );
-        await peer.restart("runtime");
+        await peer.restart("computer");
         peer.send(encodeSessionQueryCommand({ kind: "session.query", requestId: "identify-a", targets: [first] }));
         const [entry] = decodeSessionsQueriedEvent(await peer.next("identify-a", ["session.queried"])).entries;
         if (entry === undefined) {
@@ -174,7 +174,7 @@ test("Given native history, When it is imported, reopened and forked, Then execu
     try {
         const seed = await peer.create();
         await peer.prompt(seed, "seed-history");
-        await peer.restart("import-runtime");
+        await peer.restart("import-computer");
         peer.send(
             encodeNativeSessionCommand({
                 ...peer.base(),
@@ -230,7 +230,7 @@ test.for(["import", "fork"] as const)(
         try {
             const seed = await peer.create();
             await peer.prompt(seed, "seed-history");
-            await peer.restart("competing-runtime");
+            await peer.restart("competing-computer");
             const candidates: { harness: string; sessionId: string }[] = [];
             for (const harness of ["codex", "other-codex"]) {
                 const requestId = `list-${harness}`;
@@ -321,7 +321,7 @@ test.for(["complete", "cancel"] as const)(
                     }),
                 );
             }
-            // The independent wire reply establishes that both requests reached the Runtime before release.
+            // The independent wire reply establishes that both requests reached the Computer before release.
             peer.send(encodeSessionListCommand({ kind: "session.list", requestId: "received", limit: 1 }));
             await peer.next("received", ["session.listed"]);
             barrier.emit("continue");
@@ -405,8 +405,8 @@ await import(${JSON.stringify(agentPeer)});
         socket = connected;
         connected.on("message", (value) => {
             const frame = value.toString();
-            if (frame === RUNTIME_HEARTBEAT_MESSAGE) {
-                connected.send(RUNTIME_HEARTBEAT_ACK_MESSAGE);
+            if (frame === COMPUTER_HEARTBEAT_MESSAGE) {
+                connected.send(COMPUTER_HEARTBEAT_ACK_MESSAGE);
             } else {
                 frames.push(frame);
                 for (const listener of listeners) {
@@ -414,7 +414,7 @@ await import(${JSON.stringify(agentPeer)});
                 }
             }
         });
-        connected.send(JSON.stringify({ kind: "runtime.liveness.ready" }));
+        connected.send(JSON.stringify({ kind: "computer.liveness.ready" }));
     });
     const listening = once(relay, "listening", { signal });
     relay.listen(0, "127.0.0.1");
@@ -426,13 +426,13 @@ await import(${JSON.stringify(agentPeer)});
     const config = {
         ...createControlledRuntimeConfig(
             {
-                credentials: memoryRuntimeCredentials("r".repeat(43)),
+                credentials: memoryComputerCredentials("r".repeat(43)),
                 computerId: "environment",
                 defaultWorkspace: workspace,
-                relayUrl: new URL(`ws://127.0.0.1:${address.port}/morty/api/v1/runtimes/connect`),
+                relayUrl: new URL(`ws://127.0.0.1:${address.port}/morty/api/v1/computers/connect`),
             },
             [agent, otherAgent],
-            new RuntimeLocalContext(join(directory, "runtime"), process.env),
+            new RuntimeLocalContext(join(directory, "computer"), process.env),
             null,
             resolveAgent,
         ),
@@ -498,7 +498,7 @@ await import(${JSON.stringify(agentPeer)});
     };
     const send = (frame: string) => {
         if (socket === undefined) {
-            throw new Error("The Runtime has not connected");
+            throw new Error("The Computer has not connected");
         }
         socket.send(frame);
     };

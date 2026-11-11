@@ -4,7 +4,7 @@ import { expect, test } from "vitest";
 import worker from "../src/application.ts";
 import { APP_ORIGIN, accountRequest, createIdentityFixture } from "./support/identity-fixture.ts";
 
-test("Given a machine owner, When the owner opens management, Then they can pair a Runtime for their account", async () => {
+test("Given a machine owner, When the owner opens management, Then they can pair a Computer for their account", async () => {
     const fixture = await createIdentityFixture();
     try {
         const identity = await fixture.createAnonymousUser();

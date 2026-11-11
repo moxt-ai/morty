@@ -1,15 +1,15 @@
 import type { ForkMortyNativeSessionRequest } from "@morty-build/client";
 import {
     type AgentSettingsDiscoverCommand,
-    decodeRuntimeDiagnosticsRequest,
+    decodeComputerDiagnosticsRequest,
     type WorkspaceListCommand,
 } from "@morty-build/client/protocol";
 import { PairingDirectoryError } from "../../management/entity/pairing.ts";
 import { ProjectPermission } from "../../management/entity/project-authentication.ts";
 import type { PairingDirectoryService } from "../../management/service/pairing-directory-service.ts";
+import { computerControlPermission } from "./computer-control-registry.ts";
+import type { ComputerControlCommand } from "./computer-control-request.ts";
 import type { LocalSessionOperations } from "./local-session-operations.ts";
-import { runtimeControlPermission } from "./runtime-control-registry.ts";
-import type { RuntimeControlCommand } from "./runtime-control-request.ts";
 
 /** Authorized operations owned by the ComputerRelay holding the daemon connection. */
 export class RuntimeOperationsService {
@@ -30,12 +30,12 @@ export class RuntimeOperationsService {
         return await this.operations.forkNativeSession(access.scope, operationId, input, signal);
     };
 
-    readonly requestControl = async (computerId: string, command: RuntimeControlCommand, signal: AbortSignal) =>
-        await this.requestOperationControl(computerId, command, runtimeControlPermission(command), signal);
+    readonly requestControl = async (computerId: string, command: ComputerControlCommand, signal: AbortSignal) =>
+        await this.requestOperationControl(computerId, command, computerControlPermission(command), signal);
 
     readonly requestOperationControl = async (
         computerId: string,
-        command: RuntimeControlCommand,
+        command: ComputerControlCommand,
         permission: ProjectPermission,
         signal: AbortSignal,
     ) => {
@@ -43,23 +43,23 @@ export class RuntimeOperationsService {
         return await this.operations.requestComputerScopeControl(access.scope, command, signal);
     };
 
-    readonly readRuntimeDiagnostics = async (computerId: string, signal: AbortSignal) => {
-        const command = decodeRuntimeDiagnosticsRequest(
-            JSON.stringify({ kind: "runtime.diagnostics.read", requestId: crypto.randomUUID() }),
+    readonly readComputerDiagnostics = async (computerId: string, signal: AbortSignal) => {
+        const command = decodeComputerDiagnosticsRequest(
+            JSON.stringify({ kind: "computer.diagnostics.read", requestId: crypto.randomUUID() }),
         );
         return await this.requestControl(computerId, command, signal);
     };
 
-    readonly measureRuntimeLatency = async (computerId: string, signal: AbortSignal): Promise<number> => {
-        const command: RuntimeControlCommand = { kind: "runtime.ping", requestId: `ping_${crypto.randomUUID()}` };
-        const access = await this.pairings.authorizeProject(computerId, runtimeControlPermission(command), signal);
+    readonly measureComputerLatency = async (computerId: string, signal: AbortSignal): Promise<number> => {
+        const command: ComputerControlCommand = { kind: "computer.ping", requestId: `ping_${crypto.randomUUID()}` };
+        const access = await this.pairings.authorizeProject(computerId, computerControlPermission(command), signal);
         const started = performance.now();
         await this.operations.requestComputerScopeControl(access.scope, command, signal);
         return Math.max(0, Math.round(performance.now() - started));
     };
 
     readonly listWorkspace = async (computerId: string, command: WorkspaceListCommand, signal: AbortSignal) => {
-        const access = await this.pairings.authorizeProject(computerId, ProjectPermission.RuntimeRead, signal);
+        const access = await this.pairings.authorizeProject(computerId, ProjectPermission.ComputerRead, signal);
         return await this.operations.requestWorkspace(access.scope, command, signal);
     };
 
@@ -68,14 +68,14 @@ export class RuntimeOperationsService {
         command: AgentSettingsDiscoverCommand,
         signal: AbortSignal,
     ) => {
-        const runtimes = await this.pairings.listProjectRuntimes(computerId, signal);
+        const runtimes = await this.pairings.listProjectComputers(computerId, signal);
         if (!runtimes.some((candidate) => candidate.computerId === computerId)) {
             throw new PairingDirectoryError(
-                "runtime_access_denied",
-                "The project credential cannot access this Runtime",
+                "computer_access_denied",
+                "The project credential cannot access this Computer",
             );
         }
-        const access = await this.pairings.authorizeProject(computerId, ProjectPermission.RuntimeRead, signal);
+        const access = await this.pairings.authorizeProject(computerId, ProjectPermission.ComputerRead, signal);
         return await this.operations.requestAgentSettings(access.scope, command, signal);
     };
 }

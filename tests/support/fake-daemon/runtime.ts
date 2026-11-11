@@ -10,10 +10,10 @@ import {
 import * as v from "valibot";
 import { RuntimeAgentDependencies } from "../../../packages/cli/src/engine/agent/runtime-agents.ts";
 import { createRuntimeConfig, RuntimeLocalContext } from "../../../packages/cli/src/engine/runtime/config.ts";
-import type { RuntimeCredentials } from "../../../packages/cli/src/engine/runtime/connection/runtime-credentials.ts";
+import type { ComputerCredentials } from "../../../packages/cli/src/engine/runtime/connection/computer-credentials.ts";
 import { RuntimeLoop } from "../../../packages/cli/src/engine/runtime/runtime-loop.ts";
 import { acpAdapters } from "../../../packages/cli/tests/support/acp-adapters.ts";
-import { memoryRuntimeCredentials } from "../../../packages/cli/tests/support/runtime-credentials.ts";
+import { memoryComputerCredentials } from "../../../packages/cli/tests/support/computer-credentials.ts";
 import { createOwnerApi } from "../owner-api.ts";
 import { createInteractionAgent } from "./interaction-agent.ts";
 import { createSettingsAgent, createUnavailableAgent } from "./settings-agent.ts";
@@ -21,24 +21,24 @@ import { createToolLifecycleAgent } from "./tool-lifecycle-agent.ts";
 
 type TestServerApp = { readonly request: (request: Request) => Response | Promise<Response> };
 
-const runtimePairingSchema = v.object({
+const computerPairingSchema = v.object({
     pairingCode: v.string(),
     computerId: v.string(),
 });
 
-const runtimeClaimSchema = v.object({
+const computerClaimSchema = v.object({
     computerId: v.string(),
-    runtimeCredential: v.string(),
+    computerCredential: v.string(),
 });
 
-export interface ControlledRuntimeConnection {
+export interface ControlledComputerConnection {
     readonly computerId: string;
     readonly origin: string;
-    /** The Runtime's relay credential; it rotates on every connection and outlives restarts, as a saved one does. */
-    readonly credentials: RuntimeCredentials;
+    /** The Computer's relay credential; it rotates on every connection and outlives restarts, as a saved one does. */
+    readonly credentials: ComputerCredentials;
 }
 
-/** An Agent the controlled Runtime exposes. */
+/** An Agent the controlled Computer exposes. */
 export interface ControlledAgent {
     readonly harness: string;
     readonly label: string;
@@ -150,7 +150,7 @@ export function createMortyFakeDaemon(behavior: ControlledAgentBehavior, workspa
 
 export async function connectControlledAgentRuntime(options: {
     readonly behavior: ControlledAgentBehavior;
-    readonly connection: ControlledRuntimeConnection;
+    readonly connection: ControlledComputerConnection;
     readonly signal: AbortSignal;
 }) {
     options.signal.throwIfAborted();
@@ -158,7 +158,7 @@ export async function connectControlledAgentRuntime(options: {
     const workspace = join(directory, "workspace");
     await mkdir(workspace);
     await writeWorkspaceFiles(options.behavior.files, workspace, options.signal);
-    const relayUrl = new URL("/morty/api/v1/runtimes/connect", options.connection.origin);
+    const relayUrl = new URL("/morty/api/v1/computers/connect", options.connection.origin);
     relayUrl.protocol = relayUrl.protocol === "https:" ? "wss:" : "ws:";
     // The Agents can change across restarts, as when the user installs another Agent on the machine.
     const configure = (behavior: ControlledAgentBehavior) => {
@@ -236,18 +236,18 @@ export async function connectControlledAgentRuntime(options: {
         disconnect,
         reconnect: async (): Promise<void> => {
             if (state.kind === "disposed") {
-                throw new Error("Cannot reconnect a disposed controlled Runtime");
+                throw new Error("Cannot reconnect a disposed controlled Computer");
             }
             if (state.kind === "disconnected") {
                 state = { kind: "running", runtime: await start() };
             }
         },
-        /** Restarts the Runtime offering other Agents, which it publishes to the Relay when it reconnects. */
+        /** Restarts the Computer offering other Agents, which it publishes to the Relay when it reconnects. */
         restartWithAgents: async (
             agents: Pick<ControlledAgentBehavior, "additionalAgents" | "harness" | "agentName">,
         ): Promise<void> => {
             if (state.kind === "disposed") {
-                throw new Error("Cannot restart a disposed controlled Runtime");
+                throw new Error("Cannot restart a disposed controlled Computer");
             }
             await disconnect();
             ({ harness, runtime } = configure({ ...options.behavior, ...agents }));
@@ -274,7 +274,7 @@ export async function createControlledAgentRuntime(options: {
     readonly signal: AbortSignal;
 }) {
     const pairing = v.parse(
-        runtimePairingSchema,
+        computerPairingSchema,
         await (
             await options.server.request(
                 new Request(`${options.origin}/morty/api/computers/${options.computerId}/management/pairing`, {
@@ -291,7 +291,7 @@ export async function createControlledAgentRuntime(options: {
     );
     const harness = createMortyFakeDaemon(options.behavior);
     const claim = v.parse(
-        runtimeClaimSchema,
+        computerClaimSchema,
         await (
             await options.server.request(
                 new Request(`${options.origin}/morty/api/v1/pairings/${pairing.computerId}/redeem`, {
@@ -313,7 +313,7 @@ export async function createControlledAgentRuntime(options: {
         connection: {
             computerId: claim.computerId,
             origin: options.origin,
-            credentials: memoryRuntimeCredentials(claim.runtimeCredential),
+            credentials: memoryComputerCredentials(claim.computerCredential),
         },
         signal: options.signal,
     });

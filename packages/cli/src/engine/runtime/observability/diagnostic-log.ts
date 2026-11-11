@@ -73,7 +73,7 @@ export interface RuntimeDiagnosticLogOptions {
     readonly maximumBytes?: number;
     /**
      * Directory holding the manager-written process logs. The manager is the only
-     * witness of how a worker died, so a bug report taken through a live Runtime
+     * witness of how a worker died, so a bug report taken through a live Computer
      * cannot explain a silent death without it. Read-only: rotation is unsafe
      * across processes, so each file keeps exactly one writer.
      */
@@ -91,7 +91,7 @@ export class RuntimeDiagnosticLog {
         const processLogsDirectory = options.processLogsDirectory;
         this.#sources = [
             { maximumBytes, path: join(directory, DAEMON_LOG_FILENAME) },
-            // The process logs a Runtime does not own, but must read to explain its own deaths.
+            // The process logs a Computer does not own, but must read to explain its own deaths.
             ...(processLogsDirectory === undefined
                 ? []
                 : processLogPaths(processLogsDirectory).map((path) => ({ maximumBytes: null, path }))),

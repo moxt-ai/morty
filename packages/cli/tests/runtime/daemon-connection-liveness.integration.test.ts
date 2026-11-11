@@ -7,19 +7,19 @@ import type { Duplex } from "node:stream";
 import { fileURLToPath } from "node:url";
 import { sameNativeSession } from "@morty-build/client/native-session";
 import {
+    COMPUTER_HEARTBEAT_ACK_MESSAGE,
+    COMPUTER_HEARTBEAT_KIND,
+    COMPUTER_HEARTBEAT_MESSAGE,
+    COMPUTER_LIVENESS_READY_KIND,
     decodeMessageKind,
     decodeSessionEventEnvelope,
     decodeSessionOperationFailedEvent,
     decodeSessionReadyEvent,
-    encodeRuntimeLivenessReadyEvent,
+    encodeComputerLivenessReadyEvent,
     encodeSessionCreateCommand,
     encodeSessionPromptCommand,
     encodeWorkspaceListCommand,
     MORTY_API_PREFIX,
-    RUNTIME_HEARTBEAT_ACK_MESSAGE,
-    RUNTIME_HEARTBEAT_KIND,
-    RUNTIME_HEARTBEAT_MESSAGE,
-    RUNTIME_LIVENESS_READY_KIND,
     SESSION_EVENT_KIND,
     SESSION_PROMPT_KIND,
     type SessionLiveEvent,
@@ -31,13 +31,13 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { AcpAgentDefinition } from "../../src/engine/acp/agent/agent-definition.ts";
 import { RuntimeAgentDependencies } from "../../src/engine/agent/runtime-agents.ts";
 import { createRuntimeConfig, RuntimeLocalContext } from "../../src/engine/runtime/config.ts";
-import { RuntimeRelayRevokedError } from "../../src/engine/runtime/relay/runtime-revocation.ts";
+import { ComputerRelayRevokedError } from "../../src/engine/runtime/relay/computer-revocation.ts";
 import { SESSION_EVENT_BATCH_WINDOW_MILLISECONDS } from "../../src/engine/runtime/relay/session-event-publisher.ts";
 import { runRuntime } from "../../src/engine/runtime/run.ts";
 import { type ScheduledTask, systemTimer, type Timer } from "../../src/engine/util/timer.ts";
 import { acpAdapters } from "../support/acp-adapters.ts";
 import { ControlledAcpConnection } from "../support/agents/controlled-acp-connection.ts";
-import { memoryRuntimeCredentials } from "../support/runtime-credentials.ts";
+import { memoryComputerCredentials } from "../support/computer-credentials.ts";
 
 const WEBSOCKET_GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 const fakeAgentPath = fileURLToPath(new URL("../sessions/fixtures/acp-peer.ts", import.meta.url));
@@ -291,7 +291,7 @@ describe("daemon relay connection liveness", () => {
             writeServerTextFrame(
                 socket,
                 JSON.stringify({
-                    kind: RUNTIME_LIVENESS_READY_KIND,
+                    kind: COMPUTER_LIVENESS_READY_KIND,
                 }),
             );
             upgradeWaiters.shift()?.();
@@ -312,7 +312,7 @@ describe("daemon relay connection liveness", () => {
         process.env["PATH"] = "";
         const config = createRuntimeConfig(
             {
-                credentials: memoryRuntimeCredentials("r".repeat(43)),
+                credentials: memoryComputerCredentials("r".repeat(43)),
                 defaultWorkspace,
                 computerId: "heartbeat-channel",
                 relayUrl: new URL(
@@ -337,13 +337,13 @@ describe("daemon relay connection liveness", () => {
             const heartbeatFrame = await firstFrame;
             expect(heartbeatFrame.opcode).toBe(1);
             // The Relay's host answers only this exact text, without waking the Relay.
-            expect(heartbeatFrame.text).toBe(RUNTIME_HEARTBEAT_MESSAGE);
+            expect(heartbeatFrame.text).toBe(COMPUTER_HEARTBEAT_MESSAGE);
             const firstSocket = daemonSockets[0];
             if (firstSocket === undefined) {
                 throw new Error("Test relay did not retain the daemon connection");
             }
             const controlResponse = readClientFrame(firstSocket);
-            writeServerTextFrame(firstSocket, RUNTIME_HEARTBEAT_ACK_MESSAGE);
+            writeServerTextFrame(firstSocket, COMPUTER_HEARTBEAT_ACK_MESSAGE);
             writeServerTextFrame(
                 firstSocket,
                 encodeWorkspaceListCommand({
@@ -356,7 +356,7 @@ describe("daemon relay connection liveness", () => {
 
             const unacknowledgedHeartbeat = readClientFrame(firstSocket);
             await vi.advanceTimersByTimeAsync(20_000);
-            expect((await unacknowledgedHeartbeat).text).toBe(RUNTIME_HEARTBEAT_MESSAGE);
+            expect((await unacknowledgedHeartbeat).text).toBe(COMPUTER_HEARTBEAT_MESSAGE);
 
             const refreshedConnection = waitForUpgrade();
             await vi.advanceTimersByTimeAsync(10_000);
@@ -393,14 +393,14 @@ describe("daemon relay connection liveness", () => {
         }
     });
 
-    it("Given an active Runtime is revoked by the Relay, When the daemon receives the terminal close, Then it exits instead of reconnecting", async () => {
-        const stateDirectory = await mkdtemp(join(tmpdir(), "morty-daemon-runtime-revoked-"));
+    it("Given an active Computer is revoked by the Relay, When the daemon receives the terminal close, Then it exits instead of reconnecting", async () => {
+        const stateDirectory = await mkdtemp(join(tmpdir(), "morty-daemon-computer-revoked-"));
         const defaultWorkspace = join(stateDirectory, "workspace");
         await mkdir(defaultWorkspace);
         const relay = createServer((request, response) => {
             if (
                 request.method === "PUT" &&
-                request.url === `${MORTY_API_PREFIX}/channels/runtime-revoked-channel/catalog`
+                request.url === `${MORTY_API_PREFIX}/channels/computer-revoked-channel/catalog`
             ) {
                 request.resume();
                 response.writeHead(204);
@@ -454,11 +454,11 @@ describe("daemon relay connection liveness", () => {
         process.env["PATH"] = "";
         const config = createRuntimeConfig(
             {
-                credentials: memoryRuntimeCredentials("r".repeat(43)),
+                credentials: memoryComputerCredentials("r".repeat(43)),
                 defaultWorkspace,
-                computerId: "runtime-revoked-channel",
+                computerId: "computer-revoked-channel",
                 relayUrl: new URL(
-                    `ws://127.0.0.1:${readPort(relay)}${MORTY_API_PREFIX}/channels/runtime-revoked-channel/daemon`,
+                    `ws://127.0.0.1:${readPort(relay)}${MORTY_API_PREFIX}/channels/computer-revoked-channel/daemon`,
                 ),
             },
             new RuntimeAgentDependencies([]),
@@ -489,17 +489,17 @@ describe("daemon relay connection liveness", () => {
             expect(decodeMessageKind((await barrier).text)).toBe(WORKSPACE_ENTRIES_KIND);
             expect(statuses).not.toContain("online");
             const heartbeat = readClientFrame(socket);
-            writeServerTextFrame(socket, encodeRuntimeLivenessReadyEvent({ kind: RUNTIME_LIVENESS_READY_KIND }));
-            expect(decodeMessageKind((await heartbeat).text)).toBe(RUNTIME_HEARTBEAT_KIND);
+            writeServerTextFrame(socket, encodeComputerLivenessReadyEvent({ kind: COMPUTER_LIVENESS_READY_KIND }));
+            expect(decodeMessageKind((await heartbeat).text)).toBe(COMPUTER_HEARTBEAT_KIND);
             await online.promise;
             expect(statuses).toContain("online");
-            writeServerCloseFrame(socket, 1008, "Runtime revoked");
+            writeServerCloseFrame(socket, 1008, "Computer revoked");
 
-            await expect(runtime).rejects.toBeInstanceOf(RuntimeRelayRevokedError);
+            await expect(runtime).rejects.toBeInstanceOf(ComputerRelayRevokedError);
             await expect(runtime).rejects.toMatchObject({
-                code: "runtime_relay_revoked",
+                code: "computer_relay_revoked",
                 closeCode: 1008,
-                closeReason: "Runtime revoked",
+                closeReason: "Computer revoked",
             });
             expect(upgradeCount).toBe(1);
         } finally {
@@ -606,7 +606,7 @@ describe("daemon relay connection liveness", () => {
         process.env["PATH"] = "";
         const config = createRuntimeConfig(
             {
-                credentials: memoryRuntimeCredentials("r".repeat(43)),
+                credentials: memoryComputerCredentials("r".repeat(43)),
                 defaultWorkspace,
                 computerId: "liveness-channel",
                 relayUrl: new URL(
@@ -741,7 +741,7 @@ describe("daemon relay connection liveness", () => {
             writeServerTextFrame(
                 socket,
                 JSON.stringify({
-                    kind: RUNTIME_LIVENESS_READY_KIND,
+                    kind: COMPUTER_LIVENESS_READY_KIND,
                 }),
             );
             upgradeWaiters.shift()?.();
@@ -762,7 +762,7 @@ describe("daemon relay connection liveness", () => {
         process.env["PATH"] = "";
         const config = createRuntimeConfig(
             {
-                credentials: memoryRuntimeCredentials("r".repeat(43)),
+                credentials: memoryComputerCredentials("r".repeat(43)),
                 defaultWorkspace,
                 computerId: "unsupported-channel",
                 relayUrl: new URL(
@@ -926,8 +926,8 @@ describe("daemon relay connection liveness", () => {
             clientFrames.push(new ClientFrameQueue(socket));
             writeServerTextFrame(
                 socket,
-                encodeRuntimeLivenessReadyEvent({
-                    kind: RUNTIME_LIVENESS_READY_KIND,
+                encodeComputerLivenessReadyEvent({
+                    kind: COMPUTER_LIVENESS_READY_KIND,
                 }),
             );
             if (daemonSockets.length === 2) {
@@ -963,7 +963,7 @@ describe("daemon relay connection liveness", () => {
         process.env["no_proxy"] = "127.0.0.1,localhost";
         const config = createRuntimeConfig(
             {
-                credentials: memoryRuntimeCredentials("r".repeat(43)),
+                credentials: memoryComputerCredentials("r".repeat(43)),
                 defaultWorkspace,
                 computerId: "reconciliation-channel",
                 relayUrl: new URL(
@@ -1056,8 +1056,8 @@ describe("daemon relay connection liveness", () => {
                 )
             ) {
                 let frame = await firstFrame.next();
-                if (frame.text === RUNTIME_HEARTBEAT_MESSAGE) {
-                    writeServerTextFrame(firstSocket, RUNTIME_HEARTBEAT_ACK_MESSAGE);
+                if (frame.text === COMPUTER_HEARTBEAT_MESSAGE) {
+                    writeServerTextFrame(firstSocket, COMPUTER_HEARTBEAT_ACK_MESSAGE);
                     frame = await firstFrame.next();
                 }
                 while (decodeMessageKind(frame.text) !== SESSION_EVENT_KIND) {
@@ -1125,12 +1125,12 @@ describe("daemon relay connection liveness", () => {
                 throw new Error("Test relay did not observe resumed live events");
             }
             let replayedFrame = await resumedFrame.next();
-            if (replayedFrame.text === RUNTIME_HEARTBEAT_MESSAGE) {
+            if (replayedFrame.text === COMPUTER_HEARTBEAT_MESSAGE) {
                 const secondSocket = daemonSockets[1];
                 if (secondSocket === undefined) {
                     throw new Error("Test relay did not retain the replacement connection");
                 }
-                writeServerTextFrame(secondSocket, RUNTIME_HEARTBEAT_ACK_MESSAGE);
+                writeServerTextFrame(secondSocket, COMPUTER_HEARTBEAT_ACK_MESSAGE);
                 replayedFrame = await resumedFrame.next();
             }
             expect(decodeMessageKind(replayedFrame.text)).toBe(WORKSPACE_ENTRIES_KIND);
@@ -1154,7 +1154,7 @@ describe("daemon relay connection liveness", () => {
             }
             const fresh = await startSession(freshSocket, freshFrames, "fresh-command");
             let freshFrame = await freshFrames.next();
-            if (decodeMessageKind(freshFrame.text) === RUNTIME_HEARTBEAT_KIND) {
+            if (decodeMessageKind(freshFrame.text) === COMPUTER_HEARTBEAT_KIND) {
                 freshFrame = await freshFrames.next();
             }
             while (decodeMessageKind(freshFrame.text) !== SESSION_EVENT_KIND) {

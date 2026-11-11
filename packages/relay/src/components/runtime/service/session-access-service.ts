@@ -26,12 +26,12 @@ export interface SessionAccess {
 }
 
 /**
- * A Session credential confines every request to its own Session. An operation the Relay grants Runtime-wide to Runtime
+ * A Session credential confines every request to its own Session. An operation the Relay grants Computer-wide to Computer
  * read access, such as reading a Session's settings or native history, reads only that Session through it, which is
  * what Session read access permits.
  */
 function sessionScopedPermission(permission: ProjectPermission): ProjectPermission {
-    return permission === ProjectPermission.RuntimeRead ? ProjectPermission.SessionRead : permission;
+    return permission === ProjectPermission.ComputerRead ? ProjectPermission.SessionRead : permission;
 }
 
 export class SessionAccessService {
@@ -44,7 +44,7 @@ export class SessionAccessService {
     }
 
     /**
-     * Issues a Session credential bound to the active Runtime pairing and holder. Ending either
+     * Issues a Session credential bound to the active Computer pairing and holder. Ending either
      * authority ends the credential; a later pairing cannot restore it.
      */
     readonly issue = async (

@@ -29,7 +29,7 @@ const submit = (peer: RealDaemonPeer, sessionTarget: RealDaemonPeer["target"], c
         }),
     );
 
-/** The next idle status the Runtime publishes for the Session. */
+/** The next idle status the Computer publishes for the Session. */
 async function nextIdle(peer: RealDaemonPeer, sessionTarget: RealDaemonPeer["target"]): Promise<SessionStatus> {
     for (;;) {
         const message = await peer.nextMessage();

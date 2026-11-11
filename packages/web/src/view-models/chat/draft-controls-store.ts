@@ -2,11 +2,11 @@ import type { SessionConfigOption, WorkspaceEntriesEvent } from "@morty-build/cl
 import { createStore } from "zustand/vanilla";
 import {
     type BotChatApi,
-    type BotRuntimeConfiguration,
+    type BotComputerConfiguration,
     type ChatAgentSelection,
     type ChatDraftConfiguration,
-    connectedChatRuntimeAgents,
-    runtimeAgentAvailability,
+    computerAgentAvailability,
+    connectedChatComputerAgents,
 } from "@/services/chat/bot-chat-api";
 import { rememberAgentSettingChoice, restoreLastAgentSettings } from "@/services/chat/last-agent-settings";
 import {
@@ -18,19 +18,19 @@ import {
     saveRecentCwdPreference,
 } from "@/services/chat/last-cwd-preference";
 import { readLastHarnessPreference, saveLastHarnessPreference } from "@/services/chat/last-harness-preference";
-import { isRuntimeConnectionFailure } from "@/services/management/management-api";
+import { isComputerConnectionFailure } from "@/services/management/management-api";
 import type { AgentModelCatalog } from "../../services/diagnostics/model-catalog.ts";
 import { formatError } from "../format-error.ts";
 import { harnessOptions, nativeSessionAgentTabs } from "./native-session-agents.ts";
 
 /**
- * The open draft's Agent settings. Whether the Runtime is online or offers an Agent is the Runtime configuration's to
+ * The open draft's Agent settings. Whether the Computer is online or offers an Agent is the Computer configuration's to
  * say, and the page shows it there, so a draft that cannot load for those reasons stays `loading`; only what the
  * configuration cannot know is kept.
  */
 type DraftSettingsState =
     | { readonly kind: "loading" }
-    /** A read failed because the Runtime was unreachable although the configuration said it was online. */
+    /** A read failed because the Computer was unreachable although the configuration said it was online. */
     | { readonly kind: "unreachable" }
     | { readonly kind: "failed"; readonly message: string }
     | {
@@ -73,8 +73,8 @@ export function draftShownOptions(settings: DraftSettingsState): readonly Sessio
     }
 }
 
-export function draftHarnessSelection(settings: DraftSettingsState, configuration: BotRuntimeConfiguration | null) {
-    const options = harnessOptions(configuration?.runtime ?? null);
+export function draftHarnessSelection(settings: DraftSettingsState, configuration: BotComputerConfiguration | null) {
+    const options = harnessOptions(configuration?.computer ?? null);
     const harness =
         settings.kind === "switching"
             ? settings.harness
@@ -134,10 +134,10 @@ export interface DraftControlsStore {
     /** Loads the open draft's settings again, as Retry does. */
     readonly retry: (signal: AbortSignal) => Promise<void>;
     /**
-     * The page observed a Runtime configuration. Settings read under a different one are dropped; the open draft loads
-     * once the Runtime can serve it, and a draft whose Agent the Runtime no longer offers settles on an offered one.
+     * The page observed a Computer configuration. Settings read under a different one are dropped; the open draft loads
+     * once the Computer can serve it, and a draft whose Agent the Computer no longer offers settles on an offered one.
      */
-    readonly runtimeChanged: (configuration: BotRuntimeConfiguration, signal: AbortSignal) => Promise<void>;
+    readonly computerChanged: (configuration: BotComputerConfiguration, signal: AbortSignal) => Promise<void>;
     readonly openCwd: () => void;
     readonly setCwdMenuOpen: (open: boolean) => void;
     readonly saveCwd: (signal: AbortSignal) => Promise<void>;
@@ -175,24 +175,24 @@ function waitForCwdPreview(signal: AbortSignal): Promise<void> {
 export const createDraftControlsStore = (
     computerId: string,
     requests: Pick<BotChatApi, "directory" | "agentSettings">,
-    /** The Runtime configuration the workspace keeps current. */
-    runtimeConfiguration: () => BotRuntimeConfiguration | null,
-    /** A read found the Runtime unreachable although the configuration says it is online. */
+    /** The Computer configuration the workspace keeps current. */
+    computerConfiguration: () => BotComputerConfiguration | null,
+    /** A read found the Computer unreachable although the configuration says it is online. */
     onUnreachable: () => void,
 ) =>
     createStore<DraftControlsStore>()((set, get) => {
         let cwdOperation: AbortController | null = null;
-        // Agent settings belong to the Runtime configuration they were read under: a different configuration, as
-        // after the Runtime reconnects or its Agents change, drops them. They also belong to the directory a Session
+        // Agent settings belong to the Computer configuration they were read under: a different configuration, as
+        // after the Computer reconnects or its Agents change, drops them. They also belong to the directory a Session
         // would start in, whose project settings the Agent reads.
         let agentSettings: {
-            readonly runtime: string | null;
+            readonly computer: string | null;
             readonly entries: Map<string, Awaited<ReturnType<BotChatApi["agentSettings"]>>>;
-        } = { runtime: null, entries: new Map() };
+        } = { computer: null, entries: new Map() };
         // The selected draft's lifetime. Every settings operation runs within it, and none runs without one.
         let draft: { readonly controller: AbortController; readonly signal: AbortSignal } | null = null;
         // Every operation that writes the draft's settings (a load, a refresh, a harness switch, a directory choice)
-        // takes this one lane: starting one stops the previous, and only the newest may write. A Runtime
+        // takes this one lane: starting one stops the previous, and only the newest may write. A Computer
         // configuration change starts its own, so nothing read under an older configuration is shown or cached.
         let settingsOperation: AbortController | null = null;
         const beginSettingsOperation = (parent: AbortSignal) => {
@@ -257,11 +257,11 @@ export const createDraftControlsStore = (
             };
         };
         /**
-         * A read that found the Runtime unreachable says so and offers Retry; the workspace retries it once the Runtime
+         * A read that found the Computer unreachable says so and offers Retry; the workspace retries it once the Computer
          * is reachable again.
          */
         const settleFailure = (cause: unknown, message: string): void => {
-            if (isRuntimeConnectionFailure(cause)) {
+            if (isComputerConnectionFailure(cause)) {
                 set({ settings: { kind: "unreachable" } });
                 onUnreachable();
                 return;
@@ -418,12 +418,12 @@ export const createDraftControlsStore = (
             try {
                 const switching = currentSettings.kind === "switching";
                 const requestedHarness = switching ? currentSettings.harness : readLastHarnessPreference(computerId);
-                const configuration = runtimeConfiguration();
+                const configuration = computerConfiguration();
                 const agents =
-                    configuration === null || runtimeAgentAvailability(configuration.runtime) !== "available"
+                    configuration === null || computerAgentAvailability(configuration.computer) !== "available"
                         ? []
-                        : connectedChatRuntimeAgents(configuration.runtime);
-                // A requested harness the Runtime does not offer must not block the draft; the first connected Agent
+                        : connectedChatComputerAgents(configuration.computer);
+                // A requested harness the Computer does not offer must not block the draft; the first connected Agent
                 // stands in until the user chooses again.
                 const requestedAgent = agents.find((agent) => agent.harness === requestedHarness);
                 const selected = requestedAgent ?? agents[0];
@@ -443,21 +443,21 @@ export const createDraftControlsStore = (
                         operation.signal.throwIfAborted();
                     } catch {
                         // An unreadable chosen directory gives way to the default for this draft only; the choice
-                        // stays remembered for when the Runtime can read it again.
+                        // stays remembered for when the Computer can read it again.
                         operation.signal.throwIfAborted();
                     }
                 }
                 // The settings are read in the directory the Session would start in. A deliberate Agent switch must
-                // be acknowledged by the live Runtime, not satisfied by settings cached before the user made the choice.
+                // be acknowledged by the live Computer, not satisfied by settings cached before the user made the choice.
                 const result = await readAgentSettings(selected.harness, cwd, switching, operation);
                 operation.signal.throwIfAborted();
                 if (!operation.current()) {
                     return;
                 }
-                // The Runtime can drop while these reads are in flight. A switch
+                // The Computer can drop while these reads are in flight. A switch
                 // that never lands must not become the remembered harness.
-                const live = runtimeConfiguration();
-                if (live === null || !live.runtime.online) {
+                const live = computerConfiguration();
+                if (live === null || !live.computer.online) {
                     set({ settings: { kind: "loading" } });
                     return;
                 }
@@ -550,22 +550,22 @@ export const createDraftControlsStore = (
             retry: async (signal) => {
                 await load(signal);
             },
-            runtimeChanged: async (configuration, signal) => {
-                // Agent settings follow the Runtime configuration: a different one drops those read before it.
-                const runtime = JSON.stringify(configuration.runtime);
-                const changed = runtime !== agentSettings.runtime;
+            computerChanged: async (configuration, signal) => {
+                // Agent settings follow the Computer configuration: a different one drops those read before it.
+                const computer = JSON.stringify(configuration.computer);
+                const changed = computer !== agentSettings.computer;
                 if (changed) {
-                    agentSettings = { runtime, entries: new Map() };
+                    agentSettings = { computer, entries: new Map() };
                 }
                 if (draft === null) {
                     return;
                 }
                 const settings = get().settings;
-                // An offline Runtime offers nothing for now, which says nothing about whether the Agent was removed.
+                // An offline Computer offers nothing for now, which says nothing about whether the Agent was removed.
                 // A harness switch still in flight has to stop here, or its late response would be remembered.
-                if (!configuration.runtime.online) {
+                if (!configuration.computer.online) {
                     if (settings.kind === "switching") {
-                        settingsOperation?.abort(new Error("The Runtime went offline."));
+                        settingsOperation?.abort(new Error("The Computer went offline."));
                         settingsOperation = null;
                         set({ settings: { kind: "loading" } });
                     }
@@ -582,7 +582,7 @@ export const createDraftControlsStore = (
                     settings.kind === "ready" || settings.kind === "refreshing" ? settings.selectedAgent : null;
                 const offered =
                     selectedAgent !== null &&
-                    connectedChatRuntimeAgents(configuration.runtime).some(
+                    connectedChatComputerAgents(configuration.computer).some(
                         (agent) =>
                             agent.computerId === selectedAgent.computerId && agent.harness === selectedAgent.harness,
                     );
@@ -706,9 +706,9 @@ export const createDraftControlsStore = (
                 if (settings.kind !== "ready" || disabled) {
                     return;
                 }
-                // The Runtime's Agents can change while the draft is open; choose among those it offers now.
-                const configuration = runtimeConfiguration();
-                const agent = (configuration === null ? [] : nativeSessionAgentTabs(configuration.runtime)).find(
+                // The Computer's Agents can change while the draft is open; choose among those it offers now.
+                const configuration = computerConfiguration();
+                const agent = (configuration === null ? [] : nativeSessionAgentTabs(configuration.computer)).find(
                     (item) => item.installed && item.value === value,
                 );
                 if (agent === undefined) {

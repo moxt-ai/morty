@@ -4,10 +4,15 @@ import {
     CONTENT_AVAILABLE_KIND,
     CONTENT_CHUNK_MAX_BYTES,
     CONTENT_READY_KIND,
+    type ComputerDiagnosticsRequest,
+    type ComputerDiagnosticsResult,
+    type ComputerPingCommand,
+    type ComputerPongEvent,
     type ContentAvailableEvent,
     type ContentWriteCommand,
     decodeAgentSettingsDiscoveredEvent,
     decodeAgentSettingsDiscoveryFailedEvent,
+    decodeComputerStatusEvent,
     decodeContentAvailableEvent,
     decodeContentChunkFrame,
     decodeContentReadyEvent,
@@ -15,7 +20,6 @@ import {
     decodeFileEndEvent,
     decodeFileFailedEvent,
     decodeMessageKind,
-    decodeRuntimeStatusEvent,
     decodeSessionOperationFailedEvent,
     decodeWorkspaceEntriesEvent,
     encodeContentChunkFrame,
@@ -27,10 +31,6 @@ import {
     type FileReadCommand,
     type NativeSessionRequest,
     type NativeSessionResult,
-    type RuntimeDiagnosticsRequest,
-    type RuntimeDiagnosticsResult,
-    type RuntimePingCommand,
-    type RuntimePongEvent,
     requestReplyAddress,
     type SessionArchiveCommand,
     type SessionArchivedEvent,
@@ -71,9 +71,9 @@ import {
     type WorkspaceListCommand,
 } from "@morty-build/client/protocol";
 import { RuntimeOperationFailedError, SessionRuntimeError } from "../entity/session.ts";
-import { runtimeControlRegistry } from "./runtime-control-registry.ts";
+import { computerControlRegistry } from "./computer-control-registry.ts";
 
-export interface RuntimeReplyConnection {
+export interface ComputerReplyConnection {
     readonly readyState: number;
     readonly accept: () => void;
     readonly send: (message: string | ArrayBuffer | ArrayBufferView) => void;
@@ -82,9 +82,9 @@ export interface RuntimeReplyConnection {
     readonly removeEventListener: EventTarget["removeEventListener"];
 }
 
-export type RuntimeControlCommand =
-    | RuntimeDiagnosticsRequest
-    | RuntimePingCommand
+export type ComputerControlCommand =
+    | ComputerDiagnosticsRequest
+    | ComputerPingCommand
     | NativeSessionRequest
     | SessionPrepareCommand
     | SessionCreateCommand
@@ -106,9 +106,9 @@ export type RuntimeControlCommand =
     | SessionQueryCommand
     | SessionRestoreCommand;
 
-export type RuntimeControlResult =
-    | RuntimeDiagnosticsResult
-    | RuntimePongEvent
+export type ComputerControlResult =
+    | ComputerDiagnosticsResult
+    | ComputerPongEvent
     | NativeSessionResult
     | SessionReadyEvent
     | SessionConfigUpdatedEvent
@@ -127,20 +127,20 @@ export type RuntimeControlResult =
     | SessionsQueriedEvent
     | SessionRestoredEvent;
 
-export interface RuntimeFileStream {
+export interface ComputerFileStream {
     readonly finished: Promise<void>;
     readonly response: Response;
 }
 
-export async function requestRuntimeContentWrite(
-    socket: RuntimeReplyConnection,
+export async function requestComputerContentWrite(
+    socket: ComputerReplyConnection,
     command: ContentWriteCommand,
     body: ReadableStream<Uint8Array>,
     signal: AbortSignal,
 ): Promise<ContentAvailableEvent> {
     const timeout = new AbortController();
     const timer = setTimeout(
-        () => timeout.abort(new DOMException("Runtime content upload timed out", "TimeoutError")),
+        () => timeout.abort(new DOMException("Computer content upload timed out", "TimeoutError")),
         120_000,
     );
     const deadline = AbortSignal.any([signal, timeout.signal]);
@@ -151,7 +151,7 @@ export async function requestRuntimeContentWrite(
         return await new Promise<ContentAvailableEvent>((resolve, reject) => {
             const fail = (cause: unknown): void => reject(cause);
             const onClose = (): void =>
-                fail(new SessionRuntimeError("runtime_offline", "The Runtime connection closed"));
+                fail(new SessionRuntimeError("computer_offline", "The Computer connection closed"));
             const onAbort = (): void => fail(deadline.reason);
             const sendBody = async (): Promise<void> => {
                 const reader = body.getReader();
@@ -197,8 +197,8 @@ export async function requestRuntimeContentWrite(
                 }
                 try {
                     const kind = decodeMessageKind(event.data);
-                    if (kind === "runtime.status") {
-                        if (!decodeRuntimeStatusEvent(event.data).online) {
+                    if (kind === "computer.status") {
+                        if (!decodeComputerStatusEvent(event.data).online) {
                             onClose();
                         }
                         return;
@@ -228,7 +228,7 @@ export async function requestRuntimeContentWrite(
                         ) {
                             throw new SessionRuntimeError(
                                 "invalid_request",
-                                "The Runtime returned invalid content metadata",
+                                "The Computer returned invalid content metadata",
                             );
                         }
                         resolve(available);
@@ -263,14 +263,14 @@ export async function requestRuntimeContentWrite(
     }
 }
 
-export async function requestRuntimeFile(
-    socket: RuntimeReplyConnection,
+export async function requestComputerFile(
+    socket: ComputerReplyConnection,
     command: FileReadCommand,
     signal: AbortSignal,
-): Promise<RuntimeFileStream> {
+): Promise<ComputerFileStream> {
     const timeout = new AbortController();
     const timer = setTimeout(
-        () => timeout.abort(new DOMException("Runtime request timed out", "TimeoutError")),
+        () => timeout.abort(new DOMException("Computer request timed out", "TimeoutError")),
         120_000,
     );
     const deadline = AbortSignal.any([signal, timeout.signal]);
@@ -307,7 +307,7 @@ export async function requestRuntimeFile(
             }
             finish();
         };
-        const onClose = (): void => fail(new SessionRuntimeError("runtime_offline", "The Runtime connection closed"));
+        const onClose = (): void => fail(new SessionRuntimeError("computer_offline", "The Computer connection closed"));
         const onAbort = (): void => fail(deadline.reason);
         const onMessage = (event: Event): void => {
             if (!(event instanceof MessageEvent)) {
@@ -320,19 +320,19 @@ export async function requestRuntimeFile(
                         return;
                     }
                     if (!responseSettled || chunk.sequence !== nextSequence) {
-                        throw new SessionRuntimeError("invalid_request", "The Runtime returned invalid file chunks");
+                        throw new SessionRuntimeError("invalid_request", "The Computer returned invalid file chunks");
                     }
                     receivedBytes += chunk.bytes.byteLength;
                     if (receivedBytes > command.maxBytes) {
-                        throw new SessionRuntimeError("invalid_request", "The Runtime exceeded the file size limit");
+                        throw new SessionRuntimeError("invalid_request", "The Computer exceeded the file size limit");
                     }
                     nextSequence += 1;
                     stream?.enqueue(chunk.bytes);
                     return;
                 }
                 const kind = decodeMessageKind(event.data);
-                if (kind === "runtime.status") {
-                    if (!decodeRuntimeStatusEvent(event.data).online) {
+                if (kind === "computer.status") {
+                    if (!decodeComputerStatusEvent(event.data).online) {
                         onClose();
                     }
                     return;
@@ -350,7 +350,7 @@ export async function requestRuntimeFile(
                         return;
                     }
                     if (responseSettled || begin.byteLength > command.maxBytes) {
-                        throw new SessionRuntimeError("invalid_request", "The Runtime returned invalid file metadata");
+                        throw new SessionRuntimeError("invalid_request", "The Computer returned invalid file metadata");
                     }
                     const body = new ReadableStream<Uint8Array>({
                         start(controller) {
@@ -382,7 +382,7 @@ export async function requestRuntimeFile(
                         return;
                     }
                     if (!responseSettled || receivedBytes !== expectedBytes) {
-                        throw new SessionRuntimeError("invalid_request", "The Runtime ended an unknown file stream");
+                        throw new SessionRuntimeError("invalid_request", "The Computer ended an unknown file stream");
                     }
                     stream?.close();
                     finish();
@@ -391,7 +391,7 @@ export async function requestRuntimeFile(
                 fail(
                     cause instanceof SessionRuntimeError
                         ? cause
-                        : new SessionRuntimeError("invalid_request", "The Runtime returned an invalid file", {
+                        : new SessionRuntimeError("invalid_request", "The Computer returned an invalid file", {
                               cause,
                           }),
                 );
@@ -418,14 +418,14 @@ export async function requestRuntimeFile(
     return { finished, response };
 }
 
-export async function requestRuntimeAgentSettings(
-    socket: RuntimeReplyConnection,
+export async function requestComputerAgentSettings(
+    socket: ComputerReplyConnection,
     command: AgentSettingsDiscoverCommand,
     signal: AbortSignal,
 ): Promise<AgentSettingsDiscoveredEvent> {
     const timeout = new AbortController();
     const timer = setTimeout(
-        () => timeout.abort(new DOMException("Runtime request timed out", "TimeoutError")),
+        () => timeout.abort(new DOMException("Computer request timed out", "TimeoutError")),
         120_000,
     );
     const deadline = AbortSignal.any([signal, timeout.signal]);
@@ -433,7 +433,7 @@ export async function requestRuntimeAgentSettings(
     try {
         deadline.throwIfAborted();
         return await new Promise<AgentSettingsDiscoveredEvent>((resolve, reject) => {
-            const onClose = () => reject(new SessionRuntimeError("runtime_offline", "The Runtime connection closed"));
+            const onClose = () => reject(new SessionRuntimeError("computer_offline", "The Computer connection closed"));
             const onAbort = () => reject(deadline.reason);
             const onMessage = (event: Event) => {
                 if (!(event instanceof MessageEvent)) {
@@ -444,9 +444,9 @@ export async function requestRuntimeAgentSettings(
                         return;
                     }
                     const kind = decodeMessageKind(event.data);
-                    if (kind === "runtime.status") {
-                        if (!decodeRuntimeStatusEvent(event.data).online) {
-                            reject(new SessionRuntimeError("runtime_offline", "The Runtime connection closed"));
+                    if (kind === "computer.status") {
+                        if (!decodeComputerStatusEvent(event.data).online) {
+                            reject(new SessionRuntimeError("computer_offline", "The Computer connection closed"));
                         }
                         return;
                     }
@@ -466,7 +466,7 @@ export async function requestRuntimeAgentSettings(
                     }
                 } catch (cause) {
                     reject(
-                        new SessionRuntimeError("invalid_request", "The Runtime returned an invalid response", {
+                        new SessionRuntimeError("invalid_request", "The Computer returned an invalid response", {
                             cause,
                         }),
                     );
@@ -492,15 +492,15 @@ export async function requestRuntimeAgentSettings(
     }
 }
 
-export async function requestRuntimeControl(
-    socket: RuntimeReplyConnection,
-    command: RuntimeControlCommand,
+export async function requestComputerControl(
+    socket: ComputerReplyConnection,
+    command: ComputerControlCommand,
     signal: AbortSignal,
-): Promise<RuntimeControlResult> {
-    const { reply } = runtimeControlRegistry[command.kind];
+): Promise<ComputerControlResult> {
+    const { reply } = computerControlRegistry[command.kind];
     const timeout = new AbortController();
     const timer = setTimeout(
-        () => timeout.abort(new DOMException("Runtime request timed out", "TimeoutError")),
+        () => timeout.abort(new DOMException("Computer request timed out", "TimeoutError")),
         120_000,
     );
     const deadline = AbortSignal.any([signal, timeout.signal]);
@@ -508,8 +508,8 @@ export async function requestRuntimeControl(
     let cleanup = () => {};
     try {
         deadline.throwIfAborted();
-        return await new Promise<RuntimeControlResult>((resolve, reject) => {
-            const onClose = () => reject(new SessionRuntimeError("runtime_offline", "The Runtime connection closed"));
+        return await new Promise<ComputerControlResult>((resolve, reject) => {
+            const onClose = () => reject(new SessionRuntimeError("computer_offline", "The Computer connection closed"));
             const onAbort = () => {
                 if (command.kind === "native.session.request" && socket.readyState === WebSocket.OPEN) {
                     socket.send(
@@ -530,9 +530,9 @@ export async function requestRuntimeControl(
                         return;
                     }
                     const kind = decodeMessageKind(event.data);
-                    if (kind === "runtime.status") {
-                        if (!decodeRuntimeStatusEvent(event.data).online) {
-                            reject(new SessionRuntimeError("runtime_offline", "The Runtime connection closed"));
+                    if (kind === "computer.status") {
+                        if (!decodeComputerStatusEvent(event.data).online) {
+                            reject(new SessionRuntimeError("computer_offline", "The Computer connection closed"));
                         }
                         return;
                     }
@@ -556,7 +556,7 @@ export async function requestRuntimeControl(
                     }
                 } catch (cause) {
                     reject(
-                        new SessionRuntimeError("invalid_request", "The Runtime returned an invalid response", {
+                        new SessionRuntimeError("invalid_request", "The Computer returned an invalid response", {
                             cause,
                         }),
                     );
@@ -586,14 +586,14 @@ export async function requestRuntimeControl(
     }
 }
 
-export async function requestRuntimeWorkspace(
-    socket: RuntimeReplyConnection,
+export async function requestComputerWorkspace(
+    socket: ComputerReplyConnection,
     command: WorkspaceListCommand,
     signal: AbortSignal,
 ): Promise<WorkspaceEntriesEvent> {
     const timeout = new AbortController();
     const timer = setTimeout(
-        () => timeout.abort(new DOMException("Runtime request timed out", "TimeoutError")),
+        () => timeout.abort(new DOMException("Computer request timed out", "TimeoutError")),
         120_000,
     );
     const deadline = AbortSignal.any([signal, timeout.signal]);
@@ -601,7 +601,7 @@ export async function requestRuntimeWorkspace(
     try {
         deadline.throwIfAborted();
         return await new Promise<WorkspaceEntriesEvent>((resolve, reject) => {
-            const onClose = () => reject(new SessionRuntimeError("runtime_offline", "The Runtime connection closed"));
+            const onClose = () => reject(new SessionRuntimeError("computer_offline", "The Computer connection closed"));
             const onAbort = () => reject(deadline.reason);
             const onMessage = (event: Event) => {
                 if (!(event instanceof MessageEvent)) {
@@ -632,7 +632,7 @@ export async function requestRuntimeWorkspace(
                     }
                 } catch (cause) {
                     reject(
-                        new SessionRuntimeError("invalid_request", "The Runtime returned an invalid response", {
+                        new SessionRuntimeError("invalid_request", "The Computer returned an invalid response", {
                             cause,
                         }),
                     );

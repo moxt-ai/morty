@@ -56,7 +56,7 @@ child.once("exit", code => process.exit(code ?? 1));
 });
 
 test.skipIf(process.platform === "win32")(
-    "Given a discovered real Codex executable changes, When the existing conversation continues and a new one opens, Then the existing process works and the new runtime is rejected",
+    "Given a discovered real Codex executable changes, When the existing conversation continues and a new one opens, Then the existing process works and the new computer is rejected",
     async () => {
         await using provider = await FakeOpenAiProvider.start("morty-test-model", "IDENTITY_REPLY");
         await using codex = await CodexFixture.create(provider);

@@ -13,7 +13,8 @@ function failure(code: string, status: number): Response {
 
 function computerIdFromPath(pathname: string): string | null {
     const prefix = `${MORTY_API_PREFIX}/v1/computers/`;
-    if (!pathname.startsWith(prefix)) {
+    // The connection endpoint is unscoped: its authenticated credential supplies the Computer identity.
+    if (!pathname.startsWith(prefix) || pathname === `${prefix}connect`) {
         return null;
     }
     try {
@@ -46,7 +47,7 @@ async function computerIdFromUnscopedRequest(request: Request): Promise<string |
             return "";
         }
     }
-    if (pathname === `${MORTY_API_PREFIX}/v1/runtimes/connect`) {
+    if (pathname === `${MORTY_API_PREFIX}/v1/computers/connect`) {
         const authorization = request.headers.get("authorization") ?? "";
         const token = authorization.startsWith("Bearer ") ? authorization.slice("Bearer ".length) : "";
         return computerIdFromPrefixedValue(token) ?? "";

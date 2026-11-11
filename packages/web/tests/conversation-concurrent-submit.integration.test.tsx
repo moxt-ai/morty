@@ -5,7 +5,7 @@ import { dataTestId } from "../src/data-testid.ts";
 import { sendPrompt } from "./infra/application-scenario.ts";
 import { createTestApp, type TestApp } from "./infra/test-app.tsx";
 
-test("Given two idle viewers with drafts and attachments, When both submit before receiving live updates, Then the Runtime runs both messages with their attachments and refuses neither", {
+test("Given two idle viewers with drafts and attachments, When both submit before receiving live updates, Then the Computer runs both messages with their attachments and refuses neither", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({ connectAgent: true });

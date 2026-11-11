@@ -80,11 +80,11 @@ class ControlledCloseAgentSpecification extends ControlledReadinessSpecification
     readonly closeStarted = Promise.withResolvers<void>();
     #createdEndpoints = 0;
     readonly createEndpoint = (): ControlledAcpPeer => {
-        const runtimeEndpoint = this.#createdEndpoints > 0;
+        const computerEndpoint = this.#createdEndpoints > 0;
         this.#createdEndpoints += 1;
         return new ControlledCloseEndpoint(
-            runtimeEndpoint ? this.#closeGate.promise : Promise.resolve(),
-            runtimeEndpoint ? this.closeStarted.resolve : null,
+            computerEndpoint ? this.#closeGate.promise : Promise.resolve(),
+            computerEndpoint ? this.closeStarted.resolve : null,
         );
     };
 

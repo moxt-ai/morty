@@ -1,4 +1,4 @@
-import { RUNTIME_SUCCESSOR_CREDENTIAL_HEADER } from "@morty-build/client/protocol";
+import { COMPUTER_SUCCESSOR_CREDENTIAL_HEADER } from "@morty-build/client/protocol";
 import { Hono } from "hono";
 import type { RelayHttpEnvironment } from "../../../composition/relay-protocol-environment.ts";
 import { bearerToken } from "../../../infra/relay-http.ts";
@@ -17,7 +17,7 @@ export function createComputerRoutes() {
             await useCases.updateAgentCatalog(
                 validateIdentifier(context.req.param("computerId"), "computer_id"),
                 bearerToken(context.req.raw),
-                context.req.header(RUNTIME_SUCCESSOR_CREDENTIAL_HEADER) ?? null,
+                context.req.header(COMPUTER_SUCCESSOR_CREDENTIAL_HEADER) ?? null,
                 agents,
                 context.req.raw.signal,
             );

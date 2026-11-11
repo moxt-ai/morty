@@ -16,7 +16,7 @@ export const currentGeneration = (computerId: ComputerReference) =>
 
 /**
  * The generation whose daemon may act for the computer: the current one, once a daemon claimed it, until its access
- * ends. Every authorization of a Runtime credential or connection reads this one rule.
+ * ends. Every authorization of a Computer credential or connection reads this one rule.
  */
 export const activeGeneration = (computerId: ComputerReference) =>
     query

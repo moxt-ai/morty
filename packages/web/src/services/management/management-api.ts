@@ -10,7 +10,7 @@ const machineSchema = v.object({ computerPairing: v.picklist(["unpaired", "paire
  * Where the Machine's Runtime pairing stands: not yet paired (or its pairing request is pending or expired), paired,
  * or revoked until setup pairs it again. The Relay owns this fact; the Worker reads it for the Machine.
  */
-export type RuntimePairing = v.InferOutput<typeof machineSchema>["computerPairing"];
+export type ComputerPairing = v.InferOutput<typeof machineSchema>["computerPairing"];
 
 /** The Machine resource, read by setup and the page and polled by the browser for pairing changes. */
 export function machineUrl(origin: string, computerId: string): URL {
@@ -50,7 +50,7 @@ export class ManagementApi {
             await this.#request("/computer", "GET", undefined, signal),
         ).computer;
 
-    readonly readRuntimePairing = async (signal: AbortSignal): Promise<RuntimePairing> =>
+    readonly readComputerPairing = async (signal: AbortSignal): Promise<ComputerPairing> =>
         v.parse(machineSchema, await this.#request("/machine", "GET", undefined, signal)).computerPairing;
 
     readonly #request = async (
@@ -106,8 +106,8 @@ export class CloudApiError extends Error {
     }
 }
 
-const runtimeConnectionCodes = new Set(["connection_closed", "runtime_offline"]);
+const computerConnectionCodes = new Set(["connection_closed", "computer_offline"]);
 
-export function isRuntimeConnectionFailure(cause: unknown): boolean {
-    return cause instanceof CloudApiError && runtimeConnectionCodes.has(cause.code.toLowerCase());
+export function isComputerConnectionFailure(cause: unknown): boolean {
+    return cause instanceof CloudApiError && computerConnectionCodes.has(cause.code.toLowerCase());
 }

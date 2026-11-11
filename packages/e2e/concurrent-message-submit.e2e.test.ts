@@ -33,7 +33,7 @@ test("Given two devices share an idle conversation, When both send a draft, Then
                 await participant.page.getByRole("button", { name: "Send message" }).click();
             }),
         );
-        // The Runtime runs whichever message arrives first and queues the other behind it.
+        // The Computer runs whichever message arrives first and queues the other behind it.
         const queue = page.getByLabel("Queued messages", { exact: true });
         await expect(queue).toBeVisible();
         for (const participant of participants) {

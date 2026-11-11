@@ -33,7 +33,7 @@ import { createRuntimeConfig, RuntimeLocalContext } from "../../src/engine/runti
 import { runRuntime } from "../../src/engine/runtime/run.ts";
 import { acpAdapters } from "../support/acp-adapters.ts";
 import { ControlledAcpSpecification } from "../support/agents/controlled-acp-specification.ts";
-import { memoryRuntimeCredentials } from "../support/runtime-credentials.ts";
+import { memoryComputerCredentials } from "../support/computer-credentials.ts";
 
 const websocketGuid = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 const fakeAgentPath = fileURLToPath(new URL("./fixtures/acp-peer.ts", import.meta.url));
@@ -299,7 +299,7 @@ test.for([
                     "Upgrade: websocket\r\n" +
                     `Sec-WebSocket-Accept: ${accept}\r\n\r\n`,
             );
-            sendText(socket, JSON.stringify({ kind: "runtime.liveness.ready" }));
+            sendText(socket, JSON.stringify({ kind: "computer.liveness.ready" }));
             socketReady.resolve(socket);
         });
         await listen(relay);
@@ -323,7 +323,7 @@ test.for([
         }
         const config: ReturnType<typeof createRuntimeConfig> = createRuntimeConfig(
             {
-                credentials: memoryRuntimeCredentials("r".repeat(43)),
+                credentials: memoryComputerCredentials("r".repeat(43)),
                 computerId: "channel_alpha",
                 defaultWorkspace: workspace,
                 relayUrl,

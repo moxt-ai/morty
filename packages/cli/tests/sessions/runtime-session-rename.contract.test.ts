@@ -74,6 +74,6 @@ it("Given a prompted local conversation, When the Session is renamed, Then the d
             }),
         );
     } finally {
-        cancellation.abort(new Error("Runtime Session rename test completed"));
+        cancellation.abort(new Error("Computer Session rename test completed"));
     }
 });

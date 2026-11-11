@@ -1,8 +1,8 @@
 import { ComputerManagementBackendService } from "../../relay/src/components/computer/service/computer-management-backend-service.ts";
 import {
-    type RuntimeControlCommand,
-    requestRuntimeControl,
-} from "../../relay/src/components/runtime/service/runtime-control-request.ts";
+    type ComputerControlCommand,
+    requestComputerControl,
+} from "../../relay/src/components/runtime/service/computer-control-request.ts";
 import type { RelayBindings } from "../../worker/src/composition/relay-bindings.ts";
 import {
     composeRelayContext,
@@ -22,12 +22,12 @@ export function createTestComputerBackend(env: RelayBindings, computerId: string
 }
 
 /** Local control scenarios use a real internal Host connection, with no retired HTTP management API. */
-export async function requestTestRuntimeControl(
+export async function requestTestComputerControl(
     env: RelayBindings,
     computerId: string,
-    command: RuntimeControlCommand,
+    command: ComputerControlCommand,
     signal: AbortSignal,
 ) {
     const socket = await createTestComputerBackend(env, computerId).openHost(signal);
-    return requestRuntimeControl(socket, command, signal);
+    return requestComputerControl(socket, command, signal);
 }

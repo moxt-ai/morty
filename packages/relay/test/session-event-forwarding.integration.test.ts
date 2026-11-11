@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
-import { registerRuntimeFixture } from "./registered-runtime.ts";
+import { registerComputerFixture } from "./registered-computer.ts";
 
 // Time stands still from the real present, so connection checks the Relay schedules stay in the future.
 let start = 0;
@@ -49,19 +49,19 @@ class Inbox {
     };
 }
 
-interface RuntimeConnection {
+interface ComputerConnection {
     readonly inbox: Inbox;
     readonly socket: WebSocket;
 }
 
-async function withRuntimeRelay(scenario: (connect: (path: string) => Promise<RuntimeConnection>) => Promise<void>) {
+async function withComputerRelay(scenario: (connect: (path: string) => Promise<ComputerConnection>) => Promise<void>) {
     const computerId = `prj_ap_01_${crypto.randomUUID().replaceAll("-", "").slice(0, 24)}`;
-    await registerRuntimeFixture(computerId);
+    await registerComputerFixture(computerId);
     const relay = env.COMPUTER_RELAY.getByName(computerId);
     const sockets: WebSocket[] = [];
-    const connect = async (path: string): Promise<RuntimeConnection> => {
+    const connect = async (path: string): Promise<ComputerConnection> => {
         // This is the verified, Worker-to-Durable-Object HTTP boundary, not a public unauthenticated route.
-        const response = await relay.fetch(`https://runtime.internal/computers/${computerId}/${path}`, {
+        const response = await relay.fetch(`https://computer-relay.internal/computers/${computerId}/${path}`, {
             headers: {
                 Upgrade: "websocket",
             },
@@ -69,14 +69,14 @@ async function withRuntimeRelay(scenario: (connect: (path: string) => Promise<Ru
         expect(response.status).toBe(101);
         const socket = response.webSocket;
         if (socket === null) {
-            throw new Error("Expected an upgraded Runtime connection");
+            throw new Error("Expected an upgraded Computer connection");
         }
         const inbox = new Inbox(socket);
         sockets.push(socket);
         socket.accept();
         if (path === "daemon") {
             // The Relay attaches every daemon connection with liveness and announces when it is ready.
-            expect(await inbox.next()).toEqual({ kind: "runtime.liveness.ready" });
+            expect(await inbox.next()).toEqual({ kind: "computer.liveness.ready" });
         }
         return { inbox, socket };
     };
@@ -90,12 +90,12 @@ async function withRuntimeRelay(scenario: (connect: (path: string) => Promise<Ru
 }
 
 it("Given extensible native-pair daemon content, When a mixed-session batch is relayed, Then each browser receives every field only for its subscribed sessions and the daemon stays connected", async () => {
-    await withRuntimeRelay(async (connect) => {
+    await withComputerRelay(async (connect) => {
         const daemon = await connect("daemon");
         const all = await connect("host");
         const selected = await connect("host?harness=claude&sessionId=session-1");
-        expect(await all.inbox.next()).toMatchObject({ kind: "runtime.status", online: true });
-        expect(await selected.inbox.next()).toMatchObject({ kind: "runtime.status", online: true });
+        expect(await all.inbox.next()).toMatchObject({ kind: "computer.status", online: true });
+        expect(await selected.inbox.next()).toMatchObject({ kind: "computer.status", online: true });
         const events = ["session-2", "session-1"].map((sessionId) => ({
             eventId: `event-${sessionId}`,
             position: "1",
@@ -122,14 +122,14 @@ it("Given extensible native-pair daemon content, When a mixed-session batch is r
 });
 
 it("Given future unroutable daemon variants, When the Relay receives them, Then it skips them and keeps forwarding known messages", async () => {
-    await withRuntimeRelay(async (connect) => {
+    await withComputerRelay(async (connect) => {
         const daemon = await connect("daemon");
         const host = await connect("host");
-        expect(await host.inbox.next()).toMatchObject({ kind: "runtime.status", online: true });
+        expect(await host.inbox.next()).toMatchObject({ kind: "computer.status", online: true });
 
         for (const message of [
             { version: 3, message: { kind: "future" } },
-            { kind: "future.runtime.event", value: true },
+            { kind: "future.computer.event", value: true },
             {
                 kind: "session.status.changed",
                 target: { harness: "claude", sessionId: "" },
@@ -167,7 +167,7 @@ it("Given future unroutable daemon variants, When the Relay receives them, Then 
 });
 
 it("Given future fields and routable events, When peers use the Relay, Then their payloads survive and session filters remain enforced", async () => {
-    await withRuntimeRelay(async (connect) => {
+    await withComputerRelay(async (connect) => {
         const daemon = await connect("daemon");
         const host = await connect("host");
         const selected = await connect("host?harness=claude&sessionId=session-1");
@@ -175,10 +175,10 @@ it("Given future fields and routable events, When peers use the Relay, Then thei
         await sender.inbox.next();
         await host.inbox.next();
         await selected.inbox.next();
-        const command = { kind: "runtime.ping", requestId: "ping-1", futureOptions: { format: 3 } };
+        const command = { kind: "computer.ping", requestId: "ping-1", futureOptions: { format: 3 } };
         sender.socket.send(JSON.stringify(command));
         expect(await daemon.inbox.next()).toEqual(command);
-        const reply = { kind: "runtime.pong", requestId: "ping-1", futureResult: { retained: true } };
+        const reply = { kind: "computer.pong", requestId: "ping-1", futureResult: { retained: true } };
         daemon.socket.send(JSON.stringify(reply));
         // Hosts also receive the control command broadcast before its reply.
         expect(await host.inbox.next()).toEqual(command);
@@ -193,7 +193,7 @@ it("Given future fields and routable events, When peers use the Relay, Then thei
         expect(await host.inbox.next()).toEqual(otherSession);
         daemon.socket.send(JSON.stringify(future));
         expect(await host.inbox.next()).toEqual(future);
-        // Drain the runtime-wide control traffic for this subscriber.
+        // Drain the computer-wide control traffic for this subscriber.
         await selected.inbox.next();
         await selected.inbox.next();
         expect(await selected.inbox.next()).toEqual(future);
@@ -201,10 +201,10 @@ it("Given future fields and routable events, When peers use the Relay, Then thei
 });
 
 it("Given a Session message with unknown variants and fields, When the Relay forwards it, Then the host receives the message unchanged", async () => {
-    await withRuntimeRelay(async (connect) => {
+    await withComputerRelay(async (connect) => {
         const daemon = await connect("daemon");
         const host = await connect("host");
-        expect(await host.inbox.next()).toMatchObject({ kind: "runtime.status", online: true });
+        expect(await host.inbox.next()).toMatchObject({ kind: "computer.status", online: true });
 
         const message = {
             kind: "session.event.v2",

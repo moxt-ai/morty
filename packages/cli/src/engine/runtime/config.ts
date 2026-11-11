@@ -3,7 +3,7 @@ import type { NativeSessionTarget } from "@morty-build/client/protocol";
 import type { CatalogAgent } from "../agent/catalog.ts";
 import { LocalAgentCatalog } from "../agent/catalog.ts";
 import type { RuntimeAgentDependencies } from "../agent/runtime-agents.ts";
-import type { RuntimeCredentials } from "./connection/runtime-credentials.ts";
+import type { ComputerCredentials } from "./connection/computer-credentials.ts";
 
 /**
  * Where a Runtime keeps its local data, and the environment it runs and launches Agents with. The data directory is
@@ -45,7 +45,7 @@ export interface RuntimeConfig {
     readonly localContext: RuntimeLocalContext;
     readonly reconnectTarget: RuntimeReconnectTarget | null;
     readonly relayUrl: URL;
-    readonly credentials: RuntimeCredentials;
+    readonly credentials: ComputerCredentials;
     /** Stable embedding context for one Session; applied to a copied Agent before process reuse is checked. */
     readonly sessionEnvironment?: (context: NativeSessionTarget) => Readonly<Record<string, string>>;
     /**
@@ -61,15 +61,15 @@ export interface RuntimeConfig {
     readonly rediscoverAgents?: (signal: AbortSignal) => Promise<readonly CatalogAgent[]>;
 }
 
-export interface RuntimeConnectionConfig {
+export interface ComputerConnectionConfig {
     readonly defaultWorkspace: string;
     readonly computerId: string;
     readonly relayUrl: URL;
-    readonly credentials: RuntimeCredentials;
+    readonly credentials: ComputerCredentials;
 }
 
 export function createRuntimeConfig(
-    connection: RuntimeConnectionConfig,
+    connection: ComputerConnectionConfig,
     dependencies: RuntimeAgentDependencies,
     localContext: RuntimeLocalContext,
     reconnectTarget: RuntimeReconnectTarget | null = null,

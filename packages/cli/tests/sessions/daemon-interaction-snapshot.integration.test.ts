@@ -50,8 +50,8 @@ import { AcpAgentDefinition } from "../../src/engine/acp/agent/agent-definition.
 import { RuntimeLocalContext } from "../../src/engine/runtime/config.ts";
 import { runRuntime } from "../../src/engine/runtime/run.ts";
 import { ControlledAcpConnection } from "../support/agents/controlled-acp-connection.ts";
+import { memoryComputerCredentials } from "../support/computer-credentials.ts";
 import { createControlledRuntimeConfig as createRuntimeConfig } from "../support/controlled-runtime-config.ts";
-import { memoryRuntimeCredentials } from "../support/runtime-credentials.ts";
 
 class Messages {
     readonly #buffered: string[] = [];
@@ -129,7 +129,7 @@ test("Given a newly created native Session, When its first Turn resolves interac
     );
     const config = createRuntimeConfig(
         {
-            credentials: memoryRuntimeCredentials("r".repeat(43)),
+            credentials: memoryComputerCredentials("r".repeat(43)),
             computerId: "interaction",
             defaultWorkspace: workspace,
             relayUrl,
@@ -142,7 +142,7 @@ test("Given a newly created native Session, When its first Turn resolves interac
     try {
         const socket = await connected.promise;
         const messages = new Messages(socket);
-        socket.send(JSON.stringify({ kind: "runtime.liveness.ready" }));
+        socket.send(JSON.stringify({ kind: "computer.liveness.ready" }));
         socket.send(
             encodeSessionCreateCommand({
                 harness: "claude",
@@ -208,7 +208,7 @@ test("Given a newly created native Session, When its first Turn resolves interac
             action: "active-turn",
             turn: { interaction: permission },
         });
-        // The turn is dated by the Runtime's start, not by whoever reads it.
+        // The turn is dated by the Computer's start, not by whoever reads it.
         const startedAt = running.action === "active-turn" ? Date.parse(running.turn?.startedAt ?? "") : Number.NaN;
         expect(startedAt).toBeGreaterThanOrEqual(submittedAt);
         expect(startedAt).toBeLessThanOrEqual(Date.now());
@@ -332,7 +332,7 @@ test("Given an Agent announced a tool call with its input, When it requests perm
     );
     const config = createRuntimeConfig(
         {
-            credentials: memoryRuntimeCredentials("r".repeat(43)),
+            credentials: memoryComputerCredentials("r".repeat(43)),
             computerId: "announced-permission",
             defaultWorkspace: workspace,
             relayUrl,
@@ -345,7 +345,7 @@ test("Given an Agent announced a tool call with its input, When it requests perm
     try {
         const socket = await connected.promise;
         const messages = new Messages(socket);
-        socket.send(JSON.stringify({ kind: "runtime.liveness.ready" }));
+        socket.send(JSON.stringify({ kind: "computer.liveness.ready" }));
         socket.send(
             encodeSessionCreateCommand({
                 harness: "claude",
@@ -438,7 +438,7 @@ test("Given an Agent announced a tool call and then sent a rawInput null update,
     );
     const config = createRuntimeConfig(
         {
-            credentials: memoryRuntimeCredentials("r".repeat(43)),
+            credentials: memoryComputerCredentials("r".repeat(43)),
             computerId: "null-input-permission",
             defaultWorkspace: workspace,
             relayUrl,
@@ -451,7 +451,7 @@ test("Given an Agent announced a tool call and then sent a rawInput null update,
     try {
         const socket = await connected.promise;
         const messages = new Messages(socket);
-        socket.send(JSON.stringify({ kind: "runtime.liveness.ready" }));
+        socket.send(JSON.stringify({ kind: "computer.liveness.ready" }));
         socket.send(
             encodeSessionCreateCommand({
                 harness: "claude",
@@ -544,7 +544,7 @@ test("Given an Agent's first recorded form of a tool call is an update, When it 
     );
     const config = createRuntimeConfig(
         {
-            credentials: memoryRuntimeCredentials("r".repeat(43)),
+            credentials: memoryComputerCredentials("r".repeat(43)),
             computerId: "orphan-update-permission",
             defaultWorkspace: workspace,
             relayUrl,
@@ -557,7 +557,7 @@ test("Given an Agent's first recorded form of a tool call is an update, When it 
     try {
         const socket = await connected.promise;
         const messages = new Messages(socket);
-        socket.send(JSON.stringify({ kind: "runtime.liveness.ready" }));
+        socket.send(JSON.stringify({ kind: "computer.liveness.ready" }));
         socket.send(
             encodeSessionCreateCommand({
                 harness: "claude",
@@ -620,7 +620,7 @@ test("Given an Agent's first recorded form of a tool call is an update, When it 
     }
 }, 30_000);
 
-test("Given a real daemon prepared a Session, When Relay queries its metadata, Then the daemon returns it without closing the Runtime", async () => {
+test("Given a real daemon prepared a Session, When Relay queries its metadata, Then the daemon returns it without closing the Computer", async () => {
     const stateDirectory = await mkdtemp(join(tmpdir(), "morty-session-query-"));
     const workspace = join(stateDirectory, "workspace");
     await mkdir(workspace);
@@ -650,7 +650,7 @@ test("Given a real daemon prepared a Session, When Relay queries its metadata, T
     );
     const config = createRuntimeConfig(
         {
-            credentials: memoryRuntimeCredentials("r".repeat(43)),
+            credentials: memoryComputerCredentials("r".repeat(43)),
             computerId: "session-query",
             defaultWorkspace: workspace,
             relayUrl,
@@ -663,7 +663,7 @@ test("Given a real daemon prepared a Session, When Relay queries its metadata, T
     try {
         const socket = await connected.promise;
         const messages = new Messages(socket);
-        socket.send(JSON.stringify({ kind: "runtime.liveness.ready" }));
+        socket.send(JSON.stringify({ kind: "computer.liveness.ready" }));
         socket.send(
             encodeSessionCreateCommand({
                 harness: "codex",
@@ -737,7 +737,7 @@ test("Given a real daemon persisted a Session, When Relay restores it by identif
     );
     const config = createRuntimeConfig(
         {
-            credentials: memoryRuntimeCredentials("r".repeat(43)),
+            credentials: memoryComputerCredentials("r".repeat(43)),
             computerId: "session-restore",
             defaultWorkspace: workspace,
             relayUrl,
@@ -757,7 +757,7 @@ test("Given a real daemon persisted a Session, When Relay restores it by identif
         const initial = await startDaemon();
         try {
             const messages = new Messages(initial.socket);
-            initial.socket.send(JSON.stringify({ kind: "runtime.liveness.ready" }));
+            initial.socket.send(JSON.stringify({ kind: "computer.liveness.ready" }));
             initial.socket.send(
                 encodeSessionCreateCommand({
                     harness: "codex",
@@ -788,7 +788,7 @@ test("Given a real daemon persisted a Session, When Relay restores it by identif
         const restored = await startDaemon();
         try {
             const messages = new Messages(restored.socket);
-            restored.socket.send(JSON.stringify({ kind: "runtime.liveness.ready" }));
+            restored.socket.send(JSON.stringify({ kind: "computer.liveness.ready" }));
             restored.socket.send(
                 encodeSessionQueryCommand({
                     kind: "session.query",
@@ -891,7 +891,7 @@ test("Given a running turn and a queued prompt with a file, When an active-turn 
     );
     const config = createRuntimeConfig(
         {
-            credentials: memoryRuntimeCredentials("r".repeat(43)),
+            credentials: memoryComputerCredentials("r".repeat(43)),
             computerId: "queued-identity",
             defaultWorkspace: workspace,
             relayUrl,
@@ -904,7 +904,7 @@ test("Given a running turn and a queued prompt with a file, When an active-turn 
     try {
         const socket = await connected.promise;
         const messages = new Messages(socket);
-        socket.send(JSON.stringify({ kind: "runtime.liveness.ready" }));
+        socket.send(JSON.stringify({ kind: "computer.liveness.ready" }));
         socket.send(
             encodeSessionCreateCommand({
                 kind: "session.create",
@@ -948,7 +948,7 @@ test("Given a running turn and a queued prompt with a file, When an active-turn 
                 target: sessionTarget,
             }),
         );
-        // A client reads the queue once the Runtime has answered that the prompt waits in it.
+        // A client reads the queue once the Computer has answered that the prompt waits in it.
         for (;;) {
             const accepted = decodeSessionPromptAcceptedEvent(await messages.nextKind(SESSION_PROMPT_ACCEPTED_KIND));
             if (accepted.requestId === "own_queued_turn") {

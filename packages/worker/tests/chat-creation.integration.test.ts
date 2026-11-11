@@ -113,7 +113,7 @@ test("Given a paired computer, When its owner selects and creates with harness, 
     });
     expect(setup.status).toBe(202);
     const workspace = await fixture.request("chat/workspace", {});
-    expect(await workspace.json()).toMatchObject({ runtime: { agents: [{ harness: "codex" }] } });
+    expect(await workspace.json()).toMatchObject({ computer: { agents: [{ harness: "codex" }] } });
     const created = await fixture.request("chat/access", {
         harness: "codex",
         configurations: [],
@@ -131,7 +131,7 @@ test("Given a paired computer, When its owner selects and creates with harness, 
     expect(await restored.json()).toMatchObject({ harness: "codex", target });
 });
 
-test("Given a computer addressed by its identity, When its owner requests access to a Session the Runtime does not hold, Then Chat refuses to mint a credential while held Sessions remain usable", async ({
+test("Given a computer addressed by its identity, When its owner requests access to a Session the Computer does not hold, Then Chat refuses to mint a credential while held Sessions remain usable", async ({
     cloud,
 }) => {
     await using fixture = await createChatFixture(cloud);
@@ -183,7 +183,7 @@ test("Given a computer addressed by its identity, When its owner requests access
     });
     expect(otherHarness.status).toBe(404);
     expect(await otherHarness.json()).toMatchObject({ error: { code: "NOT_FOUND" } });
-    // Archiving a Session the Runtime does not hold leaves it absent, as asked.
+    // Archiving a Session the Computer does not hold leaves it absent, as asked.
     const archived = await fixture.request(`chat/managed-session/archive`, {
         harness: "pi",
         sessionId: sessionId,
@@ -197,16 +197,16 @@ test("Given a computer addressed by its identity, When its owner requests access
     expect(retained.status).toBe(200);
 });
 
-test("Given a draft Bot, When its owner sends the first message's creation request, Then the harness supplies the real session identity on the configured Runtime", async ({
+test("Given a draft Bot, When its owner sends the first message's creation request, Then the harness supplies the real session identity on the configured Computer", async ({
     cloud,
 }) => {
     await using fixture = await createChatFixture(cloud);
     const setup = { computerId: fixture.runtime.computerId, harness: "codex" };
-    const setupRuntimesResponse = await fixture.request(`chat/setup/runtimes`, {});
-    expect(setupRuntimesResponse.status).toBe(200);
-    const setupRuntimes = v.parse(
+    const setupComputersResponse = await fixture.request(`chat/setup/computers`, {});
+    expect(setupComputersResponse.status).toBe(200);
+    const setupComputers = v.parse(
         v.strictObject({
-            runtimes: v.array(
+            computers: v.array(
                 v.strictObject({
                     computerId: v.string(),
                     machineName: v.string(),
@@ -215,28 +215,28 @@ test("Given a draft Bot, When its owner sends the first message's creation reque
                 }),
             ),
         }),
-        await setupRuntimesResponse.json(),
+        await setupComputersResponse.json(),
     );
-    expect(setupRuntimes).toMatchObject({
-        runtimes: [{ computerId: fixture.runtime.computerId, online: true, agents: [{ harness: "codex" }] }],
+    expect(setupComputers).toMatchObject({
+        computers: [{ computerId: fixture.runtime.computerId, online: true, agents: [{ harness: "codex" }] }],
     });
     expect((await fixture.request(`chat/setup`, setup)).status).toBe(202);
 
-    const runtimeConfigurationResponse = await fixture.request(`chat/workspace`, {});
-    expect(runtimeConfigurationResponse.status).toBe(200);
-    expect(await runtimeConfigurationResponse.json()).toMatchObject({
-        runtime: { computerId: fixture.runtime.computerId, online: true, agents: [{ harness: "codex" }] },
+    const computerConfigurationResponse = await fixture.request(`chat/workspace`, {});
+    expect(computerConfigurationResponse.status).toBe(200);
+    expect(await computerConfigurationResponse.json()).toMatchObject({
+        computer: { computerId: fixture.runtime.computerId, online: true, agents: [{ harness: "codex" }] },
     });
-    const configuredSetupRuntimes = await fixture.request(`chat/setup/runtimes`, {});
-    expect(configuredSetupRuntimes.status).toBe(200);
-    expect(await configuredSetupRuntimes.json()).toMatchObject({ runtimes: [{ computerId: fixture.computerId }] });
+    const configuredSetupComputers = await fixture.request(`chat/setup/computers`, {});
+    expect(configuredSetupComputers.status).toBe(200);
+    expect(await configuredSetupComputers.json()).toMatchObject({ computers: [{ computerId: fixture.computerId }] });
 
     const rebound = await fixture.request(`chat/setup`, {
         ...setup,
-        computerId: "another-runtime",
+        computerId: "another-computer",
     });
     expect(rebound.status).toBe(409);
-    expect(await rebound.json()).toMatchObject({ error: { code: "BOT_RUNTIME_FIXED" } });
+    expect(await rebound.json()).toMatchObject({ error: { code: "BOT_COMPUTER_FIXED" } });
 
     expect(
         (
@@ -349,7 +349,7 @@ for (const { reason, ...configuration } of [
     });
 }
 
-test("Given the answer to a new conversation's Session creation is lost, When the Runtime restarts and its owner retries the start, Then the conversation is listed once and the retry opens the created Session", async ({
+test("Given the answer to a new conversation's Session creation is lost, When the Computer restarts and its owner retries the start, Then the conversation is listed once and the retry opens the created Session", async ({
     cloud,
 }) => {
     await using fixture = await createChatFixture(cloud);
@@ -416,7 +416,7 @@ test("Given a completed creation operation, When its first-send settings are cha
     expect(await listed.json()).toMatchObject({ sessions: [{ target }] });
 });
 
-test("Given a new conversation whose Session creation never reached the Runtime, When its owner lists conversations, Then none is listed until a retry creates it", async ({
+test("Given a new conversation whose Session creation never reached the Computer, When its owner lists conversations, Then none is listed until a retry creates it", async ({
     cloud,
 }) => {
     await using fixture = await createChatFixture(cloud);
@@ -516,7 +516,7 @@ test("Given dependent Agent settings, When applying a later selection changes an
     });
 });
 
-test("Given a Machine paired with its own Runtime, When its owner browses or opens native sessions naming another computer's Runtime, Then Chat rejects every operation without creating sessions", async ({
+test("Given a paired Computer, When its owner browses or opens native sessions naming another Computer, Then Chat rejects every operation without creating sessions", async ({
     cloud,
 }) => {
     const sessionId = crypto.randomUUID();
@@ -551,7 +551,7 @@ test("Given a Machine paired with its own Runtime, When its owner browses or ope
         paths.map(({ path }) => ({
             path,
             status: 409,
-            body: { error: { code: "BOT_RUNTIME_FIXED" } },
+            body: { error: { code: "BOT_COMPUTER_FIXED" } },
         })),
     );
     const managed = await owner.request(`chat/managed-sessions`, {});
@@ -638,7 +638,7 @@ test("Given an imported native session, When its owner closes and explicitly imp
     expect(await managed.json()).toMatchObject({ sessions: [{ target: opened.ready.target }] });
 });
 
-test("Given a Session the Runtime holds with a running turn, When its owner archives it, Then it leaves the list, the Runtime no longer holds it and archiving again succeeds", async ({
+test("Given a Session the Computer holds with a running turn, When its owner archives it, Then it leaves the list, the Computer no longer holds it and archiving again succeeds", async ({
     cloud,
 }) => {
     await using fixture = await createChatFixture(cloud);
@@ -752,7 +752,7 @@ for (const operation of ["access", "managed-session"]) {
     });
 }
 
-test("Given the Runtime is offline, When its owner archives a Session, Then archiving fails as retryable and the Session stays listed until a retry archives it", async ({
+test("Given the Computer is offline, When its owner archives a Session, Then archiving fails as retryable and the Session stays listed until a retry archives it", async ({
     cloud,
 }) => {
     await using fixture = await createChatFixture(cloud);
@@ -770,7 +770,7 @@ test("Given the Runtime is offline, When its owner archives a Session, Then arch
     const failed = await fixture.request(`chat/managed-session/archive`, target);
 
     expect(failed.status).toBe(503);
-    expect(await failed.json()).toMatchObject({ error: { code: "runtime_offline" } });
+    expect(await failed.json()).toMatchObject({ error: { code: "computer_offline" } });
     await fixture.runtime.reconnect();
     expect(await (await fixture.request(`chat/managed-sessions`, {})).json()).toMatchObject({
         sessions: [{ target }],

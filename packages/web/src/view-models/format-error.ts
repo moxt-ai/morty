@@ -1,20 +1,20 @@
 import { MortyError, SESSION_CLOSED_ERROR_CODE } from "@morty-build/client";
 import { isApiConnectionError } from "../services/api/http-api-transport.ts";
-import { isRuntimeConnectionFailure } from "../services/management/management-api.ts";
+import { isComputerConnectionFailure } from "../services/management/management-api.ts";
 
-const runtimeDisconnectedFailure = {
-    detail: "Start your Morty Runtime to reconnect, then try again.",
-    title: "Your Morty Runtime is disconnected.",
+const computerDisconnectedFailure = {
+    detail: "Start your Morty Computer to reconnect, then try again.",
+    title: "Your Morty Computer is disconnected.",
 } as const;
 
-/** How a failure because the Runtime cannot be reached reads everywhere. */
-export const runtimeDisconnectedMessage = `${runtimeDisconnectedFailure.title} ${runtimeDisconnectedFailure.detail}`;
+/** How a failure because the Computer cannot be reached reads everywhere. */
+export const computerDisconnectedMessage = `${computerDisconnectedFailure.title} ${computerDisconnectedFailure.detail}`;
 
 export function describeSessionFailureMessage(
     message: string,
 ): Readonly<{ readonly title: string; readonly detail?: string }> {
-    if (message === runtimeDisconnectedMessage) {
-        return runtimeDisconnectedFailure;
+    if (message === computerDisconnectedMessage) {
+        return computerDisconnectedFailure;
     }
     return { title: message };
 }
@@ -51,8 +51,8 @@ export function describePageFailure(
 
 // A revoked Session credential is replaced on the next attempt, which asks Chat again and so learns whether the
 // access behind it ended.
-const retryableRuntimeFailureCodes = new Set([
-    "runtime_offline",
+const retryableComputerFailureCodes = new Set([
+    "computer_offline",
     "service_unavailable",
     "credential_revoked",
     "operation_timeout",
@@ -65,14 +65,14 @@ const retryableRuntimeFailureCodes = new Set([
  * cause falls back to the caller's context-specific message.
  */
 export function formatError(cause: unknown, fallback: string): string {
-    if (isRuntimeConnectionFailure(cause)) {
-        return runtimeDisconnectedMessage;
+    if (isComputerConnectionFailure(cause)) {
+        return computerDisconnectedMessage;
     }
     return cause instanceof Error ? cause.message : fallback;
 }
 
 /**
- * Whether an operation failed because the Runtime closed the Session and nobody reopened it. The Session is not
+ * Whether an operation failed because the Computer closed the Session and nobody reopened it. The Session is not
  * broken: reopening it makes its operations work again.
  */
 export function isSessionClosedFailure(cause: unknown): cause is MortyError {
@@ -80,17 +80,17 @@ export function isSessionClosedFailure(cause: unknown): cause is MortyError {
 }
 
 /**
- * Whether a Session connection failure comes from the Runtime being unreachable.
- * Such failures heal once the Runtime returns (for example after a daemon
+ * Whether a Session connection failure comes from the Computer being unreachable.
+ * Such failures heal once the Computer returns (for example after a daemon
  * upgrade), so the Session keeps retrying them instead of settling as failed.
  */
-export function isRetryableRuntimeConnectionFailure(cause: unknown): boolean {
+export function isRetryableComputerConnectionFailure(cause: unknown): boolean {
     if (
         isApiConnectionError(cause) ||
-        isRuntimeConnectionFailure(cause) ||
+        isComputerConnectionFailure(cause) ||
         (cause instanceof DOMException && cause.name === "TimeoutError")
     ) {
         return true;
     }
-    return cause instanceof MortyError && retryableRuntimeFailureCodes.has(cause.code);
+    return cause instanceof MortyError && retryableComputerFailureCodes.has(cause.code);
 }

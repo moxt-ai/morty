@@ -2,7 +2,7 @@ import { centralLocalStorage, lastHarnessEntry } from "@/services/local-storage/
 
 /**
  * The Agent reference identifies the computer's preferred harness across
- * Runtime reconnects and pairing.
+ * Computer reconnects and pairing.
  */
 export function readLastHarnessPreference(computerId: string): string | null {
     return centralLocalStorage.read(lastHarnessEntry(computerId));

@@ -299,7 +299,7 @@ export class WsTransport implements MortyHttpTransport {
     readonly #socket = async (request: Request): Promise<WebSocket> => {
         const target = computerRequestTarget(request);
         if (target === null) {
-            throw new MortyValidationError("A WebSocket subscription requires a Runtime target");
+            throw new MortyValidationError("A WebSocket subscription requires a Computer target");
         }
         const endpoint = new URL(`${MORTY_API_PREFIX}/v1/computers/${target.computerId}/transport`, request.url);
         endpoint.protocol = endpoint.protocol === "https:" ? "wss:" : "ws:";

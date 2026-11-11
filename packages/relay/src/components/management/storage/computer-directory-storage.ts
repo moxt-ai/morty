@@ -11,11 +11,11 @@ import {
     retiredDaemonCredential,
 } from "../../../schema/computer-relay-do/index.ts";
 import type {
+    ComputerCredentialRotation,
+    ComputerPairingAudit,
+    ComputerPairingDirectoryRow,
+    ComputerPairingRow,
     PairingClaimRow,
-    RuntimeCredentialRotation,
-    RuntimeDirectoryRow,
-    RuntimePairingAudit,
-    RuntimePairingRow,
 } from "../entity/pairing-records.ts";
 import { activeGeneration, currentGeneration } from "./computer-generation.ts";
 
@@ -25,7 +25,7 @@ const registrationFields = {
     workspace_name: computerRegistration.workspaceName,
     agents_json: computerRegistration.agentsJson,
 };
-interface CreateRuntimePairing {
+interface CreateComputerPairing {
     readonly computerId: string;
     readonly codeHash: string;
     readonly pollHash: string;
@@ -47,7 +47,7 @@ const pairingAudit = (event: {
     readonly computerId: AnySQLiteColumn | SQL.Aliased<string>;
     readonly actorKind: string;
     readonly actorId: AnySQLiteColumn | SQL.Aliased<string>;
-    readonly action: RuntimePairingAudit["action"];
+    readonly action: ComputerPairingAudit["action"];
     readonly details: string;
     readonly recordedAt: AnySQLiteColumn | SQL.Aliased<number>;
 }) => ({
@@ -115,10 +115,10 @@ export class ComputerDirectoryStorage {
         return rows[0] ?? null;
     };
 
-    readonly readRuntimePairingRequest = async (
+    readonly readComputerPairingRequest = async (
         idempotencyKey: string,
         signal: AbortSignal,
-    ): Promise<RuntimePairingRow | null> => {
+    ): Promise<ComputerPairingRow | null> => {
         const rows = await relayDrizzle(this.#database, signal)
             .select({
                 computer_id: computerPairing.computerId,
@@ -142,7 +142,7 @@ export class ComputerDirectoryStorage {
      * Starts the computer's next pairing generation, unless a generation is still open: claimed, or awaiting its claim
      * before its deadline, and in either case not revoked.
      */
-    readonly createRuntimePairing = async (value: CreateRuntimePairing, signal: AbortSignal): Promise<boolean> => {
+    readonly createComputerPairing = async (value: CreateComputerPairing, signal: AbortSignal): Promise<boolean> => {
         const database = relayDrizzle(this.#database, signal);
         const openGenerations = database
             .select({ open: count().as("open") })
@@ -182,7 +182,7 @@ export class ComputerDirectoryStorage {
                         computerId: computerPairing.computerId,
                         actorKind: value.actorKind,
                         actorId: bound(value.actorId, "actor_id"),
-                        action: "runtime_pairing.requested",
+                        action: "computer_pairing.requested",
                         details: JSON.stringify({ idempotencyKey: value.idempotencyKey }),
                         recordedAt: bound(value.now, "recorded_at"),
                     }),
@@ -263,7 +263,7 @@ export class ComputerDirectoryStorage {
                         computerId: computerPairing.computerId,
                         actorKind: "runtime",
                         actorId: computerPairing.computerId,
-                        action: "runtime_pairing.claimed",
+                        action: "computer_pairing.claimed",
                         details: "{}",
                         recordedAt: bound(value.now, "recorded_at"),
                     }),
@@ -281,7 +281,7 @@ export class ComputerDirectoryStorage {
         return results[0]?.meta.changes === 1;
     };
 
-    readonly recordAudit = async (value: RuntimePairingAudit, signal: AbortSignal): Promise<void> => {
+    readonly recordAudit = async (value: ComputerPairingAudit, signal: AbortSignal): Promise<void> => {
         await relayDrizzle(this.#database, signal)
             .insert(auditEvent)
             .values({
@@ -297,8 +297,11 @@ export class ComputerDirectoryStorage {
             .onConflictDoNothing();
     };
 
-    /** The computer's current generation as a Runtime: its registration and revocation, if they happened. */
-    readonly readRuntime = async (computerId: string, signal: AbortSignal): Promise<RuntimeDirectoryRow | null> => {
+    /** The computer's current generation as a Computer: its registration and revocation, if they happened. */
+    readonly readComputer = async (
+        computerId: string,
+        signal: AbortSignal,
+    ): Promise<ComputerPairingDirectoryRow | null> => {
         const row = await this.readProjectPairing(computerId, signal);
         return row === null
             ? null
@@ -324,14 +327,14 @@ export class ComputerDirectoryStorage {
     /**
      * Presents a daemon credential with the successor the daemon saved before connecting. A current credential is
      * retired, remembering the successor that replaced it, and the successor becomes current. A retired credential
-     * still identifies its Runtime: presented with the successor that replaced it, while that successor is current, it
+     * still identifies its Computer: presented with the successor that replaced it, while that successor is current, it
      * repeats a rotation whose reply was lost; presented any other way, a copy of it is in use elsewhere.
      */
     readonly rotateDaemonCredential = async (
         presentedHash: string,
         successorHash: string,
         signal: AbortSignal,
-    ): Promise<RuntimeCredentialRotation> => {
+    ): Promise<ComputerCredentialRotation> => {
         const database = relayDrizzle(this.#database, signal);
         const active = activeGeneration(this.#computerId);
         const current = and(
@@ -355,7 +358,7 @@ export class ComputerDirectoryStorage {
             ].map(this.statement),
             signal,
         );
-        const runtime = { computer_id: this.#computerId };
+        const computer = { computer_id: this.#computerId };
         const rows = await database
             .select({
                 successor_hash: retiredDaemonCredential.successorHash,
@@ -373,8 +376,8 @@ export class ComputerDirectoryStorage {
         const row = rows[0];
         if (row !== undefined) {
             return row.successor_hash === successorHash && row.current_hash === successorHash
-                ? { kind: "rotated", runtime }
-                : { kind: "reused", runtime };
+                ? { kind: "rotated", computer }
+                : { kind: "reused", computer };
         }
         // Every generation keeps its credentials, so a daemon of an ended generation learns its access ended for good,
         // also after the computer was paired again.
@@ -393,7 +396,7 @@ export class ComputerDirectoryStorage {
     };
 
     /** Ends the current generation's access, once; a repeated revocation returns the first one. */
-    readonly revokeRuntime = async (
+    readonly revokeComputer = async (
         value: {
             readonly computerId: string;
             readonly now: number;
@@ -402,7 +405,7 @@ export class ComputerDirectoryStorage {
             readonly auditId: string;
         },
         signal: AbortSignal,
-    ): Promise<RuntimeDirectoryRow | null> => {
+    ): Promise<ComputerPairingDirectoryRow | null> => {
         if (value.computerId !== this.#computerId) {
             return null;
         }
@@ -425,7 +428,7 @@ export class ComputerDirectoryStorage {
                         computerId: bound(value.computerId, "computer_id"),
                         actorKind: value.actorKind,
                         actorId: bound(value.actorId, "actor_id"),
-                        action: "runtime_pairing.revoked",
+                        action: "computer_pairing.revoked",
                         details: "{}",
                         recordedAt: computerRevocation.revokedAt,
                     }),
@@ -435,17 +438,17 @@ export class ComputerDirectoryStorage {
         );
         await this.#database.batch([this.statement(revocation), this.statement(audit)], signal);
         // Reading the committed fact makes overlapping retries return the first revocation time.
-        return await this.readRuntime(value.computerId, signal);
+        return await this.readComputer(value.computerId, signal);
     };
 
     readonly readRegisteredComputer = async (computerId: string, signal: AbortSignal) => {
-        const row = await this.readRuntime(computerId, signal);
+        const row = await this.readComputer(computerId, signal);
         return row?.registration && row.revoked_at === null
             ? { computer_id: row.computer_id, ...row.registration }
             : null;
     };
 
-    readonly listRuntimes = async (signal: AbortSignal) => {
+    readonly listComputers = async (signal: AbortSignal) => {
         const computer = await this.readRegisteredComputer(this.#computerId, signal);
         return computer === null ? [] : [computer];
     };

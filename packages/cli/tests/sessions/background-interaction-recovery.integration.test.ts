@@ -21,8 +21,8 @@ import { AcpAgentDefinition } from "../../src/engine/acp/agent/agent-definition.
 import type { AgentTermination } from "../../src/engine/acp/agent/agent-lifecycle.ts";
 import { RuntimeLocalContext } from "../../src/engine/runtime/config.ts";
 import { runRuntime } from "../../src/engine/runtime/run.ts";
+import { memoryComputerCredentials } from "../support/computer-credentials.ts";
 import { createControlledRuntimeConfig } from "../support/controlled-runtime-config.ts";
-import { memoryRuntimeCredentials } from "../support/runtime-credentials.ts";
 
 test("Given a completed foreground turn, When its Agent requests background permission, Then the session snapshot recovers that request and removes it after the user responds", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
@@ -37,8 +37,8 @@ test("Given a completed foreground turn, When its Agent requests background perm
     const readers: Array<(frame: string) => void> = [];
     server.on("connection", (socket) => {
         socket.on("message", (data) => {
-            if (data.toString().includes('"kind":"runtime.heartbeat"')) {
-                socket.send(JSON.stringify({ kind: "runtime.heartbeat.ack" }));
+            if (data.toString().includes('"kind":"computer.heartbeat"')) {
+                socket.send(JSON.stringify({ kind: "computer.heartbeat.ack" }));
                 return;
             }
             const reader = readers.shift();
@@ -117,7 +117,7 @@ test("Given a completed foreground turn, When its Agent requests background perm
     const relayUrl = new URL(`ws://127.0.0.1:${port(relay)}${MORTY_API_PREFIX}/channels/background/daemon`);
     const config = createControlledRuntimeConfig(
         {
-            credentials: memoryRuntimeCredentials("r".repeat(43)),
+            credentials: memoryComputerCredentials("r".repeat(43)),
             computerId: "background",
             defaultWorkspace: workspace,
             relayUrl,
@@ -129,7 +129,7 @@ test("Given a completed foreground turn, When its Agent requests background perm
     const runtime = runRuntime(config, cancellation.signal);
     try {
         const socket = await connected.promise;
-        socket.send(JSON.stringify({ kind: "runtime.liveness.ready" }));
+        socket.send(JSON.stringify({ kind: "computer.liveness.ready" }));
         const identity = {
             harness: "claude",
             directory: ".",

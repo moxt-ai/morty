@@ -4,12 +4,12 @@ import { createStore } from "zustand/vanilla";
 import { isApiConnectionError } from "../../services/api/http-api-transport.ts";
 import {
     type BotChatApi,
-    type BotRuntimeConfiguration,
+    type BotComputerConfiguration,
     type ChatAccess,
     type ChatDraftConfiguration,
-    runtimeAgentAvailability,
+    computerAgentAvailability,
 } from "../../services/chat/bot-chat-api.ts";
-import { CloudApiError, isRuntimeConnectionFailure } from "../../services/management/management-api.ts";
+import { CloudApiError, isComputerConnectionFailure } from "../../services/management/management-api.ts";
 import {
     centralSessionStorage,
     newConversationDraftEntry,
@@ -19,6 +19,7 @@ import type { Clock } from "../../services/time/clock.ts";
 import { formatError } from "../format-error.ts";
 import { type ComposerAttachmentStore, createComposerAttachmentStore } from "./composer-attachment-store.ts";
 import { returnToComposer } from "./composer-return.ts";
+import type { ComputerObservation } from "./computer-recovery.ts";
 import {
     type ConversationCreationState,
     failedDraftMessage,
@@ -36,30 +37,29 @@ import { canRetryFirstMessage, canSendFirstMessage, type NewConversationFacts } 
 import type { OpenMortySession } from "./open-session.ts";
 import { createPairingDialogStore } from "./pairing-dialog-store.ts";
 import { startRecoveryNotice } from "./recovery-notice.ts";
-import type { RuntimeObservation } from "./runtime-recovery.ts";
 import { prependToDraft, type SubmittedMessage } from "./session-delivery-store.ts";
 import type { SessionTitles, SessionTitlesStore } from "./session-titles-store.ts";
 
 export type BotChatHomeStoreApi = Omit<ReturnType<typeof createBotChatHomeStore>, "setState">;
 
-type SetupReason = "unconfigured" | "runtime-revoked" | "agent-missing" | "runtime-offline" | "agent-required";
+type SetupReason = "unconfigured" | "computer-revoked" | "agent-missing" | "computer-offline" | "agent-required";
 
-/** Why a Session load waiting on a revoked Runtime fails. */
-const RUNTIME_REVOKED_MESSAGE = "This computer was disconnected. Run Morty setup on it again to reconnect.";
+/** Why a Session load waiting on a revoked Computer fails. */
+const COMPUTER_REVOKED_MESSAGE = "This computer was disconnected. Run Morty setup on it again to reconnect.";
 
-/** Initialization owns only the entry request, never the selected session or the Runtime's availability. */
+/** Initialization owns only the entry request, never the selected session or the Computer's availability. */
 type HomeInitialization =
     | { readonly kind: "loading" }
     | { readonly kind: "ready" }
     | {
           readonly kind: "failed";
-          readonly failure: "runtime" | "agent-required" | "unavailable";
+          readonly failure: "computer" | "agent-required" | "unavailable";
           readonly message: string;
       };
 
 /**
- * Whether the Machine has a Runtime to reach. `revoked`: Morty ended its Runtime because a copy of the computer's
- * connection key was used, and the computer pairs the Machine again by running setup.
+ * Whether the Computer is paired. `revoked`: a copy of its connection key was used,
+ * and the owner must run setup on the Computer to pair it again.
  */
 type BotPairing =
     | { readonly kind: "checking" }
@@ -76,11 +76,11 @@ export type BotConnectionStatus =
     | { readonly kind: "disconnected"; readonly label: "Disconnected" };
 
 /**
- * The Machine's connection as the page shows it everywhere. It is derived from the Runtime configuration the page
+ * The Machine's connection as the page shows it everywhere. It is derived from the Computer configuration the page
  * follows, so no failure path can leave one part of the page saying offline while another says online.
  */
 export function botConnectionStatus(
-    home: Pick<BotChatHomeStore, "runtimeConfiguration" | "pairing" | "configurationWatch" | "networkAvailable">,
+    home: Pick<BotChatHomeStore, "computerConfiguration" | "pairing" | "configurationWatch" | "networkAvailable">,
 ): BotConnectionStatus {
     if (home.pairing.kind === "unpaired") {
         return { kind: "unpaired", label: "Disconnected" };
@@ -91,8 +91,8 @@ export function botConnectionStatus(
     if (!home.networkAvailable || home.configurationWatch.kind === "unavailable") {
         return { kind: "unavailable", label: "Unavailable" };
     }
-    if (home.runtimeConfiguration !== null) {
-        return home.runtimeConfiguration.runtime.online
+    if (home.computerConfiguration !== null) {
+        return home.computerConfiguration.computer.online
             ? { kind: "connected", label: "Connected" }
             : { kind: "disconnected", label: "Disconnected" };
     }
@@ -100,17 +100,17 @@ export function botConnectionStatus(
 }
 
 /**
- * Whether the home view failed only because the Runtime was unreachable, so the workspace retries it once the Runtime
+ * Whether the home view failed only because the Computer was unreachable, so the workspace retries it once the Computer
  * is back. A selection that is loading again is a retry in flight, not a failure.
  */
-export function homeWaitsForRuntime(home: Pick<BotChatHomeStore, "initialization" | "selection">): boolean {
+export function homeWaitsForComputer(home: Pick<BotChatHomeStore, "initialization" | "selection">): boolean {
     const selection = home.selection;
     if (selection.kind === "draft") {
         return false;
     }
     return (
-        (home.initialization.kind === "failed" && home.initialization.failure === "runtime") ||
-        (selection.kind === "failed" && selection.failure === "runtime")
+        (home.initialization.kind === "failed" && home.initialization.failure === "computer") ||
+        (selection.kind === "failed" && selection.failure === "computer")
     );
 }
 
@@ -129,7 +129,7 @@ export interface BotChatHomeStore {
     } | null;
     readonly initialization: HomeInitialization;
     readonly pairing: BotPairing;
-    readonly runtimeConfiguration: BotRuntimeConfiguration | null;
+    readonly computerConfiguration: BotComputerConfiguration | null;
     readonly configurationWatch:
         | { readonly kind: "checking" }
         | { readonly kind: "current"; readonly checkedAt: number }
@@ -176,7 +176,7 @@ function homeSetupReason(home: BotChatHomeStore): SetupReason | null {
         return "unconfigured";
     }
     if (home.pairing.kind === "revoked") {
-        return "runtime-revoked";
+        return "computer-revoked";
     }
     if (
         (home.selection.kind === "failed" && home.selection.failure === "agent-required") ||
@@ -184,14 +184,14 @@ function homeSetupReason(home: BotChatHomeStore): SetupReason | null {
     ) {
         return "agent-required";
     }
-    if (home.selection.kind !== "draft" || home.runtimeConfiguration === null) {
+    if (home.selection.kind !== "draft" || home.computerConfiguration === null) {
         return null;
     }
-    switch (runtimeAgentAvailability(home.runtimeConfiguration.runtime)) {
+    switch (computerAgentAvailability(home.computerConfiguration.computer)) {
         case "no-agent":
             return "agent-missing";
         case "offline":
-            return "runtime-offline";
+            return "computer-offline";
         case "available":
             return null;
     }
@@ -201,7 +201,7 @@ export function homeCanStartConversation(home: BotChatHomeStore): boolean {
     return (
         home.initialization.kind === "ready" &&
         home.pairing.kind === "paired" &&
-        home.runtimeConfiguration !== null &&
+        home.computerConfiguration !== null &&
         homeSetupReason(home) === null
     );
 }
@@ -255,10 +255,10 @@ export const createBotChatHomeStore = (
         | "conversationSession"
         | "createConversation"
         | "managedSession"
-        | "readRuntimePairing"
-        | "waitForRuntimePairingChange"
-        | "waitForRuntimeConfigurationChange"
-        | "runtimeConfiguration"
+        | "readComputerPairing"
+        | "waitForComputerPairingChange"
+        | "waitForComputerConfigurationChange"
+        | "computerConfiguration"
         | "directory"
     >,
     options: {
@@ -269,15 +269,15 @@ export const createBotChatHomeStore = (
         readonly connectionAvailable: () => boolean;
         readonly entry?: "address" | "restore";
         /**
-         * Announced with every Runtime configuration the page observes, after the view follows it: the owner keeps the
-         * other workspace workflows on it and retries what the Runtime failed once it is back.
+         * Announced with every Computer configuration the page observes, after the view follows it: the owner keeps the
+         * other workspace workflows on it and retries what the Computer failed once it is back.
          */
-        readonly onRuntimeConfiguration: (
-            configuration: BotRuntimeConfiguration,
-            observation: RuntimeObservation,
+        readonly onComputerConfiguration: (
+            configuration: BotComputerConfiguration,
+            observation: ComputerObservation,
         ) => void;
-        /** Announced when the view failed only because the Runtime was unreachable and waits for it to be retried. */
-        readonly onWaitingForRuntime: () => void;
+        /** Announced when the view failed only because the Computer was unreachable and waits for it to be retried. */
+        readonly onWaitingForComputer: () => void;
         readonly clock: Clock;
         readonly url: string;
         readonly createId: () => string;
@@ -285,15 +285,15 @@ export const createBotChatHomeStore = (
         /** Announced when the owner must restart the home and directory loads. */
         readonly onRestart: () => void;
         /**
-         * Announced once setup has paired a Machine whose Runtime was revoked with a new Runtime. Every Session
-         * connection this page opened belongs to the revoked Runtime, so the owner starts the page over.
+         * Announced once setup pairs the Computer again after revocation. Every Session connection this page opened
+         * belongs to the revoked pairing, so the owner starts the page over.
          */
-        readonly onRuntimeReplaced: () => void;
+        readonly onComputerReplaced: () => void;
         /** Announced when a created conversation joins the directory: the owner reloads it without reloading the home view. */
         readonly onDirectoryRefreshed: () => void;
         /**
          * Hands a created Session its first message: the Session's delivery owns it, durably, from this call until
-         * the Runtime takes it, whichever conversation is on screen.
+         * the Computer takes it, whichever conversation is on screen.
          */
         readonly onFirstMessage: (sessionTarget: NativeSessionTarget, message: SubmittedMessage) => void;
         /** Announced after a transition that selects a new draft: the owner reloads the draft controls. */
@@ -373,7 +373,7 @@ export const createBotChatHomeStore = (
             draftHandoff: null,
             initialization: { kind: "loading" },
             pairing: { kind: "checking" },
-            runtimeConfiguration: null,
+            computerConfiguration: null,
             configurationWatch: { kind: "checking" },
             networkAvailable: navigator.onLine,
             setNetworkAvailable: (available) => {
@@ -452,7 +452,7 @@ export const createBotChatHomeStore = (
                 }
                 // Entry failures and session failures belong to the request that failed.
                 const failLoad = (
-                    failure: "runtime" | "agent-required" | "unavailable" | "connection",
+                    failure: "computer" | "agent-required" | "unavailable" | "connection",
                     message: string,
                 ): void => {
                     const current = get();
@@ -488,15 +488,15 @@ export const createBotChatHomeStore = (
                     get().retry();
                 };
                 /**
-                 * Follows the Runtime configuration. Each watch adopts its comparison baseline as the snapshot, so a
-                 * brief Runtime change between two reads cannot leave the page stale. `baselineFollowsChange` says
+                 * Follows the Computer configuration. Each watch adopts its comparison baseline as the snapshot, so a
+                 * brief Computer change between two reads cannot leave the page stale. `baselineFollowsChange` says
                  * the first baseline may already differ from what the page last saw, as after a network outage.
                  */
-                const watchRuntimeConfigurationChanges = async (baselineFollowsChange = false): Promise<void> => {
+                const watchComputerConfigurationChanges = async (baselineFollowsChange = false): Promise<void> => {
                     let afterChange = baselineFollowsChange;
                     while (true) {
                         try {
-                            await requests.waitForRuntimeConfigurationChange(signal, (configuration) =>
+                            await requests.waitForComputerConfigurationChange(signal, (configuration) =>
                                 applyConfiguration(configuration, afterChange),
                             );
                         } catch (cause) {
@@ -510,10 +510,10 @@ export const createBotChatHomeStore = (
                     }
                 };
                 /**
-                 * Adopts a watched Runtime configuration snapshot: a draft's view follows it, and the workspace
-                 * retries what the Runtime failed once a snapshot shows it back.
+                 * Adopts a watched Computer configuration snapshot: a draft's view follows it, and the workspace
+                 * retries what the Computer failed once a snapshot shows it back.
                  */
-                const applyConfiguration = (configuration: BotRuntimeConfiguration, afterChange: boolean): void => {
+                const applyConfiguration = (configuration: BotComputerConfiguration, afterChange: boolean): void => {
                     signal.throwIfAborted();
                     if (get().selection.kind === "draft") {
                         // A recovered configuration read completes draft initialization after a network outage.
@@ -523,21 +523,21 @@ export const createBotChatHomeStore = (
                 };
                 /** Records the authoritative snapshot and announces it to the other workspace workflows. */
                 const observeConfiguration = (
-                    configuration: BotRuntimeConfiguration,
-                    observation: RuntimeObservation,
+                    configuration: BotComputerConfiguration,
+                    observation: ComputerObservation,
                 ): void => {
                     clearRecoveryNotice();
                     set({
-                        runtimeConfiguration: configuration,
+                        computerConfiguration: configuration,
                         configurationWatch: { kind: "current", checkedAt: options.clock.now() },
                     });
-                    options.onRuntimeConfiguration(configuration, observation);
+                    options.onComputerConfiguration(configuration, observation);
                 };
                 /**
-                 * The computer's Runtime was revoked. The page says so, and starts over once setup pairs the computer
-                 * again: every Session connection it opened belongs to the revoked Runtime.
+                 * The Computer's pairing was revoked. The page says so, and starts over once setup pairs it
+                 * again: every Session connection it opened belongs to the revoked pairing.
                  */
-                const awaitRuntimeReplacement = async (message: string, watchSignal: AbortSignal): Promise<void> => {
+                const awaitComputerReplacement = async (message: string, watchSignal: AbortSignal): Promise<void> => {
                     set((current) => ({
                         pairing: { kind: "revoked" },
                         initialization: { kind: "ready" },
@@ -551,9 +551,9 @@ export const createBotChatHomeStore = (
                                   })
                                 : current.selection,
                     }));
-                    await requests.waitForRuntimePairingChange(watchSignal);
+                    await requests.waitForComputerPairingChange(watchSignal);
                     watchSignal.throwIfAborted();
-                    options.onRuntimeReplaced();
+                    options.onComputerReplaced();
                 };
                 /** Refresh the pairing and workspace after an interrupted API read. */
                 const followConfigurationChanges = async (watchSignal: AbortSignal): Promise<void> => {
@@ -563,10 +563,10 @@ export const createBotChatHomeStore = (
                         try {
                             if (dropped) {
                                 watchSignal.throwIfAborted();
-                                const pairing = await requests.readRuntimePairing(watchSignal);
+                                const pairing = await requests.readComputerPairing(watchSignal);
                                 watchSignal.throwIfAborted();
                                 if (pairing === "revoked") {
-                                    await awaitRuntimeReplacement(RUNTIME_REVOKED_MESSAGE, watchSignal);
+                                    await awaitComputerReplacement(COMPUTER_REVOKED_MESSAGE, watchSignal);
                                     return;
                                 }
                                 set({ pairing: { kind: pairing } });
@@ -574,7 +574,7 @@ export const createBotChatHomeStore = (
                                     // An unpaired Machine waits for the pairing
                                     // it just read to change; the pairing flow
                                     // completes by restarting the load.
-                                    await requests.waitForRuntimePairingChange(watchSignal);
+                                    await requests.waitForComputerPairingChange(watchSignal);
                                     watchSignal.throwIfAborted();
                                     completeSetup();
                                     return;
@@ -591,11 +591,11 @@ export const createBotChatHomeStore = (
                                 dropped = false;
                             }
                             // A bound Machine keeps following workspace
-                            // changes even while its Runtime is offline.
-                            // A watch re-armed after a network outage may find a Runtime that changed meanwhile.
+                            // changes even while its Computer is offline.
+                            // A watch re-armed after a network outage may find a Computer that changed meanwhile.
                             const rearmed = armed;
                             armed = true;
-                            await watchRuntimeConfigurationChanges(rearmed);
+                            await watchComputerConfigurationChanges(rearmed);
                             return;
                         } catch (cause) {
                             watchSignal.throwIfAborted();
@@ -630,10 +630,10 @@ export const createBotChatHomeStore = (
                         await followConfigurationChanges(signal);
                         return;
                     }
-                    const pairing = await requests.readRuntimePairing(signal);
+                    const pairing = await requests.readComputerPairing(signal);
                     signal.throwIfAborted();
                     if (pairing === "revoked") {
-                        await awaitRuntimeReplacement(RUNTIME_REVOKED_MESSAGE, signal);
+                        await awaitComputerReplacement(COMPUTER_REVOKED_MESSAGE, signal);
                         return;
                     }
                     set({ pairing: { kind: pairing } });
@@ -660,7 +660,7 @@ export const createBotChatHomeStore = (
                         await followConfigurationChanges(signal);
                         return;
                     }
-                    const configuration = await requests.runtimeConfiguration(signal);
+                    const configuration = await requests.computerConfiguration(signal);
                     signal.throwIfAborted();
                     set((current) => ({
                         initialization: { kind: "ready" },
@@ -672,7 +672,7 @@ export const createBotChatHomeStore = (
                     const currentSelection = get().selection;
                     if (currentSelection.kind === "ready") {
                         get().pairingDialog.getState().dismiss();
-                        await watchRuntimeConfigurationChanges();
+                        await watchComputerConfigurationChanges();
                         return;
                     }
                     const currentTarget = currentSelection.kind === "draft" ? null : currentSelection.target;
@@ -686,7 +686,7 @@ export const createBotChatHomeStore = (
                     }
                     if (currentTarget === null) {
                         get().pairingDialog.getState().dismiss();
-                        await watchRuntimeConfigurationChanges();
+                        await watchComputerConfigurationChanges();
                         return;
                     }
                 } catch (cause) {
@@ -745,21 +745,21 @@ export const createBotChatHomeStore = (
                         await followConfigurationChanges(signal);
                         return;
                     }
-                    if (cause instanceof CloudApiError && cause.code === "runtime_revoked") {
+                    if (cause instanceof CloudApiError && cause.code === "computer_revoked") {
                         // An operation reported the revocation, so the page's last pairing read may predate it. Waiting
                         // starts from a read after it; one that already differs means setup is pairing again.
-                        const pairing = await requests.readRuntimePairing(signal);
+                        const pairing = await requests.readComputerPairing(signal);
                         signal.throwIfAborted();
                         if (pairing !== "revoked") {
-                            options.onRuntimeReplaced();
+                            options.onComputerReplaced();
                             return;
                         }
-                        await awaitRuntimeReplacement(cause.message, signal);
+                        await awaitComputerReplacement(cause.message, signal);
                         return;
                     }
                     if (cause instanceof CloudApiError && cause.code === "AGENT_REQUIRED") {
                         failLoad("agent-required", cause.message);
-                        await requests.waitForRuntimeConfigurationChange(signal);
+                        await requests.waitForComputerConfigurationChange(signal);
                         signal.throwIfAborted();
                         set((current) => ({
                             selection: transitionConversationSelection(current.selection, { kind: "retry-requested" }),
@@ -768,10 +768,10 @@ export const createBotChatHomeStore = (
                         return;
                     }
                     const message = formatError(cause, "Chat is unavailable.");
-                    if (isRuntimeConnectionFailure(cause)) {
+                    if (isComputerConnectionFailure(cause)) {
                         // Only a failed read is eligible for automatic replay; it does not assert the computer is offline.
-                        failLoad("runtime", message);
-                        options.onWaitingForRuntime();
+                        failLoad("computer", message);
+                        options.onWaitingForComputer();
                         await followConfigurationChanges(signal);
                         return;
                     }

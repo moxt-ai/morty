@@ -5,6 +5,8 @@ import { join } from "node:path";
 import { type AgentConnection, agent, methods, PROTOCOL_VERSION } from "@agentclientprotocol/sdk/unstable";
 import { sameNativeSession } from "@morty-build/client/native-session";
 import {
+    COMPUTER_HEARTBEAT_ACK_MESSAGE,
+    COMPUTER_HEARTBEAT_MESSAGE,
     decodeMessageKind,
     decodeSessionEventEnvelope,
     decodeSessionHistoryPageLoaded,
@@ -16,8 +18,6 @@ import {
     encodeSessionPromptCommand,
     encodeWorkspaceListCommand,
     type NativeSessionTarget,
-    RUNTIME_HEARTBEAT_ACK_MESSAGE,
-    RUNTIME_HEARTBEAT_MESSAGE,
     SESSION_EVENT_BATCH_MAX_SIZE,
     SESSION_EVENT_KIND,
     type SessionLiveEvent,
@@ -32,8 +32,8 @@ import type { IdentifiedSessionNotification } from "../../src/engine/acp/connect
 import { RuntimeLocalContext } from "../../src/engine/runtime/config.ts";
 import { runRuntime } from "../../src/engine/runtime/run.ts";
 import type { ScheduledTask, Timer } from "../../src/engine/util/timer.ts";
+import { memoryComputerCredentials } from "../support/computer-credentials.ts";
 import { createControlledRuntimeConfig as createRuntimeConfig } from "../support/controlled-runtime-config.ts";
-import { memoryRuntimeCredentials } from "../support/runtime-credentials.ts";
 
 // Failure modes exercised through the production daemon and its real WebSocket transport:
 // - a disconnect discards a batch whose delivery timer has not fired;
@@ -205,8 +205,8 @@ class RelayPeer {
         this.socket = socket;
         socket.on("message", (encoded) => {
             const text = encoded.toString();
-            if (text === RUNTIME_HEARTBEAT_MESSAGE) {
-                socket.send(RUNTIME_HEARTBEAT_ACK_MESSAGE);
+            if (text === COMPUTER_HEARTBEAT_MESSAGE) {
+                socket.send(COMPUTER_HEARTBEAT_ACK_MESSAGE);
                 return;
             }
             if (decodeMessageKind(text) === SESSION_EVENT_KIND) {
@@ -221,7 +221,7 @@ class RelayPeer {
                 waiter(text);
             }
         });
-        socket.send(JSON.stringify({ kind: "runtime.liveness.ready" }));
+        socket.send(JSON.stringify({ kind: "computer.liveness.ready" }));
     }
 
     readonly next = (): Promise<string> => {
@@ -297,7 +297,7 @@ async function startRuntime() {
             computerId: "disconnected-output",
             defaultWorkspace: workspace,
             relayUrl: new URL(`ws://127.0.0.1:${port(http).toString()}/daemon`),
-            credentials: memoryRuntimeCredentials("r".repeat(43)),
+            credentials: memoryComputerCredentials("r".repeat(43)),
         },
         [
             new AcpAgentDefinition(
@@ -657,7 +657,7 @@ test("Given a daemon restarted with a retained outcome, When the Relay reconnect
     expect(outcomes).toMatchObject([{ payload: { commandId: "command-restarted-session", kind: "prompt.completed" } }]);
 });
 
-test("Given concurrent Sessions produce an offline burst, When the Runtime reconnects, Then every event reaches the Relay in order within protocol frame limits", async () => {
+test("Given concurrent Sessions produce an offline burst, When the Computer reconnects, Then every event reaches the Relay in order within protocol frame limits", async () => {
     await using runtime = await startRuntime();
     const first = await runtime.prompt(runtime.initial, "burst-first");
     const second = await runtime.prompt(runtime.initial, "burst-second");

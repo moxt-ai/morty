@@ -126,9 +126,9 @@ async function startIdentityFixture(
         };
         return {
             reload: reconfigure,
-            revokeRuntime: async (computerId: string) => {
+            revokeComputer: async (computerId: string) => {
                 const object = computerObjects.get(computerObjects.idFromName(computerId));
-                const response = await object.fetch("https://computer.internal/revoked-runtime", {
+                const response = await object.fetch("https://computer.internal/revoked-computer", {
                     method: "POST",
                     body: computerId,
                     signal: AbortSignal.timeout(15_000),

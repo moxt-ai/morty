@@ -1,12 +1,12 @@
 import { PairingDirectoryError, type PairingStatus, parseAgents } from "./pairing.ts";
 import type { PairingComputerRow } from "./pairing-records.ts";
 
-export function runtimeRevokedAt(value: unknown): number | null {
+export function computerRevokedAt(value: unknown): number | null {
     if (value === null) {
         return null;
     }
     if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
-        throw new PairingDirectoryError("invalid_directory_record", "The Runtime revocation is invalid");
+        throw new PairingDirectoryError("invalid_directory_record", "The Computer revocation is invalid");
     }
     return value;
 }
@@ -14,7 +14,7 @@ export function runtimeRevokedAt(value: unknown): number | null {
 // The v1 representation is a projection of facts. Passing the clock explicitly
 // makes expiry independent of polling, maintenance writes, and component order.
 export function projectComputerPairingStatus(row: PairingComputerRow, now: number): PairingStatus {
-    const revokedAt = runtimeRevokedAt(row.revoked_at);
+    const revokedAt = computerRevokedAt(row.revoked_at);
     if (revokedAt !== null) {
         return { status: "revoked", revokedAt: new Date(revokedAt).toISOString() };
     }

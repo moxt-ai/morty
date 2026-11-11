@@ -1,4 +1,4 @@
-import { RUNTIME_HEARTBEAT_KIND, type RuntimeHeartbeatEvent } from "@morty-build/client/protocol";
+import { COMPUTER_HEARTBEAT_KIND, type ComputerHeartbeatEvent } from "@morty-build/client/protocol";
 
 import type { ScheduledTask, Timer } from "../../util/timer.ts";
 
@@ -32,7 +32,7 @@ class WaitingForHeartbeatState extends RelayLivenessState {
 class FinishedRelayLivenessState extends RelayLivenessState {}
 
 export interface RelayLivenessTransport {
-    readonly send: (message: RuntimeHeartbeatEvent) => boolean;
+    readonly send: (message: ComputerHeartbeatEvent) => boolean;
     readonly unresponsive: (timeoutMilliseconds: number) => void;
 }
 
@@ -109,7 +109,7 @@ export class RelayConnectionLiveness {
             this.#timer.schedule(this.#handleTimeout, HEARTBEAT_ACK_TIMEOUT_MILLISECONDS),
         );
         this.#state = awaiting;
-        const sent = this.#transport.send({ kind: RUNTIME_HEARTBEAT_KIND });
+        const sent = this.#transport.send({ kind: COMPUTER_HEARTBEAT_KIND });
         if (!sent && this.#state === awaiting) {
             awaiting.timeout.cancel();
             this.#state = new FinishedRelayLivenessState();

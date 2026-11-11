@@ -1,18 +1,18 @@
-import { RUNTIME_PING_KIND, RUNTIME_PONG_KIND } from "@morty-build/client/protocol";
+import { COMPUTER_PING_KIND, COMPUTER_PONG_KIND } from "@morty-build/client/protocol";
 import packageMetadata from "../../../../../package.json" with { type: "json" };
 import { runtimeEnvironmentDiagnostics } from "../../observability/environment-diagnostics.ts";
 import type { RuntimeCommand } from "../definition.ts";
 import { send } from "../transport.ts";
 
-export const runtimeDiagnosticsCommand: RuntimeCommand = {
-    kind: "runtime.diagnostics.read",
+export const computerDiagnosticsCommand: RuntimeCommand = {
+    kind: "computer.diagnostics.read",
     handle: ({ config, diagnostics, socket }, message): void => {
-        if (message.kind !== "runtime.diagnostics.read") {
+        if (message.kind !== "computer.diagnostics.read") {
             throw new Error("Command kind mismatch");
         }
         try {
             send(socket, {
-                kind: "runtime.diagnostics.result",
+                kind: "computer.diagnostics.result",
                 requestId: message.requestId,
                 version: packageMetadata.version,
                 ...diagnostics.snapshot(runtimeEnvironmentDiagnostics(config)),
@@ -28,12 +28,12 @@ export const runtimeDiagnosticsCommand: RuntimeCommand = {
     },
 };
 
-export const runtimePingCommand: RuntimeCommand = {
-    kind: RUNTIME_PING_KIND,
+export const computerPingCommand: RuntimeCommand = {
+    kind: COMPUTER_PING_KIND,
     handle: ({ socket }, message): void => {
-        if (message.kind !== RUNTIME_PING_KIND) {
+        if (message.kind !== COMPUTER_PING_KIND) {
             throw new Error("Command kind mismatch");
         }
-        send(socket, { kind: RUNTIME_PONG_KIND, requestId: message.requestId });
+        send(socket, { kind: COMPUTER_PONG_KIND, requestId: message.requestId });
     },
 };

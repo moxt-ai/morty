@@ -36,8 +36,8 @@ function currentMessage(state: DeliveryState): LocalMessage | null {
 }
 
 /**
- * History, then the Runtime queue, then local delivery own each command's sole display location. This is the one place
- * that decides whether the page still shows its own copy of a message the service accepted: only until the Runtime's
+ * History, then the Computer queue, then local delivery own each command's sole display location. This is the one place
+ * that decides whether the page still shows its own copy of a message the service accepted: only until the Computer's
  * account covers it.
  */
 export function sessionDeliveryPresentation(

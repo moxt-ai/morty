@@ -9,7 +9,7 @@ export function createAgentCatalogCommands(context: CommandContext): readonly Ru
         discover:
             context.config.rediscoverAgents === undefined
                 ? () => {
-                      throw new Error("Agent catalog discovery is not available for this Runtime");
+                      throw new Error("Agent catalog discovery is not available for this Computer");
                   }
                 : context.config.rediscoverAgents,
         diagnostics: context.diagnostics,

@@ -155,7 +155,7 @@ export const sessionDraftEntry = (
         schema: messageDraftSchema,
     });
 
-/** A submitted message the Runtime never took; a reload returns it to the Session's composer. */
+/** A submitted message the Computer never took; a reload returns it to the Session's composer. */
 export const sessionUnsentMessageEntry = (
     computerId: string,
     sessionTarget: NativeSessionTarget,

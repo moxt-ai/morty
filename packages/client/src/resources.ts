@@ -6,7 +6,7 @@ import type {
 
 import { MortyValidationError } from "./errors.ts";
 
-/** A Turn's content. The Runtime runs it with the Agent and directory of the Session it holds. */
+/** A Turn's content. The Computer runs it with the Agent and directory of the Session it holds. */
 interface SubmitMortyTurnContent {
     readonly attachments: readonly PromptAttachment[];
     readonly content: string;
@@ -15,7 +15,7 @@ interface SubmitMortyTurnContent {
 }
 
 /**
- * A Turn submission. Without a disposition the message is appended: the Runtime runs it now or queues it behind the
+ * A Turn submission. Without a disposition the message is appended: the Computer runs it now or queues it behind the
  * Session's earlier work and answers which. A steering submission joins the running Turn it names, and is refused,
  * leaving its idempotency key unused, when that Turn is not running.
  */

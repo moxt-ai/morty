@@ -1,50 +1,46 @@
 export {
+    COMPUTER_SUCCESSOR_CREDENTIAL_HEADER,
+    computerCredentialSuccessor,
+    isComputerCredentialSuccessor,
+} from "./computer/credential.ts";
+export type {
+    ComputerDiagnosticsRequest,
+    ComputerDiagnosticsResult,
+} from "./computer/diagnostics.ts";
+export {
+    decodeComputerDiagnosticsRequest,
+    decodeComputerDiagnosticsResult,
+} from "./computer/diagnostics.ts";
+export type {
+    ComputerHeartbeatEvent,
+    ComputerLivenessReadyEvent,
+    ComputerPingCommand,
+    ComputerPongEvent,
+} from "./computer/liveness.ts";
+export {
+    COMPUTER_HEARTBEAT_ACK_KIND,
+    COMPUTER_HEARTBEAT_ACK_MESSAGE,
+    COMPUTER_HEARTBEAT_KIND,
+    COMPUTER_HEARTBEAT_MESSAGE,
+    COMPUTER_LIVENESS_READY_KIND,
+    COMPUTER_PING_KIND,
+    COMPUTER_PONG_KIND,
+    COMPUTER_STATUS_KIND,
+    decodeComputerHeartbeatAckEvent,
+    decodeComputerHeartbeatEvent,
+    decodeComputerPongEvent,
+    decodeComputerStatusEvent,
+    encodeComputerLivenessReadyEvent,
+    encodeComputerStatusEvent,
+} from "./computer/liveness.ts";
+export {
     MORTY_API_PREFIX,
     mortyApiUrl,
 } from "./relay/morty-api.ts";
-
 export type { ProjectLocationHint } from "./relay/project-location.ts";
-
 export { PROJECT_LOCATION_HINTS } from "./relay/project-location.ts";
-
 export type { ProjectPermissionName } from "./relay/project-permission.ts";
-
 export { RELAY_APP_PROJECT_PERMISSIONS } from "./relay/project-permission.ts";
-export {
-    isRuntimeCredentialSuccessor,
-    RUNTIME_SUCCESSOR_CREDENTIAL_HEADER,
-    runtimeCredentialSuccessor,
-} from "./runtime/credential.ts";
-export type {
-    RuntimeDiagnosticsRequest,
-    RuntimeDiagnosticsResult,
-} from "./runtime/diagnostics.ts";
-export {
-    decodeRuntimeDiagnosticsRequest,
-    decodeRuntimeDiagnosticsResult,
-} from "./runtime/diagnostics.ts";
-export type {
-    RuntimeHeartbeatEvent,
-    RuntimeLivenessReadyEvent,
-    RuntimePingCommand,
-    RuntimePongEvent,
-} from "./runtime/liveness.ts";
-export {
-    decodeRuntimeHeartbeatAckEvent,
-    decodeRuntimeHeartbeatEvent,
-    decodeRuntimePongEvent,
-    decodeRuntimeStatusEvent,
-    encodeRuntimeLivenessReadyEvent,
-    encodeRuntimeStatusEvent,
-    RUNTIME_HEARTBEAT_ACK_KIND,
-    RUNTIME_HEARTBEAT_ACK_MESSAGE,
-    RUNTIME_HEARTBEAT_KIND,
-    RUNTIME_HEARTBEAT_MESSAGE,
-    RUNTIME_LIVENESS_READY_KIND,
-    RUNTIME_PING_KIND,
-    RUNTIME_PONG_KIND,
-    RUNTIME_STATUS_KIND,
-} from "./runtime/liveness.ts";
 
 export type { RuntimeUpgradeResult } from "./runtime/upgrade.ts";
 

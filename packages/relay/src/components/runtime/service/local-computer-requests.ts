@@ -1,9 +1,9 @@
 import type { NativeSessionTarget } from "@morty-build/client/protocol";
 import { logger } from "../../../infra/logger.ts";
+import type { ComputerReplyConnection } from "./computer-control-request.ts";
 import type { HistoryRequestKind, RelayPeers, RelaySocket } from "./computer-relay-actor.ts";
-import type { RuntimeReplyConnection } from "./runtime-control-request.ts";
 
-class LocalRuntimeRequest extends EventTarget implements RuntimeReplyConnection {
+class LocalComputerRequest extends EventTarget implements ComputerReplyConnection {
     #state: number = WebSocket.OPEN;
     readonly #dispatch: (socket: RelaySocket, message: unknown) => Promise<void>;
     readonly #release: () => void;
@@ -61,10 +61,10 @@ class LocalRuntimeRequest extends EventTarget implements RuntimeReplyConnection 
     readonly accept = (): void => {};
     readonly send = (message: string | ArrayBuffer | ArrayBufferView): void => {
         if (!this.isOpen()) {
-            throw new Error("The Runtime request is closed");
+            throw new Error("The Computer request is closed");
         }
         void this.#dispatch(this.server, message).catch((cause: unknown) => {
-            logger.error({ err: cause, event: "runtime_local_request_failed" }, "Runtime local request failed");
+            logger.error({ err: cause, event: "computer_local_request_failed" }, "Computer local request failed");
             this.dispatchEvent(new Event("error"));
             this.close();
         });
@@ -79,7 +79,7 @@ class LocalRuntimeRequest extends EventTarget implements RuntimeReplyConnection 
     };
 }
 
-export class LocalRuntimeRequests {
+export class LocalComputerRequests {
     readonly #routes = new Set<ReturnType<RelayPeers["operations"]>[number]>();
     readonly routes = () => [...this.#routes];
     readonly open = (
@@ -87,7 +87,7 @@ export class LocalRuntimeRequests {
         target: NativeSessionTarget | undefined,
         dispatch: (socket: RelaySocket, message: unknown) => Promise<void>,
     ) => {
-        const connection = new LocalRuntimeRequest(dispatch, () => this.#routes.delete(route));
+        const connection = new LocalComputerRequest(dispatch, () => this.#routes.delete(route));
         const route = { socket: connection.server, requestId, target };
         this.#routes.add(route);
         return connection;

@@ -17,7 +17,7 @@ for (const target of ["immediate", "queued"] as const) {
             const app = await createTestApp({ environment, connectAgent: true, clock });
             const { network, daemon } = app;
             if (network === null || daemon === null) {
-                throw new Error("Expected the controllable network and real Runtime");
+                throw new Error("Expected the controllable network and real Computer");
             }
             await sendPrompt(
                 app,
@@ -136,7 +136,7 @@ test("Given an unconfirmed message after a reload, When another device runs a tu
     const app = await createTestApp({ environment, connectAgent: true, clock });
     const { network, daemon } = app;
     if (network === null || daemon === null) {
-        throw new Error("Expected the controllable network and real Runtime");
+        throw new Error("Expected the controllable network and real Computer");
     }
     await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "Established session");
     await app.waitForView(() => {
@@ -165,7 +165,7 @@ test("Given an unconfirmed message after a reload, When another device runs a tu
     await reloaded.waitForView(() =>
         expect(reloaded.optionalElementByTestId(dataTestId.workingIndicator)).not.toBeNull(),
     );
-    // The retry need not wait for the other turn: the Runtime queues the message behind it.
+    // The retry need not wait for the other turn: the Computer queues the message behind it.
     const retry = await reloaded.waitForView(() => {
         const button = getByRole(document.body, "button", { name: "Retry message with unknown delivery" });
         expect(button.hasAttribute("disabled")).toBe(false);

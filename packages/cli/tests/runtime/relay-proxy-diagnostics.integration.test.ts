@@ -14,10 +14,10 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { Duplex } from "node:stream";
 import {
-    encodeRuntimeLivenessReadyEvent,
-    RUNTIME_HEARTBEAT_ACK_MESSAGE,
-    RUNTIME_HEARTBEAT_MESSAGE,
-    RUNTIME_LIVENESS_READY_KIND,
+    COMPUTER_HEARTBEAT_ACK_MESSAGE,
+    COMPUTER_HEARTBEAT_MESSAGE,
+    COMPUTER_LIVENESS_READY_KIND,
+    encodeComputerLivenessReadyEvent,
 } from "@morty-build/client/protocol";
 import { listen, port } from "@morty-build/relay-test-support/websocket";
 import { afterEach, expect, test, vi } from "vitest";
@@ -96,7 +96,7 @@ async function fixture(
                 response.end(
                     JSON.stringify({
                         computerId: `chn_${role}`,
-                        runtimeCredential: role[0]?.repeat(43),
+                        computerCredential: role[0]?.repeat(43),
                     }),
                 );
                 return;
@@ -133,12 +133,12 @@ async function fixture(
         const role = request.headers.authorization === `Bearer ${"d".repeat(43)}` ? "direct" : "proxy";
         socket.on("error", () => undefined);
         socket.on("message", (data) => {
-            if (data.toString() === RUNTIME_HEARTBEAT_MESSAGE) {
+            if (data.toString() === COMPUTER_HEARTBEAT_MESSAGE) {
                 // The heartbeat follows the probe's read of Ready, so an unacknowledged proxy channel has no
                 // Relay bytes in flight. A reset queued behind unread bytes can surface as a clean EOF instead
                 // of ECONNRESET (libuv before 1.52 short-circuits POLLHUP after a partial read).
                 if (mode !== "quiet-proxy" || role !== "proxy") {
-                    socket.send(RUNTIME_HEARTBEAT_ACK_MESSAGE);
+                    socket.send(COMPUTER_HEARTBEAT_ACK_MESSAGE);
                 }
                 online.add(role);
                 if (role === "direct") {
@@ -149,7 +149,7 @@ async function fixture(
                 }
             }
         });
-        socket.send(encodeRuntimeLivenessReadyEvent({ kind: RUNTIME_LIVENESS_READY_KIND }));
+        socket.send(encodeComputerLivenessReadyEvent({ kind: COMPUTER_LIVENESS_READY_KIND }));
     });
     const tunnels: string[] = [];
     const proxy = createProxy();
@@ -291,7 +291,7 @@ async function fixture(
     };
 }
 
-// @no-uc: Technical regression; isolated transport diagnostics must not mutate an existing Runtime or conceal the effective route.
+// @no-uc: Technical regression; isolated transport diagnostics must not mutate an existing Computer or conceal the effective route.
 test("Given distinct fresh pairings, When direct and proxy probes run together over WSS, Then the report retains both ready channels and their route evidence", async () => {
     await using peer = await fixture();
     const probe = peer.run();
@@ -342,7 +342,7 @@ test("Given healthy concurrent channels, When only the proxy tunnel resets, Then
     });
 });
 
-// @no-uc: Technical regression; duplicate pairings must be rejected before either network leg can attach to the same Runtime.
+// @no-uc: Technical regression; duplicate pairings must be rejected before either network leg can attach to the same Computer.
 test("Given a reused pairing, When a comparison is requested, Then it fails before redeeming or attaching either leg", async () => {
     await using peer = await fixture();
     await writeFile(

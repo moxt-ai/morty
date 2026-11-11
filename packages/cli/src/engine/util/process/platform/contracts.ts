@@ -10,7 +10,7 @@ export interface ProcessTableEntry extends ProcessTreeIdentity {
 }
 
 /**
- * A child this Runtime spawned. Its PID identifies it only while it runs: the operating system may give the
+ * A child this Computer spawned. Its PID identifies it only while it runs: the operating system may give the
  * PID to an unrelated process once the child has exited.
  */
 export type SpawnedProcess =

@@ -16,7 +16,7 @@ test("Given an old setting edit response in flight, When another client changes 
     });
     const network = app.network;
     if (!network || !app.daemon) {
-        throw new Error("Missing real network or Runtime");
+        throw new Error("Missing real network or Computer");
     }
     await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "Start shared session");
     await app.waitForView(() => {

@@ -6,18 +6,18 @@ import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { inspect } from "node:util";
 import {
+    COMPUTER_HEARTBEAT_ACK_MESSAGE,
+    COMPUTER_HEARTBEAT_MESSAGE,
+    COMPUTER_LIVENESS_READY_KIND,
     decodeMessageKind,
     decodeNativeSessionResult,
     decodeSessionEventEnvelope,
     decodeSessionReadyEvent,
+    encodeComputerLivenessReadyEvent,
     encodeNativeSessionCommand,
-    encodeRuntimeLivenessReadyEvent,
     encodeSessionCreateCommand,
     MORTY_API_PREFIX,
     type NativeSessionTarget,
-    RUNTIME_HEARTBEAT_ACK_MESSAGE,
-    RUNTIME_HEARTBEAT_MESSAGE,
-    RUNTIME_LIVENESS_READY_KIND,
 } from "@morty-build/client/protocol";
 import { listen, port } from "@morty-build/relay-test-support/websocket";
 import { type WebSocket, WebSocketServer } from "ws";
@@ -39,7 +39,7 @@ import {
 import { runRuntime } from "../../../src/engine/runtime/run.ts";
 import { systemTimer, type Timer } from "../../../src/engine/util/timer.ts";
 import { acpAdapters } from "../acp-adapters.ts";
-import { memoryRuntimeCredentials } from "../runtime-credentials.ts";
+import { memoryComputerCredentials } from "../computer-credentials.ts";
 
 export interface DaemonConnectionPeer {
     /** Runs a `morty` command against this daemon's installation, as the user's terminal would. */
@@ -202,15 +202,15 @@ async function withDaemonConnection(
             socket = connection;
             connection.on("message", (value, isBinary) => {
                 const message = isBinary ? Buffer.from(value as Buffer) : value.toString();
-                if (typeof message === "string" && message !== RUNTIME_HEARTBEAT_MESSAGE) {
+                if (typeof message === "string" && message !== COMPUTER_HEARTBEAT_MESSAGE) {
                     recentFrames.push(message);
                     if (recentFrames.length > 10) {
                         recentFrames.shift();
                     }
                 }
                 // Like the Relay's host, answer exactly the heartbeat text without the application.
-                if (message === RUNTIME_HEARTBEAT_MESSAGE) {
-                    connection.send(RUNTIME_HEARTBEAT_ACK_MESSAGE);
+                if (message === COMPUTER_HEARTBEAT_MESSAGE) {
+                    connection.send(COMPUTER_HEARTBEAT_ACK_MESSAGE);
                     return;
                 }
 
@@ -222,12 +222,12 @@ async function withDaemonConnection(
                     pending.resolve(message);
                 }
             });
-            connection.send(encodeRuntimeLivenessReadyEvent({ kind: RUNTIME_LIVENESS_READY_KIND }));
+            connection.send(encodeComputerLivenessReadyEvent({ kind: COMPUTER_LIVENESS_READY_KIND }));
             connected.resolve();
         });
         const relayUrl = new URL(`ws://127.0.0.1:${port(relay)}${MORTY_API_PREFIX}/channels/real-agent/daemon`);
         // Managed launches perform discovery in the production CLI; only an embedded
-        // runtime needs a catalog prepared by the fixture.
+        // computer needs a catalog prepared by the fixture.
         const config =
             launch === "embedded"
                 ? await (async () => {
@@ -246,7 +246,7 @@ async function withDaemonConnection(
                       }
                       return createRuntimeConfig(
                           {
-                              credentials: memoryRuntimeCredentials("r".repeat(43)),
+                              credentials: memoryComputerCredentials("r".repeat(43)),
                               computerId: "real-agent",
                               defaultWorkspace: workspace,
                               relayUrl,
@@ -267,7 +267,7 @@ async function withDaemonConnection(
                     computerId: "real-agent",
                     defaultWorkspace: workspace,
                     relayOrigin: new URL(`http://127.0.0.1:${port(relay)}`),
-                    runtimeCredential: "r".repeat(43),
+                    computerCredential: "r".repeat(43),
                 },
                 signal,
             );

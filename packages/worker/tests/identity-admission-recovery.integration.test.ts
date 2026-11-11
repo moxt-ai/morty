@@ -58,7 +58,7 @@ test("Given setup and a lost creation response, When setup retries across tempor
     await mkdir(workspace);
     const runtime = new ControlledSetupRuntime(
         { harness: "codex", agentName: "Codex", reply: mortyReply },
-        "Admission Runtime",
+        "Admission Computer",
     );
     cleanup.defer(() => runtime.disconnect());
     const budget = new CreationBudget();
@@ -112,7 +112,7 @@ test("Given setup and a lost creation response, When setup retries across tempor
             outgoing.destroy();
         });
     });
-    // The consolidated origin carries Runtime WebSockets as well as setup HTTP requests.
+    // The consolidated origin carries Computer WebSockets as well as setup HTTP requests.
     const sockets = new Set<Duplex>();
     server.on("upgrade", (incoming, socket, head) => {
         sockets.add(socket);

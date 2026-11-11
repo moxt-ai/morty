@@ -43,8 +43,8 @@ import { SESSION_EVENT_BATCH_WINDOW_MILLISECONDS } from "../../src/engine/runtim
 import { runRuntime } from "../../src/engine/runtime/run.ts";
 import type { ScheduledTask, Timer } from "../../src/engine/util/timer.ts";
 import { ControlledAcpConnection } from "../support/agents/controlled-acp-connection.ts";
+import { memoryComputerCredentials } from "../support/computer-credentials.ts";
 import { createControlledRuntimeConfig as createRuntimeConfig } from "../support/controlled-runtime-config.ts";
-import { memoryRuntimeCredentials } from "../support/runtime-credentials.ts";
 
 const websocketGuid = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 const fakeAgentPath = fileURLToPath(new URL("./fixtures/acp-peer.ts", import.meta.url));
@@ -250,7 +250,7 @@ async function startControlledDaemon(options: { readonly stateDirectory?: string
                 "Upgrade: websocket\r\n" +
                 `Sec-WebSocket-Accept: ${accept}\r\n\r\n`,
         );
-        sendText(socket, JSON.stringify({ kind: "runtime.liveness.ready" }));
+        sendText(socket, JSON.stringify({ kind: "computer.liveness.ready" }));
         socketReady.resolve(socket);
     });
     await listen(relay);
@@ -273,7 +273,7 @@ async function startControlledDaemon(options: { readonly stateDirectory?: string
     );
     const config = createRuntimeConfig(
         {
-            credentials: memoryRuntimeCredentials("r".repeat(43)),
+            credentials: memoryComputerCredentials("r".repeat(43)),
             computerId: "channel_alpha",
             defaultWorkspace: workspace,
             relayUrl,

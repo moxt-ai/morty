@@ -1,4 +1,4 @@
-import type { RuntimeDiagnosticsResult } from "@morty-build/client/protocol";
+import type { ComputerDiagnosticsResult } from "@morty-build/client/protocol";
 import { captureFeedback, getClient } from "@sentry/react";
 import type { browserDiagnosticsSnapshot } from "./browser-diagnostics.ts";
 import type { ChatDiagnostics } from "./model-catalog.ts";
@@ -20,7 +20,7 @@ export interface BugReport {
     readonly web: ReturnType<typeof browserDiagnosticsSnapshot>;
     readonly network: NetworkDiagnostics;
     readonly daemon:
-        | { readonly kind: "available"; readonly diagnostics: RuntimeDiagnosticsResult }
+        | { readonly kind: "available"; readonly diagnostics: ComputerDiagnosticsResult }
         | { readonly kind: "unavailable"; readonly code: string };
 }
 export interface BugReportSink {

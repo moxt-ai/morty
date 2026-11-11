@@ -1,13 +1,13 @@
 import type { Clock } from "../../services/time/clock.ts";
 
 /**
- * How the page saw a Runtime configuration: read directly by a load, or delivered by a configuration watch. A watch
- * snapshot follows a change when the Runtime changed since the previous one, or may have while the browser was offline.
+ * How the page saw a Computer configuration: read directly by a load, or delivered by a configuration watch. A watch
+ * snapshot follows a change when the Computer changed since the previous one, or may have while the browser was offline.
  */
-export type RuntimeObservation = { readonly kind: "read" } | { readonly kind: "watch"; readonly afterChange: boolean };
+export type ComputerObservation = { readonly kind: "read" } | { readonly kind: "watch"; readonly afterChange: boolean };
 
 /**
- * How long to wait before each retry of what failed while the page sees the Runtime online. A Runtime reported online
+ * How long to wait before each retry of what failed while the page sees the Computer online. A Computer reported online
  * may not serve yet, so retries continue with growing delays; once they are used up, the next change starts over.
  */
 const RECOVERY_DELAYS_MS = [0, 1_000, 2_000, 5_000, 10_000, 20_000, 30_000] as const;
@@ -15,19 +15,19 @@ const RECOVERY_DELAYS_MS = [0, 1_000, 2_000, 5_000, 10_000, 20_000, 30_000] as c
 const RECOVERY_STABLE_MS = 60_000;
 
 /**
- * Retries what the workspace reads through the Runtime and could not read while the Runtime was unreachable, the way
- * Reconnect would, while the page sees the Runtime online.
+ * Retries what the workspace reads through the Computer and could not read while the Computer was unreachable, the way
+ * Reconnect would, while the page sees the Computer online.
  *
  * A return the page observes retries at once. Otherwise a retry follows only a reported failure, after a delay that
- * grows with each failure of the same outage, so a retry still in flight is never restarted, and a Runtime reported
- * online that cannot serve is not retried in a loop. Seeing the Runtime offline, a change, or a failure after the
+ * grows with each failure of the same outage, so a retry still in flight is never restarted, and a Computer reported
+ * online that cannot serve is not retried in a loop. Seeing the Computer offline, a change, or a failure after the
  * readers worked for a while starts the delays over; time spent failing never counts as working. `waiting` is derived
  * from what the readers hold: something that is loading or following again is in flight, not waiting.
  */
-export function createRuntimeRecovery(options: {
+export function createComputerRecovery(options: {
     readonly clock: Clock;
     readonly lifetime: AbortSignal;
-    /** Whether anything failed for the Runtime and is not being retried now. */
+    /** Whether anything failed for the Computer and is not being retried now. */
     readonly waiting: () => boolean;
     /** Retries everything that waits. */
     readonly retry: () => void;
@@ -39,7 +39,7 @@ export function createRuntimeRecovery(options: {
     let scheduled: AbortController | null = null;
     const startOver = (): void => {
         attempts = 0;
-        scheduled?.abort(new DOMException("The Runtime recovery started over", "AbortError"));
+        scheduled?.abort(new DOMException("The Computer recovery started over", "AbortError"));
         scheduled = null;
     };
     const retry = (): void => {
@@ -74,26 +74,26 @@ export function createRuntimeRecovery(options: {
         );
     };
     return {
-        /** Adopts a Runtime configuration the page observed. */
-        observe: (configurationOnline: boolean, observation: RuntimeObservation): void => {
+        /** Adopts a Computer configuration the page observed. */
+        observe: (configurationOnline: boolean, observation: ComputerObservation): void => {
             if (!configurationOnline || (observation.kind === "watch" && observation.afterChange)) {
                 startOver();
             }
             online = configurationOnline;
-            // A load reads the configuration before it reads through the Runtime, so nothing it reads waits yet.
+            // A load reads the configuration before it reads through the Computer, so nothing it reads waits yet.
             if (observation.kind === "watch") {
                 schedule();
             }
         },
         /**
-         * Something read through the Runtime works again: a session opened or connected, a list loaded, or statuses
+         * Something read through the Computer works again: a session opened or connected, a list loaded, or statuses
          * are followed.
          */
         working: (): void => {
             workingSince ??= options.clock.now();
         },
         /**
-         * Something read through the Runtime failed for it: the home view, a list load, the status stream, or the open
+         * Something read through the Computer failed for it: the home view, a list load, the status stream, or the open
          * Session's connection once its own retries are used up.
          */
         failed: (): void => {

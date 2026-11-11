@@ -26,7 +26,7 @@ afterEach(async () => {
 
 describe("Morty daemon lifecycle", () => {
     it.each(["workspace", "database"])(
-        "Given an enabled Runtime has a broken %s, When the user starts the daemon, Then startup fails and releases its lock instead of claiming success",
+        "Given an enabled Computer has a broken %s, When the user starts the daemon, Then startup fails and releases its lock instead of claiming success",
         async (broken) => {
             const directory = await mkdtemp(join(tmpdir(), "morty-worker-fail-fast-"));
             temporaryDirectories.push(directory);
@@ -41,7 +41,7 @@ describe("Morty daemon lifecycle", () => {
                     computerId,
                     defaultWorkspace: workspace,
                     relayOrigin: new URL("http://127.0.0.1:1"),
-                    runtimeCredential: "a".repeat(43),
+                    computerCredential: "a".repeat(43),
                 },
                 signal,
             );
@@ -162,7 +162,7 @@ describe("Morty pairing lifecycle", () => {
                 computerId: "computer_test",
                 defaultWorkspace: workspace,
                 relayOrigin: relay.origin,
-                runtimeCredential: "a".repeat(43),
+                computerCredential: "a".repeat(43),
             },
             deadline,
         );
@@ -253,12 +253,12 @@ async function startRelay(ready = true): Promise<{ readonly origin: URL; readonl
     sockets.on("connection", (socket) => {
         socket.on("message", (bytes) => {
             const message = decodeDaemonToServiceMessage(bytes.toString());
-            if (message.kind === "runtime.heartbeat") {
-                socket.send(JSON.stringify({ kind: "runtime.heartbeat.ack" }));
+            if (message.kind === "computer.heartbeat") {
+                socket.send(JSON.stringify({ kind: "computer.heartbeat.ack" }));
             }
         });
         if (ready) {
-            socket.send(JSON.stringify({ kind: "runtime.liveness.ready" }));
+            socket.send(JSON.stringify({ kind: "computer.liveness.ready" }));
         }
     });
     await listen(server);

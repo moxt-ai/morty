@@ -18,7 +18,7 @@ type RuntimeLoopState =
     | { readonly kind: "running" }
     | { readonly kind: "finished" };
 
-function validateRuntimeRelay(relayUrl: URL): void {
+function validateComputerRelay(relayUrl: URL): void {
     if (relayUrl.protocol !== "ws:" && relayUrl.protocol !== "wss:") {
         throw new MortyRuntimeConfigurationError("The Runtime relay URL must use WebSocket transport");
     }
@@ -52,7 +52,7 @@ export class RuntimeLoop {
                 this.#options.sessionEnvironment === undefined
                     ? prepared
                     : { ...prepared, sessionEnvironment: this.#options.sessionEnvironment };
-            validateRuntimeRelay(config.relayUrl);
+            validateComputerRelay(config.relayUrl);
             this.#state = { kind: "running" };
             await runRuntime(config, signal, undefined, {
                 ...(this.#options.agentProcesses === undefined ? {} : { agentProcesses: this.#options.agentProcesses }),

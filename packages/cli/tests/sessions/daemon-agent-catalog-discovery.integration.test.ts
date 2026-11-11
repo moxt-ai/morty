@@ -27,8 +27,8 @@ import { createCatalogAgentResolver } from "../../src/engine/runtime/catalog/res
 import { RuntimeLocalContext } from "../../src/engine/runtime/config.ts";
 import { runRuntime } from "../../src/engine/runtime/run.ts";
 import { ControlledAcpSpecification } from "../support/agents/controlled-acp-specification.ts";
+import { memoryComputerCredentials } from "../support/computer-credentials.ts";
 import { createControlledRuntimeConfig as createRuntimeConfig } from "../support/controlled-runtime-config.ts";
-import { memoryRuntimeCredentials } from "../support/runtime-credentials.ts";
 
 const websocketGuid = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 const fakeAgentPath = fileURLToPath(new URL("./fixtures/acp-peer.ts", import.meta.url));
@@ -263,7 +263,7 @@ async function createCatalogRelay(): Promise<CatalogRelay> {
                 "Upgrade: websocket\r\n" +
                 `Sec-WebSocket-Accept: ${accept}\r\n\r\n`,
         );
-        sendText(socket, JSON.stringify({ kind: "runtime.liveness.ready" }));
+        sendText(socket, JSON.stringify({ kind: "computer.liveness.ready" }));
         socketReady.resolve(socket);
     });
     await listen(relay);
@@ -341,7 +341,7 @@ test("Given the daemon started before an Agent was installed, When the Relay req
     }
     const config: ReturnType<typeof createRuntimeConfig> = createRuntimeConfig(
         {
-            credentials: memoryRuntimeCredentials("r".repeat(43)),
+            credentials: memoryComputerCredentials("r".repeat(43)),
             computerId: "channel_catalog",
             defaultWorkspace: workspace,
             relayUrl,
@@ -428,7 +428,7 @@ test("Given a full catalog discovery is publishing, When the per-Agent resolver 
     }
     const config: ReturnType<typeof createRuntimeConfig> = createRuntimeConfig(
         {
-            credentials: memoryRuntimeCredentials("r".repeat(43)),
+            credentials: memoryComputerCredentials("r".repeat(43)),
             computerId: "channel_catalog_race",
             defaultWorkspace: workspace,
             relayUrl,
@@ -545,7 +545,7 @@ test("Given a full catalog discovery has published, When a queued per-Agent reso
     const resolverDiscovered = Promise.withResolvers<void>();
     const config: ReturnType<typeof createRuntimeConfig> = createRuntimeConfig(
         {
-            credentials: memoryRuntimeCredentials("r".repeat(43)),
+            credentials: memoryComputerCredentials("r".repeat(43)),
             computerId: "channel_catalog_reply",
             defaultWorkspace: workspace,
             relayUrl,

@@ -50,14 +50,14 @@ if (Object.keys({ ...release.peerDependencies, ...release.optionalDependencies }
 }
 for (const [name, version] of Object.entries(release.dependencies ?? {})) {
     if (!/^\d+\.\d+\.\d+$/.test(version)) {
-        throw new Error(`Runtime dependency is not an exact version: ${name}@${version}`);
+        throw new Error(`Computer dependency is not an exact version: ${name}@${version}`);
     }
     const installed = declaredDependencies.parse(await manifest(`node_modules/${name}/package.json`));
     if (
         Object.keys({ ...installed.dependencies, ...installed.peerDependencies, ...installed.optionalDependencies })
             .length > 0
     ) {
-        throw new Error(`Runtime dependency has dependencies of its own: ${name}`);
+        throw new Error(`Computer dependency has dependencies of its own: ${name}`);
     }
 }
 

@@ -3,13 +3,13 @@ import type { BackendProjectAccess } from "../management/service/backend-project
 import type { ComputerManagementStorageDirectory } from "../management/service/computer-management-storage-directory.ts";
 import type { ComputerRelayStoreResolver } from "../management/storage/computer-relay-store.ts";
 import type { ComputerScope } from "./entity/session.ts";
-import { createRuntimeRoutes } from "./http/runtime-routes.ts";
+import { createComputerRoutes } from "./http/computer-routes.ts";
+import { ComputerCredentialService } from "./service/computer-credential-service.ts";
 import { ComputerRelayActor } from "./service/computer-relay-actor.ts";
+import { type ComputerPeers, ComputerService } from "./service/computer-service.ts";
 import { DaemonConnectionService } from "./service/daemon-connection-service.ts";
-import { LocalRuntimeRequests } from "./service/local-runtime-requests.ts";
+import { LocalComputerRequests } from "./service/local-computer-requests.ts";
 import { NativeSessionForks } from "./service/native-session-forks.ts";
-import { RuntimeCredentialService } from "./service/runtime-credential-service.ts";
-import { type RuntimePeers, RuntimeService } from "./service/runtime-service.ts";
 import { ComputerConnectionStorage } from "./storage/computer-connection-storage.ts";
 
 export type RuntimeContext = ReturnType<typeof createRuntimeContext>;
@@ -24,15 +24,15 @@ export function createRuntimeContext(cx: {
         readonly projectAccess: Pick<BackendProjectAccess, "grants" | "grantsSessionCredential">;
     };
     readonly gateways: {
-        readonly peers: RuntimePeers;
+        readonly peers: ComputerPeers;
     };
     readonly utilities: {
         readonly waitUntil: (operation: Promise<void>) => void;
     };
 }) {
-    const requests = new LocalRuntimeRequests();
+    const requests = new LocalComputerRequests();
     const source = cx.gateways.peers;
-    const peers: RuntimePeers = {
+    const peers: ComputerPeers = {
         accept: source.accept,
         sockets: source.sockets,
         daemonConnections: source.daemonConnections,
@@ -43,13 +43,13 @@ export function createRuntimeContext(cx: {
         historyRecipients: () => [...source.historyRecipients(), ...requests.routes().map(({ socket }) => socket)],
         operations: () => [...source.operations(), ...requests.routes()],
     };
-    const credentials = new RuntimeCredentialService(
+    const credentials = new ComputerCredentialService(
         cx.storages.projectStores,
         cx.services.projects,
         cx.services.projectAccess,
     );
     const connections = new DaemonConnectionService(new ComputerConnectionStorage(cx.doDatabase));
-    const runtime = new RuntimeService({
+    const runtime = new ComputerService({
         services: {
             credentials,
             connections,
@@ -72,7 +72,7 @@ export function createRuntimeContext(cx: {
             nativeForks: new NativeSessionForks(cx.utilities.waitUntil),
         },
         applications: {
-            runtime: createRuntimeRoutes(runtime),
+            runtime: createComputerRoutes(runtime),
         },
     };
 }

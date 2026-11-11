@@ -24,7 +24,7 @@ export const SESSION_TURN_WITHDRAWN_KIND = "session.turn.withdrawn";
 
 /**
  * How a prompt joins its Session. An appended prompt runs when nothing earlier is waiting or running, and otherwise
- * waits at the end of the Session's queue; the Runtime alone decides which. A steering prompt joins the running command
+ * waits at the end of the Session's queue; the Computer alone decides which. A steering prompt joins the running command
  * it names, and is refused without being admitted when that command is not running.
  */
 export const SessionPromptDisposition = Object.freeze({
@@ -39,7 +39,7 @@ type SessionPromptPlacement =
     | { readonly disposition: typeof SessionPromptDisposition.Append }
     | { readonly disposition: typeof SessionPromptDisposition.Steer; readonly targetCommandId: string };
 
-/** A prompt for an existing Session. The Runtime runs it with the Agent and directory of the Session it holds. */
+/** A prompt for an existing Session. The Computer runs it with the Agent and directory of the Session it holds. */
 export type SessionPromptCommand = {
     readonly commandId: string;
     readonly attachments: readonly PromptAttachment[];

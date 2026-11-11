@@ -35,7 +35,7 @@ application data directory for the current user, which is not synced to other
 computers, and protects it using filesystem permissions. Each computer has its own.
 Do not copy it to a repository, a synced folder, or another computer.
 The CLI reuses the saved identity and Machine for this origin and reconnects an
-active managed connection when possible. If the saved Machine's Runtime is no
+active managed connection when possible. If the saved Machine's Computer is no
 longer managed here, setup stops with `PROJECT_REPLACEMENT_REQUIRED` before replacing
 anything. Explain in the user's language: **I cannot find this computer's original
 connection configuration. Setting up a new connection will invalidate earlier
@@ -47,14 +47,14 @@ the exact `computerId` from `error.replacement`. Approval applies only to that c
 Do not retry with this option automatically, delete local state, or create another
 identity to bypass confirmation. If the user declines, stop and keep the saved state.
 Approved replacement keeps the user, replaces the Project and Machine, and pairs a
-new Runtime. Links and browsers from the replaced Project stop working.
-Morty owns Runtime connection state and identifiers; do not save or back them up yourself.
+new Computer. Links and browsers from the replaced Project stop working.
+Morty owns Computer connection state and identifiers; do not save or back them up yourself.
 Normal setup and reconnection need no registration, separate bind command, or confirmation.
 
 ## Finish
 
 Keep progress in this session and wait for `status: "ready"` or an error (at most
-five minutes). The daemon keeps the Runtime online after the command exits.
+five minutes). The daemon keeps the Computer online after the command exits.
 Only ready confirms setup; a working chat reply is a separate check.
 
 Return the exact clickable `url` and the working directory from the `workspace` field. Display the owner-only PNG at
@@ -62,7 +62,7 @@ Return the exact clickable `url` and the working directory from the `workspace` 
 If `qrPath` is null, explain that the QR image is unavailable and use the link. Never open,
 preview, or redeem the handoff URL yourself. Tell the user: **Open this link or
 scan the QR code to chat within 10 minutes. It works on one device only and opens the same
-user and Machine; that device keeps access until <`accessExpiresAt` in the user's local time>. Keep the Runtime online.
+user and Machine; that device keeps access until <`accessExpiresAt` in the user's local time>. Keep the Computer online.
 You can bind an account later.**
 Also tell the user, in their language: **If you want to revoke these sharing links
 later, come back and tell me: "Revoke all links I previously shared from this machine."
@@ -83,8 +83,8 @@ Keep the saved identity and continue recovery using the same approved Project wh
 approval is still required. Do not request a second approval for the same previously
 authorized replacement, and never carry approval over to a different Project.
 
-On failure, use `error.code` and the private Runtime log, and follow the `nextStep`
-in `error.runtime`, `error.harness`, `error.binding` or `error.savedIdentity` when present.
+On failure, use `error.code` and the private Computer log, and follow the `nextStep`
+in `error.computer`, `error.harness`, `error.binding` or `error.savedIdentity` when present.
 `SAVED_IDENTITY_ORIGIN_MISMATCH` means this computer's saved identity belongs to another
 Morty origin; setup changed nothing. Never delete or edit the saved state to get past it. Fix installation or
 authentication for the selected harness; do not silently choose another.

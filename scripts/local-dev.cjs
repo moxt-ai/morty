@@ -668,11 +668,11 @@ async function setup(options) {
             await stopProcess(runtimePid);
             fail(`setup failed: ${JSON.stringify(failure.error)}`);
         }
-        const reused = records.findLast((record) => record !== null && record.status === "runtime_reused");
+        const reused = records.findLast((record) => record !== null && record.status === "computer_reused");
         if (reused !== undefined && reused !== null && typeof reused.computerId === "string") {
             computerId = reused.computerId;
         }
-        const paired = records.findLast((record) => record !== null && record.status === "runtime_paired");
+        const paired = records.findLast((record) => record !== null && record.status === "computer_paired");
         if (paired !== undefined && paired !== null && typeof paired.computerId === "string") {
             computerId = paired.computerId;
         }
@@ -693,7 +693,7 @@ async function setup(options) {
         );
     }
     if (computerId === null) {
-        fail("the setup runtime did not report its Runtime ID");
+        fail("the setup runtime did not report its Computer ID");
     }
     const handoffUrl = typeof ready.url === "string" ? ready.url : "";
     if (handoffUrl.length === 0) {
@@ -748,7 +748,7 @@ async function reload(options) {
     process.once("SIGTERM", cancel);
     const operation = { signal: controller.signal, timeout: SETUP_READY_TIMEOUT_MILLISECONDS };
     try {
-        log("rebuilding web/Chat; Relay and paired runtimes will stay running");
+        log("rebuilding web/Chat; Relay and paired computers will stay running");
         // Do not delete the entrypoint/assets while the live Wrangler watcher reads them.
         await run("pnpm", ["build", "--emptyOutDir", "false"], operation);
         controller.signal.throwIfAborted();
@@ -922,7 +922,7 @@ function usage(stream = process.stdout) {
             "  node scripts/local-dev.cjs logs   --state-dir DIR [--worker chat|runtime|all] [--lines N] [--filter REGEX] [--follow]",
             "  node scripts/local-dev.cjs remove --state-dir DIR [--keep-state]",
             "",
-            "reload rebuilds web/Chat without restarting Relay or runtimes.",
+            "reload rebuilds web/Chat without restarting Relay or computers.",
             "",
         ].join("\n"),
     );

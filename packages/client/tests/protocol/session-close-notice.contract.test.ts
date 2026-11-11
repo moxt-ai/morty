@@ -9,7 +9,7 @@ import {
 import { describe, expect, it } from "vitest";
 
 describe("Session close notice contracts", () => {
-    it("Given a Runtime reports that it closed a Session, When the notice crosses the daemon-to-service boundary, Then receivers decode the same notice with its reason", () => {
+    it("Given a Computer reports that it closed a Session, When the notice crosses the daemon-to-service boundary, Then receivers decode the same notice with its reason", () => {
         const notice = {
             kind: SESSION_CLOSE_NOTICE_KIND,
             reason: "This Session was closed on request.",
@@ -19,7 +19,7 @@ describe("Session close notice contracts", () => {
         expect(decodeDaemonToServiceMessage(encodeDaemonToServiceMessage(notice))).toEqual(notice);
     });
 
-    it("Given a reason worded by a newer Runtime, When a receiver decodes the notice, Then any reason of up to 500 characters arrives as sent", () => {
+    it("Given a reason worded by a newer Computer, When a receiver decodes the notice, Then any reason of up to 500 characters arrives as sent", () => {
         for (const reason of ["This Session was closed after 24 hours without activity.", "r".repeat(500)]) {
             const encoded = JSON.stringify({
                 kind: SESSION_CLOSE_NOTICE_KIND,
@@ -35,7 +35,7 @@ describe("Session close notice contracts", () => {
         }
     });
 
-    it("Given a notice from a newer Runtime with an extra field, When a receiver decodes it, Then the unrecognized field is ignored", () => {
+    it("Given a notice from a newer Computer with an extra field, When a receiver decodes it, Then the unrecognized field is ignored", () => {
         const encoded = JSON.stringify({
             closedAt: "2026-10-22T00:00:00.000Z",
             kind: SESSION_CLOSE_NOTICE_KIND,
@@ -65,7 +65,7 @@ describe("Session close notice contracts", () => {
         }
     });
 
-    it("Given a Runtime answers a close request, When its reply crosses the boundary, Then the native pair is retained", () => {
+    it("Given a Computer answers a close request, When its reply crosses the boundary, Then the native pair is retained", () => {
         const reply = {
             kind: "session.closed",
             requestId: "request-1",

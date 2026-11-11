@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { decodeDaemonToServiceMessage, decodeServiceToDaemonMessage } from "../../src/protocol/index.ts";
 
-describe("Runtime upgrade wire contract", () => {
+describe("Computer upgrade wire contract", () => {
     it("Given a server upgrade command, When decoded, Then remote upgrade triggering is rejected", () => {
-        const request = { kind: "runtime.upgrade.request", requestId: "upgrade_1", version: "0.0.228" };
+        const request = { kind: "computer.upgrade.request", requestId: "upgrade_1", version: "0.0.228" };
         expect(() => decodeServiceToDaemonMessage(JSON.stringify(request))).toThrow();
     });
     it("Given a rolled back daemon, When it reports failure, Then the service receives a correlated error and cooldown", () => {

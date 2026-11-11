@@ -14,9 +14,9 @@ export type SessionConnection =
           readonly notice: "quiet" | "visible";
       }
     | {
-          /** The Runtime closed the Session. Reopening it, which only the user chooses to do, resumes the connection. */
+          /** The Computer closed the Session. Reopening it, which only the user chooses to do, resumes the connection. */
           readonly kind: "closed";
-          /** The Runtime's explanation, or null when this page learned of the closing from a failed operation. */
+          /** The Computer's explanation, or null when this page learned of the closing from a failed operation. */
           readonly reason: string | null;
           readonly reopen:
               | { readonly kind: "available" }
@@ -89,10 +89,10 @@ export function connectionReadiness(connection: SessionConnection): ConnectionRe
 }
 
 /**
- * Whether the connection used up its automatic retries for a failure the Runtime's return can resolve. Such a
- * connection waits for its owner to retry it once the owner sees the Runtime reachable again.
+ * Whether the connection used up its automatic retries for a failure the Computer's return can resolve. Such a
+ * connection waits for its owner to retry it once the owner sees the Computer reachable again.
  */
-export function connectionWaitsForRuntime(connection: SessionConnection): boolean {
+export function connectionWaitsForComputer(connection: SessionConnection): boolean {
     return connection.kind === "disconnected" && connection.retry.kind === "exhausted";
 }
 

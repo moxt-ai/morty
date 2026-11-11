@@ -239,7 +239,7 @@ function BugReportDialog({
                         </details>
                         <p className="text-xs text-muted-foreground">
                             Network and daemon diagnostics are collected automatically and may take up to 10 seconds.
-                            You can still send a report when your Runtime is offline.
+                            You can still send a report when your Computer is offline.
                         </p>
                         {state.kind === "failed" && <p role="alert">{state.message}</p>}
                         {state.kind === "sending" && <p role="status">Collecting diagnostics and sending…</p>}

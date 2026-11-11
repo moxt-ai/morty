@@ -6,7 +6,7 @@ import {
 } from "../../engine/runtime/connection/runtime-installation-store.ts";
 import {
     PairingClientError,
-    pairRuntimeConnection,
+    pairComputerConnection,
     parsePairingCode,
     parseRelayOrigin,
     validateComputerId,
@@ -76,7 +76,7 @@ export async function pairLocalMachine(
 ): Promise<VerifiedComputerConnection> {
     const requested = parsePairCommand(arguments_, "");
     const installation = await openMortyInstallation(signal, process.env);
-    return await pairRuntimeConnection(
+    return await pairComputerConnection(
         installation,
         {
             pairingCode: requested.code,

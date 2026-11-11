@@ -1,11 +1,14 @@
 import {
     AGENT_CATALOG_DISCOVER_KIND,
     AGENT_SETTINGS_DISCOVER_KIND,
+    COMPUTER_HEARTBEAT_ACK_KIND,
+    COMPUTER_LIVENESS_READY_KIND,
+    COMPUTER_PING_KIND,
     CONTENT_COMMIT_KIND,
     CONTENT_WRITE_KIND,
+    decodeComputerDiagnosticsResult,
+    decodeComputerPongEvent,
     decodeNativeSessionResult,
-    decodeRuntimeDiagnosticsResult,
-    decodeRuntimePongEvent,
     decodeSessionArchivedEvent,
     decodeSessionClosedEvent,
     decodeSessionConfigReadResult,
@@ -26,9 +29,6 @@ import {
     NATIVE_SESSION_CANCEL_KIND,
     NATIVE_SESSION_REQUEST_KIND,
     type NativeSessionRequest,
-    RUNTIME_HEARTBEAT_ACK_KIND,
-    RUNTIME_LIVENESS_READY_KIND,
-    RUNTIME_PING_KIND,
     SESSION_ARCHIVE_KIND,
     SESSION_CANCEL_BEFORE_START_KIND,
     SESSION_CANCEL_KIND,
@@ -52,38 +52,38 @@ import {
     WORKSPACE_LIST_KIND,
 } from "@morty-build/client/protocol";
 import { ProjectPermission } from "../../management/entity/project-authentication.ts";
-import type { RuntimeControlCommand, RuntimeControlResult } from "./runtime-control-request.ts";
+import type { ComputerControlCommand, ComputerControlResult } from "./computer-control-request.ts";
 
-/** The Runtime's reply to one control command, which names the command's own request identifier. */
-interface RuntimeControlReply {
-    readonly eventKind: RuntimeControlResult["kind"];
-    readonly decode: (data: string) => RuntimeControlResult;
+/** The Computer's reply to one control command, which names the command's own request identifier. */
+interface ComputerControlReply {
+    readonly eventKind: ComputerControlResult["kind"];
+    readonly decode: (data: string) => ComputerControlResult;
 }
 
-interface RuntimeControlDefinition {
-    readonly permission: ProjectPermission | ((command: RuntimeControlCommand) => ProjectPermission);
-    readonly reply: RuntimeControlReply;
+interface ComputerControlDefinition {
+    readonly permission: ProjectPermission | ((command: ComputerControlCommand) => ProjectPermission);
+    readonly reply: ComputerControlReply;
 }
 
-function directReply<K extends RuntimeControlResult["kind"]>(
+function directReply<K extends ComputerControlResult["kind"]>(
     eventKind: K,
-    decode: (data: string) => Extract<RuntimeControlResult, { readonly kind: NoInfer<K> }>,
+    decode: (data: string) => Extract<ComputerControlResult, { readonly kind: NoInfer<K> }>,
 ) {
-    return { eventKind, decode } satisfies RuntimeControlReply;
+    return { eventKind, decode } satisfies ComputerControlReply;
 }
 
 /** Code-owned command policy; callers must still authorize the selected permission. */
-export const runtimeControlRegistry = {
-    "runtime.diagnostics.read": {
-        permission: ProjectPermission.RuntimeRead,
-        reply: directReply("runtime.diagnostics.result", decodeRuntimeDiagnosticsResult),
+export const computerControlRegistry = {
+    "computer.diagnostics.read": {
+        permission: ProjectPermission.ComputerRead,
+        reply: directReply("computer.diagnostics.result", decodeComputerDiagnosticsResult),
     },
-    "runtime.ping": {
-        permission: ProjectPermission.RuntimeRead,
-        reply: directReply("runtime.pong", decodeRuntimePongEvent),
+    "computer.ping": {
+        permission: ProjectPermission.ComputerRead,
+        reply: directReply("computer.pong", decodeComputerPongEvent),
     },
     "native.session.request": {
-        permission: (command: RuntimeControlCommand) =>
+        permission: (command: ComputerControlCommand) =>
             command.kind === "native.session.request"
                 ? nativeSessionRequestPermission(command.action)
                 : ProjectPermission.SessionWrite,
@@ -98,7 +98,7 @@ export const runtimeControlRegistry = {
         reply: directReply("session.ready", decodeSessionReadyEvent),
     },
     "session.creation.read": {
-        permission: ProjectPermission.RuntimeRead,
+        permission: ProjectPermission.ComputerRead,
         reply: directReply("session.ready", decodeSessionReadyEvent),
     },
     "session.configure": {
@@ -106,7 +106,7 @@ export const runtimeControlRegistry = {
         reply: directReply("session.config.updated", decodeSessionConfigUpdatedEvent),
     },
     "session.config.read": {
-        permission: ProjectPermission.RuntimeRead,
+        permission: ProjectPermission.ComputerRead,
         reply: directReply("session.config.read.result", decodeSessionConfigReadResult),
     },
     "session.rename": {
@@ -138,7 +138,7 @@ export const runtimeControlRegistry = {
         reply: directReply("session.prompt.accepted", decodeSessionPromptAcceptedEvent),
     },
     "session.preview-history.page.load": {
-        permission: ProjectPermission.RuntimeRead,
+        permission: ProjectPermission.ComputerRead,
         reply: directReply("session.preview-history.page.loaded", decodeSessionPreviewHistoryWirePageLoaded),
     },
     "session.live-history.v2.page.load": {
@@ -154,27 +154,27 @@ export const runtimeControlRegistry = {
         reply: directReply("session.interaction.answered", decodeSessionInteractionAnsweredEvent),
     },
     "session.list": {
-        permission: ProjectPermission.RuntimeRead,
+        permission: ProjectPermission.ComputerRead,
         reply: directReply("session.listed", decodeSessionsListedEvent),
     },
     "session.query": {
-        permission: ProjectPermission.RuntimeRead,
+        permission: ProjectPermission.ComputerRead,
         reply: directReply("session.queried", decodeSessionsQueriedEvent),
     },
     "session.restore": {
         permission: ProjectPermission.SessionWrite,
         reply: directReply("session.restored", decodeSessionRestoredEvent),
     },
-} satisfies { readonly [K in RuntimeControlCommand["kind"]]: RuntimeControlDefinition };
+} satisfies { readonly [K in ComputerControlCommand["kind"]]: ComputerControlDefinition };
 
 /**
- * Listing reads every native session the Runtime can see, and reading the active Turn reads one Session's execution.
+ * Listing reads every native session the Computer can see, and reading the active Turn reads one Session's execution.
  * Every other native request acts on the Agent's sessions.
  */
 export function nativeSessionRequestPermission(action: NativeSessionRequest["action"]): ProjectPermission {
     switch (action) {
         case "list":
-            return ProjectPermission.RuntimeRead;
+            return ProjectPermission.ComputerRead;
         case "active-turn":
             return ProjectPermission.SessionRead;
         case "find":
@@ -186,19 +186,19 @@ export function nativeSessionRequestPermission(action: NativeSessionRequest["act
     }
 }
 
-export function runtimeControlPermission(command: RuntimeControlCommand): ProjectPermission {
-    const { permission } = runtimeControlRegistry[command.kind];
+export function computerControlPermission(command: ComputerControlCommand): ProjectPermission {
+    const { permission } = computerControlRegistry[command.kind];
     return typeof permission === "function" ? permission(command) : permission;
 }
 
 /**
- * What a credential must grant to send this message to a Runtime, however it reaches the Relay: an HTTP route and a
+ * What a credential must grant to send this message to a Computer, however it reaches the Relay: an HTTP route and a
  * host connection apply the same answer. Null for messages only the Relay itself sends to a daemon.
  */
-export function runtimeCommandPermission(message: ServiceToDaemonMessage): ProjectPermission | null {
+export function computerCommandPermission(message: ServiceToDaemonMessage): ProjectPermission | null {
     switch (message.kind) {
-        case "runtime.diagnostics.read":
-        case RUNTIME_PING_KIND:
+        case "computer.diagnostics.read":
+        case COMPUTER_PING_KIND:
         case NATIVE_SESSION_REQUEST_KIND:
         case SESSION_PREPARE_KIND:
         case SESSION_CREATE_KIND:
@@ -219,19 +219,19 @@ export function runtimeCommandPermission(message: ServiceToDaemonMessage): Proje
         case SESSION_LIST_KIND:
         case SESSION_QUERY_KIND:
         case SESSION_RESTORE_KIND:
-            return runtimeControlPermission(message);
+            return computerControlPermission(message);
         case AGENT_CATALOG_DISCOVER_KIND:
         case AGENT_SETTINGS_DISCOVER_KIND:
         case WORKSPACE_LIST_KIND:
-            return ProjectPermission.RuntimeRead;
+            return ProjectPermission.ComputerRead;
         case FILE_READ_KIND:
             return ProjectPermission.SessionRead;
         case CONTENT_WRITE_KIND:
         case CONTENT_COMMIT_KIND:
         case NATIVE_SESSION_CANCEL_KIND:
             return ProjectPermission.SessionWrite;
-        case RUNTIME_HEARTBEAT_ACK_KIND:
-        case RUNTIME_LIVENESS_READY_KIND:
+        case COMPUTER_HEARTBEAT_ACK_KIND:
+        case COMPUTER_LIVENESS_READY_KIND:
             return null;
         default:
             return message satisfies never;

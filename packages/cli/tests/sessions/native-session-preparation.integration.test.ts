@@ -50,7 +50,7 @@ describe("native session preparation", () => {
         }
     });
 
-    it("Given preparation is still loading, When the Runtime closes, Then preparation cannot return a live conversation", async () => {
+    it("Given preparation is still loading, When the Computer closes, Then preparation cannot return a live conversation", async () => {
         const f = await fixture("Claude Code", "load-only");
         const owner = new AbortController();
         try {

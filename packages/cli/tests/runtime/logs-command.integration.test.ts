@@ -48,7 +48,7 @@ async function writeInstallationLog(stateDirectory: string, filename: string, li
 
 describe("Morty logs command", () => {
     // @no-uc: Technical regression; a bug report must collect logs from every installation, not just the active one.
-    it("Given a stopped daemon with logs from both the Runtime and its manager, When the user collects them for a bug report, Then every installation's log is printed with its state-relative path", async () => {
+    it("Given a stopped daemon with logs from both the Computer and its manager, When the user collects them for a bug report, Then every installation's log is printed with its state-relative path", async () => {
         const directory = await mkdtemp(join(tmpdir(), "morty-logs-command-"));
         temporaryDirectories.push(directory);
         const stateDirectory = join(directory, "state");

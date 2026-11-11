@@ -13,10 +13,10 @@ test("Given a rotated connection, When replacement pairing is cancelled, Then th
             computerId: "computer_scan",
             defaultWorkspace: root,
             relayOrigin: new URL("https://relay.example.com/"),
-            runtimeCredential: "a".repeat(43),
+            computerCredential: "a".repeat(43),
         };
         const connection = await installation.saveConnection(input, signal);
-        const credentials = installation.runtimeCredentials(connection.pairingGeneration);
+        const credentials = installation.computerCredentials(connection.pairingGeneration);
         const rotation = await credentials.prepare(signal);
         await credentials.complete(rotation, signal);
         expect((await credentials.held(signal)).current === rotation.successor).toBe(true);
@@ -39,14 +39,14 @@ test("Given a running credential rotation, When the pairing is replaced concurre
             computerId: "computer_scan",
             defaultWorkspace: root,
             relayOrigin: new URL("https://relay.example.com/"),
-            runtimeCredential: "a".repeat(43),
+            computerCredential: "a".repeat(43),
         };
         const old = await installation.saveConnection(input, signal);
-        const credentials = installation.runtimeCredentials(old.pairingGeneration);
+        const credentials = installation.computerCredentials(old.pairingGeneration);
         const rotated = await credentials.prepare(signal);
         await credentials.complete(rotated, signal);
         const replacementHost = await RuntimeInstallationStore.open(root, signal);
-        const replacementInput = { ...input, runtimeCredential: "b".repeat(43) };
+        const replacementInput = { ...input, computerCredential: "b".repeat(43) };
         const [rotation, pairing] = await Promise.allSettled([
             credentials.prepare(signal),
             replacementHost.saveConnection(replacementInput, signal),
@@ -59,7 +59,7 @@ test("Given a running credential rotation, When the pairing is replaced concurre
             pairing.status === "fulfilled"
                 ? pairing.value
                 : await replacementHost.saveConnection(replacementInput, signal);
-        const current = installation.runtimeCredentials(replacement.pairingGeneration);
+        const current = installation.computerCredentials(replacement.pairingGeneration);
         expect(replacement.computerId).toBe(old.computerId);
         expect(replacement.pairingGeneration).not.toBe(old.pairingGeneration);
         await expect(credentials.held(signal)).rejects.toMatchObject({ code: "connection_not_found" });
@@ -71,7 +71,7 @@ test("Given a running credential rotation, When the pairing is replaced concurre
             code: "connection_not_found",
         });
         expect(await installation.currentConnection(signal)).toEqual(replacement);
-        expect((await current.held(signal)).current === replacementInput.runtimeCredential).toBe(true);
+        expect((await current.held(signal)).current === replacementInput.computerCredential).toBe(true);
         if (rotation.status === "fulfilled") {
             await expect(credentials.complete(rotation.value, signal)).rejects.toMatchObject({
                 code: "connection_not_found",
@@ -85,7 +85,7 @@ test("Given a running credential rotation, When the pairing is replaced concurre
         await installation.setConnectionActivation(replacement.pairingGeneration, "active", signal);
         const reopened = await RuntimeInstallationStore.open(root, signal);
         expect(
-            (await reopened.runtimeCredentials(replacement.pairingGeneration).held(signal)).current === next.successor,
+            (await reopened.computerCredentials(replacement.pairingGeneration).held(signal)).current === next.successor,
         ).toBe(true);
     } finally {
         await rm(root, { recursive: true, force: true });

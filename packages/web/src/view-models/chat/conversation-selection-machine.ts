@@ -15,7 +15,7 @@ export type ConversationSelectionState =
       }
     | {
           readonly kind: "failed";
-          readonly failure: "connection" | "runtime" | "agent-required" | "unavailable";
+          readonly failure: "connection" | "computer" | "agent-required" | "unavailable";
           readonly message: string;
           readonly target: ConversationTarget;
       };
@@ -31,7 +31,7 @@ export type ConversationSelectionEvent =
       }
     | {
           readonly kind: "session-load-failed";
-          readonly failure: "connection" | "runtime" | "agent-required" | "unavailable";
+          readonly failure: "connection" | "computer" | "agent-required" | "unavailable";
           readonly message: string;
           readonly target: ConversationTarget;
       }

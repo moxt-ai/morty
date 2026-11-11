@@ -27,7 +27,7 @@ function failureDetails(failure: unknown): Readonly<Record<string, string>> {
     return fields;
 }
 
-/** Persist discovery evidence before the Runtime connects, including recovered probe timeouts. */
+/** Persist discovery evidence before the Computer connects, including recovered probe timeouts. */
 export async function discoverRuntimeAgentInventory(options: DiscoverLocalAgentInventoryOptions, computerId: string) {
     const log = new RuntimeDiagnosticLog(options.dataDirectory);
     const record = (details: Readonly<Record<string, string | number>>): void => {

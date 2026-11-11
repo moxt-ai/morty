@@ -8,7 +8,7 @@ import { createHostedRelayAccess } from "../../worker/src/composition/relay-serv
 import { DurableObjectDatabase } from "../../worker/src/infra/durable-object-database.ts";
 import { RelayAuthenticationConfiguration } from "../src/components/management/entity/computer-management.ts";
 import { createOwner, issueSession, ownerRequest } from "./owner-fixture.ts";
-import { registerRuntimeFixture } from "./registered-runtime.ts";
+import { registerComputerFixture } from "./registered-computer.ts";
 
 const origin = `https://relay.test${MORTY_API_PREFIX}`;
 
@@ -56,9 +56,9 @@ async function openSessionView(_slug: string) {
     const owner = await createOwner();
     const { computerId } = owner;
     const sessionId = "viewer-check-session";
-    await registerRuntimeFixture(computerId);
+    await registerComputerFixture(computerId);
     const daemonResponse = await env.COMPUTER_RELAY.getByName(computerId).fetch(
-        `https://runtime.internal/computers/${computerId}/daemon`,
+        `https://computer-relay.internal/computers/${computerId}/daemon`,
         { headers: { Upgrade: "websocket" } },
     );
     expect(daemonResponse.status).toBe(101);
@@ -68,7 +68,7 @@ async function openSessionView(_slug: string) {
     }
     const daemonInbox = new Inbox(daemon);
     daemon.accept();
-    expect(await daemonInbox.next()).toEqual({ kind: "runtime.liveness.ready" });
+    expect(await daemonInbox.next()).toEqual({ kind: "computer.liveness.ready" });
 
     const { credential: sessionCredential } = await issueSession(computerId, { harness: "claude", sessionId });
 

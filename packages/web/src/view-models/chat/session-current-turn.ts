@@ -20,8 +20,8 @@ export type CurrentTurn =
           readonly turnId: string;
           readonly startedAt: number;
           /**
-           * How far the native session's owner has taken the command when the Runtime handed it there instead of
-           * running it, or null when the Runtime reported no handoff.
+           * How far the native session's owner has taken the command when the Computer handed it there instead of
+           * running it, or null when the Computer reported no handoff.
            */
           readonly delegation: DelegationStage | null;
       };
@@ -31,12 +31,12 @@ export type CurrentTurnEvent =
     | { readonly kind: "new-turn-submitted" }
     /**
      * The service accepted this page's submission of a new turn, dated by `startedAt`, when this browser sent it,
-     * until the Runtime reports when the turn started.
+     * until the Computer reports when the turn started.
      */
     | { readonly kind: "accepted"; readonly commandId: string; readonly turnId: string; readonly startedAt: number }
     /**
-     * The service reports the command running; it replaces any other current command. `startedAt` is when the Runtime
-     * started it, or null when the Runtime does not say: the turn then keeps its date, or is dated by `observedAt`.
+     * The service reports the command running; it replaces any other current command. `startedAt` is when the Computer
+     * started it, or null when the Computer does not say: the turn then keeps its date, or is dated by `observedAt`.
      */
     | {
           readonly kind: "running";
@@ -45,7 +45,7 @@ export type CurrentTurnEvent =
           readonly startedAt: number | null;
           readonly observedAt: number;
       }
-    /** The Runtime handed the command to the native session's owner, which reached `stage` with it at `at`. */
+    /** The Computer handed the command to the native session's owner, which reached `stage` with it at `at`. */
     | { readonly kind: "delegated"; readonly commandId: string; readonly stage: DelegationStage; readonly at: number }
     /** The service reports the command's turn ended; `failure` explains a failed one. */
     | { readonly kind: "ended"; readonly commandId: string; readonly failure: TurnFailure | null }
@@ -97,7 +97,7 @@ export function transitionCurrentTurn(turn: CurrentTurn, event: CurrentTurnEvent
             };
         case "delegated":
             // The owner never gives a started command back to its queue, whatever order the reports arrive in. Its
-            // work started when the owner took it, not when the Runtime handed it over.
+            // work started when the owner took it, not when the Computer handed it over.
             if (!isCurrent(turn, event.commandId) || turn.delegation === "started") {
                 return turn;
             }

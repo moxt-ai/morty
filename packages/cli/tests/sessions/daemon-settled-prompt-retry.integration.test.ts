@@ -89,7 +89,7 @@ test("Given a completed prompt, When a client retries it before and after a daem
                 }
                 expect(original.event.mortyMetadata?.restated).toBeUndefined();
                 // A restatement keeps when the outcome was recorded: receivers that predate the restated marker
-                // report that time as when the command ended. It is marked as the outcome the Runtime recorded.
+                // report that time as when the command ended. It is marked as the outcome the Computer recorded.
                 const restatement = {
                     payload: original.event.payload,
                     mortyMetadata: { restated: true },

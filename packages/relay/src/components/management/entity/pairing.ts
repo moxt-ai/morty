@@ -18,7 +18,7 @@ export interface AgentDescriptor {
     readonly label: string;
 }
 
-export class CreatedRuntimePairing {
+export class CreatedComputerPairing {
     readonly expiresAt: string;
     readonly pairingCode: string;
     readonly pollToken: string;
@@ -90,16 +90,16 @@ export class PairingDirectoryError extends Error implements HttpError {
 function pairingDirectoryErrorStatus(code: string): number {
     switch (code) {
         case "pairing_not_found":
-        case "runtime_not_found":
+        case "computer_not_found":
         case "channel_not_found":
             return 404;
         case "unauthorized":
-        case "runtime_revoked":
+        case "computer_revoked":
             return 401;
-        case "runtime_access_denied":
+        case "computer_access_denied":
         case "workspace_required":
             return 403;
-        case "runtime_unavailable":
+        case "computer_unavailable":
         case "idempotency_conflict":
         case "session_configuration_conflict":
         case "turn_already_started":
@@ -107,17 +107,17 @@ function pairingDirectoryErrorStatus(code: string): number {
         case "pairing_timeout":
         case "directory_timeout":
             return 504;
-        case "runtime_quota_exceeded":
+        case "computer_quota_exceeded":
             return 429;
         case "directory_unavailable":
-        case "runtime_disconnect_failed":
+        case "computer_disconnect_failed":
             return 503;
         default:
             return 400;
     }
 }
 
-export class RevokedProjectRuntime {
+export class RevokedProjectComputer {
     readonly access: VerifiedComputerAccess;
     readonly revokedAt: string;
 

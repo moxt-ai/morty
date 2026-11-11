@@ -12,12 +12,12 @@ import {
     fakeAgentHarness,
     fakeAgentHarnessCapabilities,
 } from "./agent-harness.ts";
+import { memoryComputerCredentials } from "./computer-credentials.ts";
 import { createControlledRuntimeConfig as createRuntimeConfig } from "./controlled-runtime-config.ts";
-import { memoryRuntimeCredentials } from "./runtime-credentials.ts";
 
 type TestServerApp = { readonly request: (request: Request) => Response | Promise<Response> };
 
-const runtimePairingSchema = v.object({
+const computerPairingSchema = v.object({
     computerId: v.string(),
     pairingCode: v.string(),
 });
@@ -71,7 +71,7 @@ export async function createFakeAgentHarnessRuntime(options: {
         );
         const harnesses = options.harnesses ?? [defaultFakeAgentHarness];
         const pairing = v.parse(
-            runtimePairingSchema,
+            computerPairingSchema,
             await (
                 await options.server.request(
                     new Request(`${options.origin}/morty/api/computers/${options.computerId}/management/pairing`, {
@@ -87,7 +87,7 @@ export async function createFakeAgentHarnessRuntime(options: {
             ).json(),
         );
         const claim = v.parse(
-            v.object({ runtimeCredential: v.string() }),
+            v.object({ computerCredential: v.string() }),
             await (
                 await options.server.request(
                     new Request(`${options.origin}/morty/api/v1/pairings/${pairing.computerId}/redeem`, {
@@ -104,12 +104,12 @@ export async function createFakeAgentHarnessRuntime(options: {
                 )
             ).json(),
         );
-        const relayUrl = mortyApiUrl(options.relayOrigin ?? options.origin, "/v1/runtimes/connect");
+        const relayUrl = mortyApiUrl(options.relayOrigin ?? options.origin, "/v1/computers/connect");
         relayUrl.protocol = relayUrl.protocol === "https:" ? "wss:" : "ws:";
         const localContext = new RuntimeLocalContext(directory, process.env);
         const config = createRuntimeConfig(
             {
-                credentials: memoryRuntimeCredentials(claim.runtimeCredential),
+                credentials: memoryComputerCredentials(claim.computerCredential),
                 computerId: pairing.computerId,
                 defaultWorkspace: workspace,
                 relayUrl,
@@ -163,7 +163,7 @@ export async function createFakeAgentHarnessRuntime(options: {
                 }),
             );
             if (setup.status !== 202) {
-                throw new Error(`Runtime setup failed (${setup.status})`);
+                throw new Error(`Computer setup failed (${setup.status})`);
             }
         }
         let disposed = false;
@@ -183,7 +183,7 @@ export async function createFakeAgentHarnessRuntime(options: {
                 }
                 disposed = true;
                 owner.close();
-                cancellation.abort(new Error("Controlled Agent harness Runtime stopped"));
+                cancellation.abort(new Error("Controlled Agent harness Computer stopped"));
                 await runtime?.catch(() => undefined);
                 await rm(directory, { recursive: true, force: true });
             },

@@ -104,10 +104,10 @@ async function createProbeEngine(options: ProbeOptions, signal: AbortSignal) {
     void online.promise.catch(() => undefined);
     relay.on("connection", (socket) => {
         connected.resolve(socket);
-        socket.send(JSON.stringify({ kind: "runtime.liveness.ready" }));
+        socket.send(JSON.stringify({ kind: "computer.liveness.ready" }));
         socket.on("message", (encoded) => {
-            if (String(encoded) === '{"kind":"runtime.heartbeat"}') {
-                socket.send(JSON.stringify({ kind: "runtime.heartbeat.ack" }));
+            if (String(encoded) === '{"kind":"computer.heartbeat"}') {
+                socket.send(JSON.stringify({ kind: "computer.heartbeat.ack" }));
             }
         });
     });
@@ -134,7 +134,7 @@ async function createProbeEngine(options: ProbeOptions, signal: AbortSignal) {
             computerId: "output-drain",
             defaultWorkspace: workspace,
             relayOrigin: new URL(`http://127.0.0.1:${port(http)}`),
-            runtimeCredential: "r".repeat(43),
+            computerCredential: "r".repeat(43),
         },
         signal,
     );
@@ -234,8 +234,8 @@ async function request(
 }
 
 async function diagnostics(socket: WebSocket, signal: AbortSignal) {
-    const result = await request(socket, { kind: "runtime.diagnostics.read", requestId: "probe-report" }, signal);
-    if (result.kind !== "runtime.diagnostics.result") {
+    const result = await request(socket, { kind: "computer.diagnostics.read", requestId: "probe-report" }, signal);
+    if (result.kind !== "computer.diagnostics.result") {
         throw new Error("Expected a Runtime diagnostic report");
     }
     return result;

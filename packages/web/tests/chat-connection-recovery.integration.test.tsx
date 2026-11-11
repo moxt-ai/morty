@@ -6,7 +6,7 @@ import { openExecutionDetails, recoverChat, sendPrompt } from "./infra/applicati
 import { createTestApp } from "./infra/test-app.tsx";
 import { TestClock } from "./infra/test-clock.ts";
 
-test("Given a connected Chat with an unsent draft, When its network drops and returns, Then it recovers without a blocking dialog or sending the draft and still reports Runtime changes", {
+test("Given a connected Chat with an unsent draft, When its network drops and returns, Then it recovers without a blocking dialog or sending the draft and still reports Computer changes", {
     timeout: 45_000,
 }, async () => {
     const clock = new TestClock("2026-10-23T08:00:00Z");
@@ -16,7 +16,7 @@ test("Given a connected Chat with an unsent draft, When its network drops and re
         (element) => element instanceof HTMLTextAreaElement && !element.disabled,
     );
     if (!(composer instanceof HTMLTextAreaElement) || app.daemon === null) {
-        throw new Error("Expected the connected Chat and Runtime");
+        throw new Error("Expected the connected Chat and Computer");
     }
     await app.user.click(composer);
     await app.user.paste("Keep this draft unsent");
@@ -85,7 +85,7 @@ test("Given a running task and an unsent draft, When Chat disconnects while the 
         (element) => element instanceof HTMLTextAreaElement && !element.disabled,
     );
     if (!(initialComposer instanceof HTMLTextAreaElement) || app.daemon === null) {
-        throw new Error("Expected a connected Chat and Runtime");
+        throw new Error("Expected a connected Chat and Computer");
     }
     await sendPrompt(app, initialComposer, "hold after first delta");
     await app.waitForView(() =>

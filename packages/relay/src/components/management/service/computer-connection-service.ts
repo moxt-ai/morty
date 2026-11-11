@@ -25,17 +25,17 @@ export class ComputerConnectionService {
     ) => this.#pairings.updateAgentCatalog(computerId, token, successor, agents, signal);
 
     /**
-     * Authorizes a daemon connection, rotating its credential. A reused credential ends the Runtime's access first; a
-     * daemon of a Runtime whose access ended is told so, so it stops instead of retrying.
+     * Authorizes a daemon connection, rotating its credential. A reused credential ends the Computer's access first; a
+     * daemon of a Computer whose access ended is told so, so it stops instead of retrying.
      */
-    readonly connectRuntime = async (
+    readonly connectComputer = async (
         token: string,
         successor: string,
         signal: AbortSignal,
     ): Promise<
         { readonly kind: "accepted"; readonly access: VerifiedComputerAccess } | { readonly kind: "revoked" }
     > => {
-        const rotation = await this.#pairings.rotateRuntimeCredential(token, successor, signal);
+        const rotation = await this.#pairings.rotateComputerCredential(token, successor, signal);
         switch (rotation.kind) {
             case "rotated":
                 return { kind: "accepted", access: rotation.access };
@@ -46,12 +46,12 @@ export class ComputerConnectionService {
         }
         logger.warn(
             {
-                event: "runtime_credential_reused",
+                event: "computer_credential_reused",
                 computerId: rotation.access.computerId,
             },
-            "A retired Runtime credential was presented; the Runtime was revoked",
+            "A retired Computer credential was presented; the Computer was revoked",
         );
-        await this.#computerRelayGateway.disconnectRuntime(rotation.access, signal);
+        await this.#computerRelayGateway.disconnectComputer(rotation.access, signal);
         return { kind: "revoked" };
     };
 }

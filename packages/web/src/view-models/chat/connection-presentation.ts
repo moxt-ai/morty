@@ -39,8 +39,8 @@ export function connectionPresentation(
     const lastConfirmed =
         (!home.networkAvailable || watch.kind === "unavailable") &&
         checkedAt !== null &&
-        home.runtimeConfiguration !== null
-            ? `Last confirmed ${home.runtimeConfiguration.runtime.online ? "online" : "offline"} at ${new Date(checkedAt).toLocaleTimeString()}`
+        home.computerConfiguration !== null
+            ? `Last confirmed ${home.computerConfiguration.computer.online ? "online" : "offline"} at ${new Date(checkedAt).toLocaleTimeString()}`
             : null;
     const connection = sessionLabel(session, home.selection.kind === "draft");
     const present = (

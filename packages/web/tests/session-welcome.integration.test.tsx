@@ -55,7 +55,7 @@ test("Given a dismissed welcome tip, When its chat URL requests the welcome mock
     await preview.close();
 });
 
-test("Given an offline Runtime, When the chat URL requests the welcome mock, Then the card remains available for styling", {
+test("Given an offline Computer, When the chat URL requests the welcome mock, Then the card remains available for styling", {
     timeout: 30_000,
 }, async () => {
     const sessionId = "offline-welcome-preview";
@@ -68,7 +68,7 @@ test("Given an offline Runtime, When the chat URL requests the welcome mock, The
     await opened.waitForView(() => expect(window.location.pathname).toBe("/chat"));
     const app = await opened.reload();
     if (opened.daemon === null) {
-        throw new Error("Expected a connected Runtime");
+        throw new Error("Expected a connected Computer");
     }
     await opened.daemon.disconnect();
     const url = new URL(window.location.href);

@@ -1,10 +1,10 @@
 import { type Dispatcher, WebSocket } from "undici";
 
 import { environmentProxyDispatcher } from "../../util/network/environment-proxy.ts";
-import { isRuntimeRelayRevocation, RuntimeRelayRevokedError } from "./runtime-revocation.ts";
+import { ComputerRelayRevokedError, isComputerRelayRevocation } from "./computer-revocation.ts";
 
 // The Relay accepts a daemon only after it has made the Channel's previous connection offline, and a
-// Project whose Runtime had several Sessions in flight takes longer to reach that point than a small one.
+// Project whose Computer had several Sessions in flight takes longer to reach that point than a small one.
 // A tight deadline made the daemon give up mid-accept, reconnect, and give up again, so allow enough room
 // for a large Project while still failing a genuinely dead Relay.
 const CONNECTION_TIMEOUT_MILLISECONDS = 60_000;
@@ -146,8 +146,8 @@ export function connectRelay(
             );
         };
         const onClose = (event: CloseEvent): void => {
-            if (isRuntimeRelayRevocation(event.code, event.reason)) {
-                fail(new RuntimeRelayRevokedError(event.code, event.reason));
+            if (isComputerRelayRevocation(event.code, event.reason)) {
+                fail(new ComputerRelayRevokedError(event.code, event.reason));
                 return;
             }
             fail(

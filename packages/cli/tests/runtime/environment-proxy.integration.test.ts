@@ -50,7 +50,7 @@ describe("daemon environment proxy", () => {
             response.end(
                 JSON.stringify({
                     computerId: "proxy-computer",
-                    runtimeCredential: "a".repeat(32),
+                    computerCredential: "a".repeat(32),
                 }),
             );
         });

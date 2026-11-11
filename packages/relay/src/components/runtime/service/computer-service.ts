@@ -1,14 +1,14 @@
 import { nativeSessionKey } from "@morty-build/client/native-session";
 import {
+    COMPUTER_LIVENESS_READY_KIND,
+    COMPUTER_STATUS_KIND,
+    type ComputerLivenessReadyEvent,
     type DaemonToRelayMessage,
     decodeDaemonToRelayMessage,
     decodeKnownServiceToDaemonMessage,
-    encodeRuntimeStatusEvent,
+    encodeComputerStatusEvent,
     encodeServiceToDaemonMessage,
     type NativeSessionTarget,
-    RUNTIME_LIVENESS_READY_KIND,
-    RUNTIME_STATUS_KIND,
-    type RuntimeLivenessReadyEvent,
     SESSION_EVENT_KIND,
     type SessionAccessGrant,
 } from "@morty-build/client/protocol";
@@ -17,11 +17,11 @@ import { PairingDirectoryError } from "../../management/entity/pairing.ts";
 import { ProjectPermission } from "../../management/entity/project-authentication.ts";
 import type { ComputerConnectionIdentity } from "../entity/computer-connection.ts";
 import { ComputerScope } from "../entity/session.ts";
+import { computerCommandPermission } from "./computer-control-registry.ts";
+import type { ComputerCredentialService } from "./computer-credential-service.ts";
+import { ComputerMessageScheduler, ComputerMessageSchedulerCapacityError } from "./computer-message-scheduler.ts";
 import type { ComputerRelayActor, RelayPeers, RelaySocket } from "./computer-relay-actor.ts";
 import type { DaemonConnectionService } from "./daemon-connection-service.ts";
-import { runtimeCommandPermission } from "./runtime-control-registry.ts";
-import type { RuntimeCredentialService } from "./runtime-credential-service.ts";
-import { RuntimeMessageScheduler, RuntimeMessageSchedulerCapacityError } from "./runtime-message-scheduler.ts";
 
 const DAEMON_ATTACHMENT_TIMEOUT_MILLISECONDS = 30_000;
 
@@ -35,7 +35,7 @@ const DAEMON_HEARTBEAT_SILENCE_LIMIT_MILLISECONDS = 35_000;
 /** Whether a heartbeat on a daemon connection has been answered, and when it last was. */
 export type DaemonHeartbeat = { readonly kind: "none" } | { readonly kind: "received"; readonly at: number };
 
-export type RuntimeSocketIdentity =
+export type ComputerSocketIdentity =
     | {
           readonly role: "viewer";
           readonly expiresAt: number;
@@ -65,52 +65,52 @@ export type RuntimeSocketIdentity =
           readonly computerId: string;
       };
 
-export interface RuntimeSocket extends RelaySocket {
+export interface ComputerSocket extends RelaySocket {
     readonly replaceDaemon: () => void;
 }
 
-export interface RuntimePeers extends RelayPeers {
-    readonly sockets: () => readonly { readonly identity: RuntimeSocketIdentity; readonly socket: RuntimeSocket }[];
+export interface ComputerPeers extends RelayPeers {
+    readonly sockets: () => readonly { readonly identity: ComputerSocketIdentity; readonly socket: ComputerSocket }[];
     /** Daemon connections with the time each one's heartbeat was last answered by the host. */
     readonly daemonConnections: () => readonly {
-        readonly identity: RuntimeSocketIdentity;
-        readonly socket: RuntimeSocket;
+        readonly identity: ComputerSocketIdentity;
+        readonly socket: ComputerSocket;
         readonly heartbeat: DaemonHeartbeat;
     }[];
-    readonly accept: (identity: RuntimeSocketIdentity) => {
-        readonly socket: RuntimeSocket;
+    readonly accept: (identity: ComputerSocketIdentity) => {
+        readonly socket: ComputerSocket;
         readonly response: Response;
     };
 }
 
-type RuntimePeer = ReturnType<RuntimePeers["sockets"]>[number];
+type ComputerPeer = ReturnType<ComputerPeers["sockets"]>[number];
 
 interface RuntimeContext {
     readonly services: {
         readonly connections: DaemonConnectionService;
-        readonly credentials: RuntimeCredentialService;
+        readonly credentials: ComputerCredentialService;
         readonly relay: (scope: ComputerScope) => ComputerRelayActor;
     };
     readonly gateways: {
-        readonly peers: RuntimePeers;
+        readonly peers: ComputerPeers;
     };
     readonly utilities: {
         readonly waitUntil: (operation: Promise<void>) => void;
     };
 }
 
-export type RuntimeAdmission =
+export type ComputerAdmission =
     | { readonly kind: "revoked" }
     | { readonly kind: "accepted"; readonly response: Response };
 
-type DaemonSocketIdentity = Extract<RuntimeSocketIdentity, { readonly role: "daemon" | "replaced-daemon" }> & {
+type DaemonSocketIdentity = Extract<ComputerSocketIdentity, { readonly role: "daemon" | "replaced-daemon" }> & {
     readonly role: "daemon";
 };
 
-export class RuntimeService {
+export class ComputerService {
     readonly #cx: RuntimeContext;
     readonly #channels = new Map<string, ComputerRelayActor>();
-    readonly #daemonMessages = new RuntimeMessageScheduler();
+    readonly #daemonMessages = new ComputerMessageScheduler();
     readonly #attachments = new Set<{
         readonly controller: AbortController;
         readonly identity: DaemonSocketIdentity;
@@ -136,7 +136,7 @@ export class RuntimeService {
         });
 
     /**
-     * Admits a connection only while a generation of this Runtime is active, under that generation. The pending
+     * Admits a connection only while a generation of this Computer is active, under that generation. The pending
      * admission is registered before that authority is read: a revocation committed after the read is notified
      * after it, and the notification aborts the admission. `accept` must check the admission signal and then
      * accept without awaiting, so a later notification finds the accepted socket and closes it.
@@ -171,11 +171,11 @@ export class RuntimeService {
         scope: ComputerScope,
         signal: AbortSignal,
         generation: number,
-    ): RuntimeAdmission => {
+    ): ComputerAdmission => {
         // Nothing below awaits, so this admission check and accept + connect are one step.
         signal.throwIfAborted();
         const latest = this.#cx.services.connections.latest();
-        // The connections opened during an earlier generation belong to the Runtime that generation paired.
+        // The connections opened during an earlier generation belong to the Computer that generation paired.
         if (latest !== null && latest.generation !== generation) {
             for (const { socket } of this.#cx.gateways.peers.sockets()) {
                 socket.close(1000, "Previous daemon disconnected");
@@ -189,7 +189,7 @@ export class RuntimeService {
             .filter(({ identity, socket }) => identity.role === "daemon" && socket.isOpen());
         for (const attachment of this.#attachments) {
             if (attachment.identity.computerId === scope.computerId) {
-                attachment.controller.abort(new DOMException("Runtime connection replaced", "AbortError"));
+                attachment.controller.abort(new DOMException("Computer connection replaced", "AbortError"));
             }
         }
         for (const { socket } of previous) {
@@ -199,14 +199,14 @@ export class RuntimeService {
         const identity: DaemonSocketIdentity = { ...connection, role: "daemon" };
         const accepted = this.#cx.gateways.peers.accept(identity);
         this.#cx.services.connections.connected(connection, generation, Date.now());
-        logger.info({ ...identity, event: "runtime_websocket_accepted" }, "Runtime WebSocket accepted");
+        logger.info({ ...identity, event: "computer_websocket_accepted" }, "Computer WebSocket accepted");
         this.deferDaemonAttachment(identity, accepted.socket, scope, previous.length > 0);
         return { kind: "accepted", response: accepted.response };
     };
 
     private readonly deferDaemonAttachment = (
         identity: DaemonSocketIdentity,
-        socket: RuntimeSocket,
+        socket: ComputerSocket,
         scope: ComputerScope,
         replaced: boolean,
     ): void => {
@@ -216,7 +216,7 @@ export class RuntimeService {
         // after the attachment finished, so the timer is cleared once it settles.
         const timeout = new AbortController();
         const timer = setTimeout(
-            () => timeout.abort(new DOMException("The Runtime attachment timed out", "TimeoutError")),
+            () => timeout.abort(new DOMException("The Computer attachment timed out", "TimeoutError")),
             DAEMON_ATTACHMENT_TIMEOUT_MILLISECONDS,
         );
         const signal = AbortSignal.any([attachment.controller.signal, timeout.signal]);
@@ -227,17 +227,17 @@ export class RuntimeService {
                 if (!this.#cx.services.connections.isCurrent(identity)) {
                     return;
                 }
-                const ready: RuntimeLivenessReadyEvent = { kind: RUNTIME_LIVENESS_READY_KIND };
+                const ready: ComputerLivenessReadyEvent = { kind: COMPUTER_LIVENESS_READY_KIND };
                 socket.send(encodeServiceToDaemonMessage(ready));
             } catch (error) {
                 if (!attachment.controller.signal.aborted) {
                     logger.error(
-                        { ...identity, err: error, event: "runtime_attachment_failed" },
-                        "Runtime attachment failed",
+                        { ...identity, err: error, event: "computer_attachment_failed" },
+                        "Computer attachment failed",
                     );
                 }
                 if (this.#cx.services.connections.isCurrent(identity)) {
-                    socket.close(1011, "Runtime attachment failed");
+                    socket.close(1011, "Computer attachment failed");
                 }
             } finally {
                 clearTimeout(timer);
@@ -248,11 +248,11 @@ export class RuntimeService {
     };
 
     readonly acceptHost = (
-        identity: Extract<RuntimeSocketIdentity, { readonly role: "host" | "relay" }>,
+        identity: Extract<ComputerSocketIdentity, { readonly role: "host" | "relay" }>,
         signal: AbortSignal,
-    ): Promise<RuntimeAdmission> => {
+    ): Promise<ComputerAdmission> => {
         const scope = new ComputerScope(identity.computerId);
-        return this.admit(scope, signal, async (admission): Promise<RuntimeAdmission> => {
+        return this.admit(scope, signal, async (admission): Promise<ComputerAdmission> => {
             admission.throwIfAborted();
             const accepted = this.#cx.gateways.peers.accept(identity);
             await this.attachHost(scope, accepted.socket, signal);
@@ -260,9 +260,9 @@ export class RuntimeService {
         });
     };
 
-    readonly revokeRuntime = async (scope: ComputerScope, signal: AbortSignal): Promise<void> => {
+    readonly revokeComputer = async (scope: ComputerScope, signal: AbortSignal): Promise<void> => {
         signal.throwIfAborted();
-        // The Project's Runtime authority committed the revocation before notifying; acceptance and every
+        // The Project's Computer authority committed the revocation before notifying; acceptance and every
         // daemon message read that authority, so this notification only cleans up promptly. Its one fallible
         // step runs first, so a failed notification leaves this Relay unchanged for the caller to retry.
         // A delayed disconnect must not close the daemon that claimed a fresh authorization.
@@ -276,12 +276,12 @@ export class RuntimeService {
         }
         for (const accepting of this.#accepting) {
             if (accepting.scope.computerId === scope.computerId) {
-                accepting.controller.abort(new DOMException("Runtime revoked", "AbortError"));
+                accepting.controller.abort(new DOMException("Computer revoked", "AbortError"));
             }
         }
         for (const attachment of this.#attachments) {
             if (attachment.identity.computerId === scope.computerId) {
-                attachment.controller.abort(new DOMException("Runtime revoked", "AbortError"));
+                attachment.controller.abort(new DOMException("Computer revoked", "AbortError"));
             }
         }
         for (const { identity, socket } of this.#cx.gateways.peers.sockets()) {
@@ -289,9 +289,9 @@ export class RuntimeService {
                 continue;
             }
             if (identity.role === "daemon") {
-                socket.close(1008, "Runtime revoked");
+                socket.close(1008, "Computer revoked");
             } else if (identity.role === "viewer" || identity.role === "host") {
-                socket.close(1008, "Runtime revoked");
+                socket.close(1008, "Computer revoked");
             }
         }
         if (connected) {
@@ -301,7 +301,7 @@ export class RuntimeService {
 
     /**
      * Closes the host connections and live Session views whose credential no longer authorizes them. A host's own
-     * messages are authorized as they arrive, but nothing the Runtime sends to a quiet host or to a view is, so the
+     * messages are authorized as they arrive, but nothing the Computer sends to a quiet host or to a view is, so the
      * Relay runs this as soon as access to the computer ends, and periodically while either is connected.
      */
     readonly reauthorizeConnections = async (signal: AbortSignal): Promise<void> => {
@@ -358,7 +358,7 @@ export class RuntimeService {
                         this.#cx.services.connections.isCurrent(identity),
                 );
             if (daemon !== undefined && daemon.identity.computerId !== scope.computerId) {
-                throw new PairingDirectoryError("runtime_access_denied", "The selected Runtime is unavailable");
+                throw new PairingDirectoryError("computer_access_denied", "The selected Computer is unavailable");
             }
             const relay = this.relay(scope);
             if (typeof message === "string") {
@@ -372,15 +372,15 @@ export class RuntimeService {
     };
 
     readonly receiveMessage = async (
-        identity: RuntimeSocketIdentity,
-        socket: RuntimeSocket,
+        identity: ComputerSocketIdentity,
+        socket: ComputerSocket,
         message: unknown,
         signal: AbortSignal,
     ): Promise<void> => {
         signal.throwIfAborted();
         const scope = new ComputerScope(identity.computerId);
         if (identity.role === "host" || identity.role === "relay" || identity.role === "viewer") {
-            // Closing first makes this command see the Runtime as offline and fail at once; detaching
+            // Closing first makes this command see the Computer as offline and fail at once; detaching
             // afterwards releases commands already sent into the silent connection.
             const silentDaemons = this.closeSilentDaemons();
             try {
@@ -404,7 +404,7 @@ export class RuntimeService {
                     typeof message === "string"
                         ? command === null
                             ? null
-                            : runtimeCommandPermission(command)
+                            : computerCommandPermission(command)
                         : ProjectPermission.SessionWrite;
                 switch (await this.#cx.services.credentials.authorizeHostMessage(identity, permission, signal)) {
                     case "revoked":
@@ -439,7 +439,7 @@ export class RuntimeService {
             } catch (error) {
                 signal.throwIfAborted();
                 socket.close(
-                    error instanceof RuntimeMessageSchedulerCapacityError ? 1013 : 1008,
+                    error instanceof ComputerMessageSchedulerCapacityError ? 1013 : 1008,
                     "Invalid content chunk",
                 );
             }
@@ -468,10 +468,10 @@ export class RuntimeService {
                 await relay.receiveDaemonMessage(socket, daemonMessage, signal, message);
             });
         } catch (error) {
-            if (error instanceof RuntimeMessageSchedulerCapacityError) {
+            if (error instanceof ComputerMessageSchedulerCapacityError) {
                 logger.warn(
-                    { ...identity, err: error, event: "runtime_message_queue_full", closeCode: 1013 },
-                    "Runtime message queue full",
+                    { ...identity, err: error, event: "computer_message_queue_full", closeCode: 1013 },
+                    "Computer message queue full",
                 );
                 socket.close(1013, error.code);
                 return;
@@ -481,8 +481,8 @@ export class RuntimeService {
     };
 
     private readonly authorizeDaemonMessage = async (
-        identity: Extract<RuntimeSocketIdentity, { readonly role: "daemon" | "replaced-daemon" }>,
-        socket: RuntimeSocket,
+        identity: Extract<ComputerSocketIdentity, { readonly role: "daemon" | "replaced-daemon" }>,
+        socket: ComputerSocket,
         signal: AbortSignal,
     ): Promise<boolean> => {
         if (identity.role === "replaced-daemon") {
@@ -496,16 +496,16 @@ export class RuntimeService {
         // served. Read that authority before every business message; the local connection fence alone is insufficient.
         try {
             if ((await this.#cx.services.credentials.activeGeneration(identity, signal)) === null) {
-                socket.close(1008, "Runtime revoked");
+                socket.close(1008, "Computer revoked");
                 return false;
             }
         } catch (error) {
             signal.throwIfAborted();
             logger.warn(
-                { ...identity, err: error, event: "runtime_authorization_failed", closeCode: 1011 },
-                "Runtime authorization unavailable",
+                { ...identity, err: error, event: "computer_authorization_failed", closeCode: 1011 },
+                "Computer authorization unavailable",
             );
-            socket.close(1011, "Runtime authorization unavailable");
+            socket.close(1011, "Computer authorization unavailable");
             return false;
         }
         // A replacement may have been accepted while the authoritative lookup was in flight.
@@ -517,9 +517,9 @@ export class RuntimeService {
 
     /**
      * Closes a daemon connection that is no longer the current one, telling a replaced daemon to reconnect and the
-     * daemon of an ended generation that its Runtime was revoked. True when it closed the connection.
+     * daemon of an ended generation that its Computer was revoked. True when it closed the connection.
      */
-    private readonly fenceDaemon = (identity: ComputerConnectionIdentity, socket: RuntimeSocket): boolean => {
+    private readonly fenceDaemon = (identity: ComputerConnectionIdentity, socket: ComputerSocket): boolean => {
         const standing = this.#cx.services.connections.standing(identity);
         switch (standing) {
             case "current":
@@ -528,7 +528,7 @@ export class RuntimeService {
                 socket.replaceDaemon();
                 return true;
             case "ended":
-                socket.close(1008, "Runtime revoked");
+                socket.close(1008, "Computer revoked");
                 return true;
             default:
                 return standing satisfies never;
@@ -561,7 +561,7 @@ export class RuntimeService {
     };
 
     readonly detach = async (
-        identity: RuntimeSocketIdentity,
+        identity: ComputerSocketIdentity,
         socket: RelaySocket,
         signal: AbortSignal,
     ): Promise<void> => {
@@ -577,7 +577,7 @@ export class RuntimeService {
                 attachment.identity.computerId === identity.computerId &&
                 attachment.identity.connectionEpoch === identity.connectionEpoch
             ) {
-                attachment.controller.abort(new DOMException("Runtime connection closed", "AbortError"));
+                attachment.controller.abort(new DOMException("Computer connection closed", "AbortError"));
             }
         }
         await this.#daemonMessages.idle(signal);
@@ -588,9 +588,9 @@ export class RuntimeService {
         await this.relay(new ComputerScope(identity.computerId)).detachDaemon(socket, signal);
     };
 
-    private readonly closeSilentDaemons = (): readonly RuntimePeer[] => {
+    private readonly closeSilentDaemons = (): readonly ComputerPeer[] => {
         const now = Date.now();
-        const silent: RuntimePeer[] = [];
+        const silent: ComputerPeer[] = [];
         for (const { identity, socket, heartbeat } of this.#cx.gateways.peers.daemonConnections()) {
             if (identity.role !== "daemon" || !socket.isOpen()) {
                 continue;
@@ -608,12 +608,12 @@ export class RuntimeService {
                 {
                     ...identity,
                     closeCode: 4001,
-                    event: "runtime_heartbeat_silence",
+                    event: "computer_heartbeat_silence",
                     silenceMilliseconds: now - heardAt,
                 },
-                "Runtime daemon stopped heartbeating",
+                "Computer daemon stopped heartbeating",
             );
-            socket.close(4001, "Runtime heartbeat timed out");
+            socket.close(4001, "Computer heartbeat timed out");
             silent.push({ identity, socket });
         }
         return silent;
@@ -630,11 +630,11 @@ export class RuntimeService {
 
     // The connection may never report its close, so the Relay detaches it itself. The command or
     // read that noticed the silence may end first, so the detach does not share its cancellation.
-    private readonly detachDaemons = async (daemons: readonly RuntimePeer[]): Promise<void> => {
+    private readonly detachDaemons = async (daemons: readonly ComputerPeer[]): Promise<void> => {
         for (const { identity, socket } of daemons) {
             const timeout = new AbortController();
             const timer = setTimeout(
-                () => timeout.abort(new DOMException("The Runtime detach timed out", "TimeoutError")),
+                () => timeout.abort(new DOMException("The Computer detach timed out", "TimeoutError")),
                 DAEMON_DETACH_TIMEOUT_MILLISECONDS,
             );
             try {
@@ -652,7 +652,7 @@ export class RuntimeService {
             ...this.#cx.gateways.peers.nativeRequests().map(({ socket }) => socket),
         ]) {
             if (host.isOpen()) {
-                host.send(encodeRuntimeStatusEvent({ kind: RUNTIME_STATUS_KIND, computerId, online: false }));
+                host.send(encodeComputerStatusEvent({ kind: COMPUTER_STATUS_KIND, computerId, online: false }));
             }
         }
     };

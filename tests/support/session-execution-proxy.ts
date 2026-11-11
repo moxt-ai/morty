@@ -1,5 +1,5 @@
 import { createServer, type IncomingMessage, request } from "node:http";
-import { decodeNativeSessionResult, RUNTIME_SUCCESSOR_CREDENTIAL_HEADER } from "@morty-build/client/protocol";
+import { COMPUTER_SUCCESSOR_CREDENTIAL_HEADER, decodeNativeSessionResult } from "@morty-build/client/protocol";
 import { WebSocket, WebSocketServer } from "ws";
 
 /** Forwards real traffic unchanged, with controllable ordering at the Relay transport boundary. */
@@ -14,7 +14,7 @@ export async function createSessionExecutionProxy(upstream: string) {
         return held;
     };
     let hold: ((release: () => void) => void) | null = null;
-    // Requests held by the end of their path until released, each release returning the Runtime's response.
+    // Requests held by the end of their path until released, each release returning the Computer's response.
     const heldReplies = new Map<string, (release: () => Promise<unknown>) => void>();
     let holdSubmission: ((release: () => void) => void) | null = null;
     let heldEvents: (() => void)[] | null = null;
@@ -69,10 +69,10 @@ export async function createSessionExecutionProxy(upstream: string) {
                 : {
                       headers: {
                           authorization: incoming.headers.authorization,
-                          ...(typeof incoming.headers[RUNTIME_SUCCESSOR_CREDENTIAL_HEADER] === "string"
+                          ...(typeof incoming.headers[COMPUTER_SUCCESSOR_CREDENTIAL_HEADER] === "string"
                               ? {
-                                    [RUNTIME_SUCCESSOR_CREDENTIAL_HEADER]:
-                                        incoming.headers[RUNTIME_SUCCESSOR_CREDENTIAL_HEADER],
+                                    [COMPUTER_SUCCESSOR_CREDENTIAL_HEADER]:
+                                        incoming.headers[COMPUTER_SUCCESSOR_CREDENTIAL_HEADER],
                                 }
                               : {}),
                       },
@@ -322,12 +322,12 @@ export async function createSessionExecutionProxy(upstream: string) {
             new Promise<() => void>((resolve) => {
                 hold = resolve;
             }),
-        /** Holds the next turn submission before the Runtime receives it, until the returned release. */
+        /** Holds the next turn submission before the Computer receives it, until the returned release. */
         holdNextSubmission: () =>
             new Promise<() => void>((resolve) => {
                 holdSubmission = resolve;
             }),
-        /** Holds the next steer before the Runtime receives it; the release forwards it and returns the response. */
+        /** Holds the next steer before the Computer receives it; the release forwards it and returns the response. */
         holdNextSteer: () =>
             new Promise<() => Promise<unknown>>((resolve) => {
                 heldReplies.set("/disposition", resolve);

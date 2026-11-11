@@ -10,7 +10,7 @@ export interface AgentProbeDiagnostic {
 
 export interface LocalAgentDiscoveryContext {
     readonly architecture?: NodeJS.Architecture;
-    /** The Runtime's local data directory, where Agents that Morty configures keep their Morty-owned state. */
+    /** The Computer's local data directory, where Agents that Morty configures keep their Morty-owned state. */
     readonly dataDirectory: string;
     readonly defaultWorkspace: string;
     readonly environment: Readonly<NodeJS.ProcessEnv>;

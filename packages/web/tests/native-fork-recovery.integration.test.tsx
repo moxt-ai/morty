@@ -49,7 +49,7 @@ test("Given a Fork completes before Morty loses its response, When the user retr
             expect(response.status).toBe(200);
             return await response.json();
         };
-        // The Runtime holds the Fork it completed, so it is listed before the retry.
+        // The Computer holds the Fork it completed, so it is listed before the retry.
         const forked = { sessions: [{ title: "Native fork-recovery-source (Fork #1)" }] };
         expect(await managed()).toMatchObject(forked);
         await app.user.click(getByRole(dialog, "button", { name: "Fork" }));

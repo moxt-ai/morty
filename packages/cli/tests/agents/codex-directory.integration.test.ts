@@ -160,7 +160,7 @@ it("Given a saved Codex thread with a long preview, When its directory is listed
 });
 
 it.each(["import", "fork"] satisfies readonly ("import" | "fork")[])(
-    "Given Runtime uses native Session identities, When Chat requests %s, Then Codex returns its own destination pair without returning native history",
+    "Given Computer uses native Session identities, When Chat requests %s, Then Codex returns its own destination pair without returning native history",
     async (action) => {
         const f = await codexFixture();
         try {

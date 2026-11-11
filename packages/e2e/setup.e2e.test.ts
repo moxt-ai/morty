@@ -4,13 +4,13 @@ import { dirname, isAbsolute, join, relative } from "node:path";
 import { dataTestId } from "../web/src/data-testid.ts";
 import { expect, test } from "./infra/test.ts";
 
-/** How the Runtime shows a directory: under the user's home directory as `~/…`, elsewhere in full. */
+/** How the Computer shows a directory: under the user's home directory as `~/…`, elsewhere in full. */
 function directoryLabel(path: string): string {
     const suffix = relative(homedir(), path);
     return suffix === "" ? "~" : !isAbsolute(suffix) && !suffix.startsWith("..") ? `~/${suffix}` : path;
 }
 
-test("Given a saved setup handoff, When its Runtime reconnects, Then setup returns a concise QR image reference", async ({
+test("Given a saved setup handoff, When its Computer reconnects, Then setup returns a concise QR image reference", async ({
     runtime,
 }) => {
     const original = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
@@ -23,15 +23,15 @@ test("Given a saved setup handoff, When its Runtime reconnects, Then setup retur
     expect(connected.computerId).toBe(original.computerId);
     expect(statuses).not.toContain("prepared");
     expect(statuses).toEqual(
-        expect.arrayContaining(["runtime_reused", "runtime_paired", "runtime_online", "binding_activated"]),
+        expect.arrayContaining(["computer_reused", "computer_paired", "computer_online", "binding_activated"]),
     );
-    expect(statuses.indexOf("runtime_reused")).toBeLessThan(statuses.indexOf("runtime_paired"));
-    expect(statuses.indexOf("runtime_paired")).toBeLessThan(statuses.indexOf("runtime_online"));
-    expect(statuses.indexOf("runtime_online")).toBeLessThan(statuses.indexOf("binding_activated"));
+    expect(statuses.indexOf("computer_reused")).toBeLessThan(statuses.indexOf("computer_paired"));
+    expect(statuses.indexOf("computer_paired")).toBeLessThan(statuses.indexOf("computer_online"));
+    expect(statuses.indexOf("computer_online")).toBeLessThan(statuses.indexOf("binding_activated"));
     expect(connected.configuration).toHaveProperty("pairing", { kind: "none" });
     expect(connected.configuration).not.toHaveProperty("pairing_key");
     expect(connected.configuration).not.toHaveProperty("expected_computer_id");
-    expect(connected.configuration).not.toHaveProperty("runtime_process");
+    expect(connected.configuration).not.toHaveProperty("computer_process");
     const ready = connected.events.find((event) => event["status"] === "ready");
     expect(ready).not.toHaveProperty("qrDataUrl");
     expect(ready).not.toHaveProperty("qrTextPath");
@@ -51,7 +51,7 @@ test("Given the agent's shell exposes its Claude Code session, When it follows t
     expect(connected.events).not.toContainEqual(expect.objectContaining({ status: "session_id_mismatch" }));
 });
 
-test("Given a saved Machine whose Runtime the manager no longer manages, When the user approves its replacement, Then setup pairs a fresh Runtime and keeps the user", async ({
+test("Given a saved Machine whose Computer the manager no longer manages, When the user approves its replacement, Then setup pairs a fresh Computer and keeps the user", async ({
     runtime,
 }) => {
     const original = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
@@ -64,7 +64,7 @@ test("Given a saved Machine whose Runtime the manager no longer manages, When th
         original.identity.computerId,
     );
 
-    expect(connected.events).not.toContainEqual(expect.objectContaining({ status: "runtime_reused" }));
+    expect(connected.events).not.toContainEqual(expect.objectContaining({ status: "computer_reused" }));
     expect(connected.identity.userId).toBe(original.identity.userId);
     expect(connected.identity.computerId).not.toBe(original.identity.computerId);
     expect(connected.computerId).not.toBe(original.computerId);
@@ -108,7 +108,7 @@ test("Given a browser opened the saved Machine's link, When the user approves re
     await expect(page.getByRole("textbox", { name: "Message" })).toBeEnabled();
 });
 
-test("Given a saved Machine and another same-App connection, When its Runtime reconnects, Then setup reuses the Machine's bound Runtime", async ({
+test("Given a saved Machine and another same-App connection, When its Computer reconnects, Then setup reuses the Machine's bound Computer", async ({
     runtime,
 }) => {
     await runtime.openChat();
@@ -121,20 +121,20 @@ test("Given a saved Machine and another same-App connection, When its Runtime re
     expect(connected.computerId).toBe(original.computerId);
     expect(connected.events).toEqual(
         expect.arrayContaining([
-            expect.objectContaining({ status: "runtime_reused" }),
-            expect.objectContaining({ status: "runtime_online" }),
+            expect.objectContaining({ status: "computer_reused" }),
+            expect.objectContaining({ status: "computer_online" }),
             expect.objectContaining({ status: "ready" }),
         ]),
     );
 });
 
-test("Given a healthy connected Runtime, When setup runs again, Then it reuses the live connection and hands off to Chat", async ({
+test("Given a healthy connected Computer, When setup runs again, Then it reuses the live connection and hands off to Chat", async ({
     runtime,
 }) => {
     const original = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
     const connected = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
     expect(connected.computerId).toBe(original.computerId);
-    expect(connected.events).toContainEqual(expect.objectContaining({ status: "runtime_already_online" }));
+    expect(connected.events).toContainEqual(expect.objectContaining({ status: "computer_already_online" }));
     expect(connected.events).not.toContainEqual(expect.objectContaining({ status: "runtime_started" }));
     await runtime.page.goto(connected.url);
     await expect(runtime.page.getByRole("textbox", { name: "Message" })).toBeEnabled();

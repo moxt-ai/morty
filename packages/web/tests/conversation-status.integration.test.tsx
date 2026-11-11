@@ -48,7 +48,7 @@ test("Given a conversation whose turn failed, When the directory reloads with th
     });
 });
 
-test("Given an open conversation, When I send a message the Runtime has not received yet, Then the sidebar marks it working with the pane and clears the mark when the reply completes", {
+test("Given an open conversation, When I send a message the Computer has not received yet, Then the sidebar marks it working with the pane and clears the mark when the reply completes", {
     timeout: dedicatedEnvironmentTimeout,
 }, async () => {
     const firstPrompt = "Start a conversation to follow up";
@@ -67,14 +67,14 @@ test("Given an open conversation, When I send a message the Runtime has not rece
     });
 
     const submission = executionNetwork.holdNextSubmission();
-    await sendPrompt(app, await readyComposer(app), "Follow up while the Runtime waits");
+    await sendPrompt(app, await readyComposer(app), "Follow up while the Computer waits");
     const release = await submission;
-    // The Runtime has not received the message, so only the open pane knows the conversation works.
+    // The Computer has not received the message, so only the open pane knows the conversation works.
     await app.waitForView(() => expect(entryStatus(app, firstPrompt)).toBe("Session working"));
 
     release();
     await app.waitForView(() => {
-        expect(document.body.textContent).toContain("Codex turn 2: Follow up while the Runtime waits");
+        expect(document.body.textContent).toContain("Codex turn 2: Follow up while the Computer waits");
         expect(entryStatus(app, firstPrompt)).toBeNull();
     });
     await app.close();
@@ -90,7 +90,7 @@ test("Given a conversation still answering in the background, When I start anoth
     onTestFinished(() => app.close());
     const { daemon, executionNetwork } = app;
     if (daemon === null || executionNetwork === null) {
-        throw new Error("Expected the connected Runtime and its transport proxy");
+        throw new Error("Expected the connected Computer and its transport proxy");
     }
     await sendPrompt(app, await readyComposer(app), heldPrompt);
     await app.waitForView(() => expect(document.body.textContent).toContain("Partial reply"));
@@ -146,7 +146,7 @@ test("Given a conversation I left while it was answering, When I return, watch t
     onTestFinished(() => app.close());
     const { daemon } = app;
     if (daemon === null) {
-        throw new Error("Expected the connected Runtime");
+        throw new Error("Expected the connected Computer");
     }
     await sendPrompt(app, await readyComposer(app), heldPrompt);
     await app.waitForView(() => expect(document.body.textContent).toContain("Partial reply"));

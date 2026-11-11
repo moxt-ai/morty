@@ -1,4 +1,4 @@
-import { requestTestRuntimeControl } from "../../../relay-test-support/src/backend-fixture.ts";
+import { requestTestComputerControl } from "../../../relay-test-support/src/backend-fixture.ts";
 import type { ConfiguredRelayBindings } from "../../src/composition/relay-bindings.ts";
 import { ComputerRelay as ProductionComputerRelay } from "../../src/do/computer-relay.ts";
 import chat from "../../src/index.ts";
@@ -11,7 +11,7 @@ export default {
             /^\/__test\/computers\/([^/]+)\/harnesses\/([^/]+)\/sessions\/([^/]+)\/close$/u,
         );
         if (target !== null && target[1] !== undefined && target[2] !== undefined && target[3] !== undefined) {
-            const result = await requestTestRuntimeControl(
+            const result = await requestTestComputerControl(
                 env,
                 target[1],
                 {
@@ -30,9 +30,9 @@ export default {
 /** Seeds persisted boundary conditions while keeping authentication and revocation on the production HTTP path. */
 export class ComputerRelay extends ProductionComputerRelay {
     override async fetch(request: Request): Promise<Response> {
-        if (request.url === "https://computer.internal/revoked-runtime" && request.method === "POST") {
+        if (request.url === "https://computer.internal/revoked-computer" && request.method === "POST") {
             const computerId = await request.text();
-            await this.revokeRuntime(computerId, {
+            await this.revokeComputer(computerId, {
                 computerId,
                 now: Date.now(),
                 actorKind: "system",
@@ -40,7 +40,7 @@ export class ComputerRelay extends ProductionComputerRelay {
                 auditId: `test-revocation-${crypto.randomUUID()}`,
             });
             return await super.fetch(
-                new Request(`https://runtime.internal/computers/${computerId}/runtime/revoke`, {
+                new Request(`https://computer-relay.internal/computers/${computerId}/computer/revoke`, {
                     method: "DELETE",
                     signal: request.signal,
                 }),

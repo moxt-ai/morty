@@ -267,7 +267,7 @@ export async function createTestApp(
             activeApps.delete(app);
             // A real reload gets a fresh page with its own Chat API
             // transport; the reloaded document keeps the live server and
-            // Runtime fixtures but replaces the disposed transport so a
+            // Computer fixtures but replaces the disposed transport so a
             // late close from the old socket cannot reject its requests.
             const transport = new TestApiTransport(current.origin);
             transport.open();

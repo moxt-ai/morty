@@ -2,7 +2,7 @@ import type { AcpAgentDefinition } from "../acp/agent/agent-definition.ts";
 import { OperationError } from "../infra/operation-error.ts";
 import { SerialTaskQueue } from "../util/serial-task-queue.ts";
 
-/** The launch definition of a cataloged Agent, as the runtime names it. */
+/** The launch definition of a cataloged Agent, as the computer names it. */
 export type CatalogAgent = AcpAgentDefinition;
 
 export class LocalAgentCatalogSnapshot {

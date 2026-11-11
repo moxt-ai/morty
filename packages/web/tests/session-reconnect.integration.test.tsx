@@ -162,7 +162,7 @@ test("Given an open conversation with a draft, When recovery after two backgroun
     const app = await createTestApp({ environment, connectAgent: true, clock });
     const composer = await openSavedConversation(app, "Quiet recovery");
     if (app.daemon === null || app.executionNetwork === null) {
-        throw new Error("Expected the connected Runtime and real execution-read proxy");
+        throw new Error("Expected the connected Computer and real execution-read proxy");
     }
     await app.user.type(composer, "Keep writing through recovery");
     for (const cycle of [1, 2]) {
@@ -205,7 +205,7 @@ test("Given an interrupted conversation, When recovery lasts thirty seconds acro
     const app = await createTestApp({ connectAgent: true, clock });
     const composer = await openSavedConversation(app, "Persistent interruption");
     if (app.daemon === null) {
-        throw new Error("Expected the connected Runtime");
+        throw new Error("Expected the connected Computer");
     }
     await app.user.type(composer, "Still unsent");
     await app.daemon.disconnect();
@@ -229,14 +229,14 @@ test("Given an interrupted conversation, When recovery lasts thirty seconds acro
     expect(composer.value).toBe("Still unsent");
 });
 
-test("Given an offline Runtime, When the retry deadline elapses, Then the countdown advances and automatic retries back off", {
+test("Given an offline Computer, When the retry deadline elapses, Then the countdown advances and automatic retries back off", {
     timeout: 30_000,
 }, async () => {
     const clock = new TestClock(CLOCK_ORIGIN);
     const app = await createTestApp({ connectAgent: true, clock });
-    await openSavedConversation(app, "Survive a Runtime restart");
+    await openSavedConversation(app, "Survive a Computer restart");
     if (app.daemon === null) {
-        throw new Error("Expected the connected Runtime");
+        throw new Error("Expected the connected Computer");
     }
     await app.daemon.disconnect();
     await showReconnectNotice(app, clock);
@@ -306,14 +306,14 @@ async function openSavedConversation(app: TestApp, prompt: string): Promise<HTML
     return composer;
 }
 
-test("Given a failed Agent turn, When its Runtime reconnects and the conversation reloads, Then the failure is never duplicated and the reload still shows how the turn ended", {
+test("Given a failed Agent turn, When its Computer reconnects and the conversation reloads, Then the failure is never duplicated and the reload still shows how the turn ended", {
     timeout: 30_000,
 }, async () => {
     const clock = new TestClock(CLOCK_ORIGIN);
     const app = await createTestApp({ connectAgent: true, clock });
     const composer = await openSavedConversation(app, "Before the failed turn");
     if (app.daemon === null) {
-        throw new Error("Expected a connected Runtime");
+        throw new Error("Expected a connected Computer");
     }
     const form = composer.closest("form");
     if (form === null) {
@@ -343,7 +343,7 @@ test("Given a failed Agent turn, When its Runtime reconnects and the conversatio
         expect(composer.disabled).toBe(false);
         expect(reconnectStatusText(app)).toBeNull();
     });
-    // The restarted Runtime's history restates how the turn ended from its execution receipt: once, with the summary
+    // The restarted Computer's history restates how the turn ended from its execution receipt: once, with the summary
     // the receipt keeps across a restart in place of the Agent's own error text.
     await app.waitForView(() => {
         expect(
@@ -367,14 +367,14 @@ test("Given a failed Agent turn, When its Runtime reconnects and the conversatio
     });
 });
 
-test("Given a recovered Runtime and an unsent draft, When the retry deadline arrives, Then Chat recovers automatically without sending the draft", {
+test("Given a recovered Computer and an unsent draft, When the retry deadline arrives, Then Chat recovers automatically without sending the draft", {
     timeout: 30_000,
 }, async () => {
     const clock = new TestClock(CLOCK_ORIGIN);
     const app = await createTestApp({ connectAgent: true, clock });
     const composer = await openSavedConversation(app, "Recover automatically");
     if (app.daemon === null) {
-        throw new Error("Expected the connected Runtime");
+        throw new Error("Expected the connected Computer");
     }
     await app.user.click(composer);
     await app.user.paste("Still unsent");
@@ -400,14 +400,14 @@ test("Given a recovered Runtime and an unsent draft, When the retry deadline arr
     expect(getByRole(document.body, "log", { name: "Messages" }).textContent).not.toContain("Still unsent");
 });
 
-test("Given an unavailable Runtime and an editable draft, When automatic retries are exhausted and the user retries, Then one actionable failure clears and the draft is never sent automatically", {
+test("Given an unavailable Computer and an editable draft, When automatic retries are exhausted and the user retries, Then one actionable failure clears and the draft is never sent automatically", {
     timeout: 30_000,
 }, async () => {
     const clock = new TestClock(CLOCK_ORIGIN);
     const app = await createTestApp({ connectAgent: true, clock });
     const composer = await openSavedConversation(app, "Recover after exhausted retries");
     if (app.daemon === null) {
-        throw new Error("Expected a connected Runtime");
+        throw new Error("Expected a connected Computer");
     }
     await app.user.type(composer, "Keep editing through failure");
     await app.daemon.disconnect();
@@ -498,7 +498,7 @@ test("Given an open conversation whose automatic retries are exhausted, When the
     const app = await createTestApp({ connectAgent: true, clock });
     await openSavedConversation(app, "Reconnect when the computer returns");
     if (app.daemon === null) {
-        throw new Error("Expected a connected Runtime");
+        throw new Error("Expected a connected Computer");
     }
     await app.daemon.disconnect();
     await showReconnectNotice(app, clock);
@@ -563,7 +563,7 @@ test("Given an active turn and an unsent follow-up, When connection freshness is
     );
 });
 
-test("Given a queued follow-up on an active turn, When the Runtime drops and the retry notice appears, Then the notice joins the flow and the queue stays visible", {
+test("Given a queued follow-up on an active turn, When the Computer drops and the retry notice appears, Then the notice joins the flow and the queue stays visible", {
     timeout: 30_000,
 }, async () => {
     const clock = new TestClock(CLOCK_ORIGIN);
@@ -579,7 +579,7 @@ test("Given a queued follow-up on an active turn, When the Runtime drops and the
         (element) => element.textContent?.includes("Queue this follow-up") === true,
     );
     if (app.daemon === null) {
-        throw new Error("Expected the connected Runtime");
+        throw new Error("Expected the connected Computer");
     }
     await app.daemon.disconnect();
     await showReconnectNotice(app, clock);

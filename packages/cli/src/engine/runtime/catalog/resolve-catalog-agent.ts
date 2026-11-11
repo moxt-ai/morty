@@ -20,7 +20,7 @@ type PublishCatalog = (config: RuntimeConfig, signal: AbortSignal) => Promise<vo
  * Resolves the Agent definition a command should run against. The cataloged snapshot is served
  * while its executables still match discovery; once an upgrade replaces them, the Agent is
  * re-discovered and the catalog entry is swapped so new conversations and settings discovery use
- * the upgraded runtime. A failed publication rolls the swap back, keeping the relay-facing catalog
+ * the upgraded computer. A failed publication rolls the swap back, keeping the relay-facing catalog
  * consistent with what this daemon would actually spawn. Concurrent commands for the same Agent
  * share one refresh instead of racing probes against the same binary, and the swap commits
  * through the catalog's serialized replacement so it neither overlaps nor clobbers a full discovery.

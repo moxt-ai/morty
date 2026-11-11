@@ -3,7 +3,7 @@ import type { RelayContext } from "../../../composition/create-relay-dependencie
 import { hashSecret } from "../../management/entity/pairing.ts";
 import type { SessionAccessService } from "../../runtime/service/session-access-service.ts";
 
-/** Internal operations colocated with this computer's storage and Runtime connection. Never an HTTP router. */
+/** Internal operations colocated with this computer's storage and Computer connection. Never an HTTP router. */
 export class ComputerManagementBackendService {
     readonly computerId: string;
     readonly context: RelayContext;
@@ -20,22 +20,22 @@ export class ComputerManagementBackendService {
     readonly #pairingKey = () => hashSecret(`morty.internal.pairing.v1:${this.pairingRoot}`);
 
     readonly createPairing = async (idempotencyKey: string, signal: AbortSignal) =>
-        await this.context.services.runtimePairings.createProjectRuntimePairing(
+        await this.context.services.computerPairings.createProjectComputerPairing(
             this.computerId,
             await this.#pairingKey(),
             idempotencyKey,
             signal,
         );
     readonly readPairing = async (signal: AbortSignal) =>
-        await this.context.services.runtimePairings.readProjectRuntimePairing(this.computerId, signal);
-    readonly revokeRuntime = async (signal: AbortSignal) =>
-        await this.context.services.runtimePairings.revokeProjectRuntime(this.computerId, signal);
-    readonly runtimes = async (signal: AbortSignal) =>
-        await this.context.services.runtimePairings.listProjectRuntimes(this.computerId, signal);
+        await this.context.services.computerPairings.readProjectComputerPairing(this.computerId, signal);
+    readonly revokeComputer = async (signal: AbortSignal) =>
+        await this.context.services.computerPairings.revokeProjectComputer(this.computerId, signal);
+    readonly computers = async (signal: AbortSignal) =>
+        await this.context.services.computerPairings.listProjectComputers(this.computerId, signal);
     readonly agents = async (signal: AbortSignal) =>
-        await this.context.services.runtimePairings.getRuntimeAgents(this.computerId, signal);
+        await this.context.services.computerPairings.getComputerAgents(this.computerId, signal);
     readonly probe = async (signal: AbortSignal) =>
-        await this.context.services.runtimePairings.probeProject(this.computerId, signal);
+        await this.context.services.computerPairings.probeProject(this.computerId, signal);
     readonly issueSessionAccess = async (
         target: NativeSessionTarget,
         lifetime: number,
@@ -49,14 +49,14 @@ export class ComputerManagementBackendService {
             signal,
         );
     readonly openHost = async (signal: AbortSignal): Promise<WebSocket> => {
-        const access = await this.context.services.runtimePairings.authorizePairedHost(this.computerId, signal);
+        const access = await this.context.services.computerPairings.authorizePairedHost(this.computerId, signal);
         const response = await this.context.gateways.computerRelayGateway.acceptHost(
             access,
-            new Request("https://runtime.internal/host", { headers: { upgrade: "websocket" }, signal }),
+            new Request("https://computer-relay.internal/host", { headers: { upgrade: "websocket" }, signal }),
             signal,
         );
         if (response.status !== 101 || response.webSocket === null) {
-            throw new Error("Runtime host connection was not accepted");
+            throw new Error("Computer host connection was not accepted");
         }
         return response.webSocket;
     };

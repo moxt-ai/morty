@@ -1,4 +1,4 @@
-import { RUNTIME_SUCCESSOR_CREDENTIAL_HEADER } from "@morty-build/client/protocol";
+import { COMPUTER_SUCCESSOR_CREDENTIAL_HEADER } from "@morty-build/client/protocol";
 import { Hono } from "hono";
 import type { RelayHttpEnvironment } from "../../../composition/relay-protocol-environment.ts";
 import { bearerToken } from "../../../infra/relay-http.ts";
@@ -11,14 +11,14 @@ export function createProjectComputerPairingRoutes() {
     return new Hono<RelayHttpEnvironment>()
         .onError(rethrowHonoError)
         .use("*", errorMiddleware)
-        .use("/pairings/:computerId/redeem", pairingTimeoutMiddleware("Runtime pairing redemption timed out"))
+        .use("/pairings/:computerId/redeem", pairingTimeoutMiddleware("Computer pairing redemption timed out"))
         .post(
             "/pairings/:computerId/redeem",
             bodyParser<RelayHttpEnvironment>(["agents", "machineName", "pairingCode", "workspaceName"]),
             async (context) => {
                 const body = context.req.valid("json");
                 const agents = validateAgents(body["agents"]);
-                const redeemed = await context.var.relay.services.runtimePairings.redeemRuntimePairing(
+                const redeemed = await context.var.relay.services.computerPairings.redeemComputerPairing(
                     validateIdentifier(context.req.param("computerId"), "computer_id"),
                     validatePairingCode(body["pairingCode"]),
                     validateDisplayName(body["machineName"], "machine_name"),
@@ -28,15 +28,15 @@ export function createProjectComputerPairingRoutes() {
                 );
                 return context.json({
                     computerId: redeemed.computerId,
-                    runtimeCredential: redeemed.daemonToken,
+                    computerCredential: redeemed.daemonToken,
                 });
             },
         )
-        .get("/runtimes/connect", async (context) => {
+        .get("/computers/connect", async (context) => {
             const request = context.req.raw;
-            const connection = await context.var.relay.services.computerConnections.connectRuntime(
+            const connection = await context.var.relay.services.computerConnections.connectComputer(
                 bearerToken(request),
-                request.headers.get(RUNTIME_SUCCESSOR_CREDENTIAL_HEADER) ?? "",
+                request.headers.get(COMPUTER_SUCCESSOR_CREDENTIAL_HEADER) ?? "",
                 request.signal,
             );
             switch (connection.kind) {

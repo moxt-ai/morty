@@ -2,7 +2,7 @@ import { decodeSessionReadyEvent, type SessionConfigurationSelection } from "@mo
 import { HttpApiTransport } from "../../packages/web/src/services/api/http-api-transport.ts";
 import { BotChatApi } from "../../packages/web/src/services/chat/bot-chat-api.ts";
 
-/** Uses the product's owner API client against the real Worker in Runtime integration scenarios. */
+/** Uses the product's owner API client against the real Worker in Computer integration scenarios. */
 export function createOwnerApi(options: {
     readonly origin: string;
     readonly computerId: string;
@@ -41,7 +41,7 @@ export function createOwnerApi(options: {
                 }),
             );
             if (setup.status !== 202) {
-                throw new Error(`Runtime setup failed (${setup.status}): ${await setup.text()}`);
+                throw new Error(`Computer setup failed (${setup.status}): ${await setup.text()}`);
             }
             const access = await api.createConversation(
                 input.operationId,

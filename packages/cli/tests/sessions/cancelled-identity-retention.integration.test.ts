@@ -159,7 +159,7 @@ test("Given an executed command and a command cancelled before start, When later
 }, 90_000);
 
 for (const admission of ["before-admission", "queued"] as const) {
-    test(`Given a command was explicitly cancelled ${admission}, When receipts are evicted and the Runtime restarts, Then the command cannot execute again and cancellation remains unstarted`, async () => {
+    test(`Given a command was explicitly cancelled ${admission}, When receipts are evicted and the Computer restarts, Then the command cannot execute again and cancellation remains unstarted`, async () => {
         vi.useFakeTimers({ toFake: ["Date"] });
         vi.setSystemTime(new Date("2026-10-30T08:00:00Z"));
         const directory = await mkdtemp(join(tmpdir(), "morty-cancelled-identity-"));

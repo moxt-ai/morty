@@ -1,16 +1,16 @@
 const DEFAULT_CONCURRENCY = 8;
 const DEFAULT_PENDING_LIMIT = 512;
 
-export class RuntimeMessageSchedulerCapacityError extends Error {
-    readonly code = "runtime_message_queue_full";
+export class ComputerMessageSchedulerCapacityError extends Error {
+    readonly code = "computer_message_queue_full";
 
     constructor(limit: number) {
-        super(`Runtime message queue reached its limit of ${limit}`);
-        this.name = "RuntimeMessageSchedulerCapacityError";
+        super(`Computer message queue reached its limit of ${limit}`);
+        this.name = "ComputerMessageSchedulerCapacityError";
     }
 }
 
-class RuntimeMessageSlot {
+class ComputerMessageSlot {
     readonly #releaseSlot: () => void;
     #released = false;
 
@@ -27,8 +27,8 @@ class RuntimeMessageSlot {
     };
 }
 
-class RuntimeMessageSlotWaiter {
-    readonly completion = Promise.withResolvers<RuntimeMessageSlot>();
+class ComputerMessageSlotWaiter {
+    readonly completion = Promise.withResolvers<ComputerMessageSlot>();
     readonly signal: AbortSignal;
 
     constructor(signal: AbortSignal) {
@@ -40,26 +40,26 @@ class RuntimeMessageSlotWaiter {
     };
 }
 
-class RuntimeMessageConcurrency {
+class ComputerMessageConcurrency {
     readonly #limit: number;
     #active = 0;
-    readonly #waiters: RuntimeMessageSlotWaiter[] = [];
+    readonly #waiters: ComputerMessageSlotWaiter[] = [];
 
     constructor(limit: number) {
         if (!Number.isSafeInteger(limit) || limit < 1) {
-            throw new Error("Runtime message concurrency must be a positive safe integer");
+            throw new Error("Computer message concurrency must be a positive safe integer");
         }
         this.#limit = limit;
     }
 
-    readonly acquire = async (signal: AbortSignal): Promise<RuntimeMessageSlot> => {
+    readonly acquire = async (signal: AbortSignal): Promise<ComputerMessageSlot> => {
         signal.throwIfAborted();
         if (this.#active < this.#limit) {
             this.#active += 1;
-            return new RuntimeMessageSlot(this.#release);
+            return new ComputerMessageSlot(this.#release);
         }
 
-        const waiter = new RuntimeMessageSlotWaiter(signal);
+        const waiter = new ComputerMessageSlotWaiter(signal);
         this.#waiters.push(waiter);
         signal.addEventListener("abort", waiter.cancel, { once: true });
         try {
@@ -79,14 +79,14 @@ class RuntimeMessageConcurrency {
             if (waiter === undefined || waiter.signal.aborted) {
                 continue;
             }
-            waiter.completion.resolve(new RuntimeMessageSlot(this.#release));
+            waiter.completion.resolve(new ComputerMessageSlot(this.#release));
             return;
         }
         this.#active -= 1;
     };
 }
 
-function waitForRuntimeMessage(completion: Promise<void>, signal: AbortSignal): Promise<void> {
+function waitForComputerMessage(completion: Promise<void>, signal: AbortSignal): Promise<void> {
     signal.throwIfAborted();
     const result = Promise.withResolvers<void>();
     const cancel = (): void => result.reject(signal.reason);
@@ -104,8 +104,8 @@ function waitForRuntimeMessage(completion: Promise<void>, signal: AbortSignal): 
     return result.promise;
 }
 
-export class RuntimeMessageScheduler {
-    readonly #concurrency: RuntimeMessageConcurrency;
+export class ComputerMessageScheduler {
+    readonly #concurrency: ComputerMessageConcurrency;
     readonly #pendingLimit: number;
     readonly #lanes = new Map<string, Promise<void>>();
     readonly #operations = new Set<Promise<void>>();
@@ -113,9 +113,9 @@ export class RuntimeMessageScheduler {
 
     constructor(concurrency = DEFAULT_CONCURRENCY, pendingLimit = DEFAULT_PENDING_LIMIT) {
         if (!Number.isSafeInteger(pendingLimit) || pendingLimit < concurrency) {
-            throw new Error("Runtime message pending limit must cover the concurrency limit");
+            throw new Error("Computer message pending limit must cover the concurrency limit");
         }
-        this.#concurrency = new RuntimeMessageConcurrency(concurrency);
+        this.#concurrency = new ComputerMessageConcurrency(concurrency);
         this.#pendingLimit = pendingLimit;
     }
 
@@ -126,13 +126,13 @@ export class RuntimeMessageScheduler {
     readonly run = async (lanes: readonly string[], signal: AbortSignal, task: () => Promise<void>): Promise<void> => {
         signal.throwIfAborted();
         if (this.#pending >= this.#pendingLimit) {
-            throw new RuntimeMessageSchedulerCapacityError(this.#pendingLimit);
+            throw new ComputerMessageSchedulerCapacityError(this.#pendingLimit);
         }
         this.#pending += 1;
 
         const previous = Promise.all(lanes.map((lane) => this.#lanes.get(lane))).then(() => undefined);
         const operation = (async (): Promise<void> => {
-            await waitForRuntimeMessage(previous, signal);
+            await waitForComputerMessage(previous, signal);
             const slot = await this.#concurrency.acquire(signal);
             try {
                 signal.throwIfAborted();
@@ -162,7 +162,7 @@ export class RuntimeMessageScheduler {
 
     readonly idle = async (signal: AbortSignal): Promise<void> => {
         while (this.#operations.size > 0) {
-            await waitForRuntimeMessage(
+            await waitForComputerMessage(
                 Promise.all(this.#operations).then(() => undefined),
                 signal,
             );

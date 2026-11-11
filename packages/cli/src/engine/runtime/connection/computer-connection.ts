@@ -1,15 +1,15 @@
-import type { HeldRuntimeCredentials } from "./runtime-credentials.ts";
+import type { HeldComputerCredentials } from "./computer-credentials.ts";
 
 export interface ComputerConnectionInput {
     readonly computerId: string;
     readonly defaultWorkspace: string;
     readonly relayOrigin: URL;
-    readonly runtimeCredential: string;
+    readonly computerCredential: string;
 }
 
 export type ComputerConnectionActivation = "active" | "stopped";
 
-/** A saved pairing: the identity a Runtime presents to the relay, and whether it should run. */
+/** A saved pairing: the identity a Computer presents to the relay, and whether it should run. */
 export class VerifiedComputerConnection {
     readonly kind = "verified";
     readonly activation: ComputerConnectionActivation;
@@ -19,7 +19,7 @@ export class VerifiedComputerConnection {
     readonly defaultWorkspace: string;
     readonly relayOrigin: URL;
     /** The credential state saved with this pairing; live users read it through the installation store. */
-    readonly credentials: HeldRuntimeCredentials;
+    readonly credentials: HeldComputerCredentials;
 
     constructor(
         activation: ComputerConnectionActivation,
@@ -27,7 +27,7 @@ export class VerifiedComputerConnection {
         computerId: string,
         defaultWorkspace: string,
         relayOrigin: URL,
-        credentials: HeldRuntimeCredentials,
+        credentials: HeldComputerCredentials,
     ) {
         this.activation = activation;
         this.computerId = computerId;

@@ -11,9 +11,9 @@ import { publishAgentCatalog } from "./catalog/publish-agent-catalog.ts";
 import { resolveCatalogAgent } from "./catalog/resolve-catalog-agent.ts";
 import type { RuntimeConfig } from "./config.ts";
 import { RuntimeDiagnosticLog } from "./observability/diagnostic-log.ts";
+import { ComputerRelayRevokedError } from "./relay/computer-revocation.ts";
 import { RelayConnectionDiagnostics } from "./relay/diagnostics.ts";
 import { runRelayConnection } from "./relay/run-relay-connection.ts";
-import { RuntimeRelayRevokedError } from "./relay/runtime-revocation.ts";
 import { RuntimeSessionEventPublisher } from "./relay/session-event-publisher.ts";
 
 const RELAY_RECONNECT_DELAY_MILLISECONDS = 500;
@@ -159,14 +159,14 @@ export async function runRuntime(
             return;
         }
         readinessAnnounced = true;
-        process.stdout.write("Morty Runtime is ready for Agent requests.\n");
+        process.stdout.write("Morty Computer is ready for Agent requests.\n");
     };
     const announceConnection = (): void => {
         if (connectionAnnounced) {
             return;
         }
         connectionAnnounced = true;
-        process.stdout.write("Morty Runtime connected to the relay.\n\n");
+        process.stdout.write("Morty Computer connected to the relay.\n\n");
         if (config.reconnectTarget !== null) {
             const reconnectCommand = "morty start";
             process.stdout.write(
@@ -217,7 +217,7 @@ export async function runRuntime(
                 if (signal.aborted) {
                     return;
                 }
-                if (error instanceof RuntimeRelayRevokedError) {
+                if (error instanceof ComputerRelayRevokedError) {
                     throw error;
                 }
                 diagnostics.connectionFailed(connectionEpoch, error, "connection");

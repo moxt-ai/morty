@@ -4,8 +4,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import {
+    decodeComputerDiagnosticsResult,
     decodeMessageKind,
-    decodeRuntimeDiagnosticsResult,
     decodeSessionLiveEvent,
     encodeSessionPrepareCommand,
     encodeSessionPromptCommand,
@@ -86,13 +86,13 @@ test("Given an Agent rejects a turn, When the turn fails, Then the failure event
                 expect(local).not.toContain(promptText);
                 expect(local).not.toContain("Rejected prompt:");
 
-                peer.send(JSON.stringify({ kind: "runtime.diagnostics.read", requestId: "turn-failure-report" }));
+                peer.send(JSON.stringify({ kind: "computer.diagnostics.read", requestId: "turn-failure-report" }));
                 for (;;) {
                     const message = await peer.nextMessage();
-                    if (decodeMessageKind(message) !== "runtime.diagnostics.result") {
+                    if (decodeMessageKind(message) !== "computer.diagnostics.result") {
                         continue;
                     }
-                    const exported = decodeRuntimeDiagnosticsResult(message);
+                    const exported = decodeComputerDiagnosticsResult(message);
                     expect(exported.requestId).toBe("turn-failure-report");
                     expect(exported.entries).toContainEqual(
                         expect.objectContaining({

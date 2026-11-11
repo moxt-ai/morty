@@ -10,7 +10,7 @@ beforeEach(() => {
 });
 afterEach(() => vi.useRealTimers());
 
-test("Given a browser opening a Session, When its device is revoked before the Runtime finishes creation, Then its pending open cannot grant fresh Session access", async () => {
+test("Given a browser opening a Session, When its device is revoked before the Computer finishes creation, Then its pending open cannot grant fresh Session access", async () => {
     const cloud = await createIdentityFixture();
     const creation = Promise.withResolvers<void>();
     const continueCreation = Promise.withResolvers<void>();
@@ -89,7 +89,7 @@ test("Given a browser opening a Session, When its device is revoked before the R
     }
 }, 45_000);
 
-test("Given a device with an open Session, When its owner disconnects it while the Runtime is offline, Then device and Session access are revoked together without a retry", async () => {
+test("Given a device with an open Session, When its owner disconnects it while the Computer is offline, Then device and Session access are revoked together without a retry", async () => {
     const cloud = await createIdentityFixture();
     try {
         const owner = await cloud.createAnonymousUser();
@@ -164,7 +164,7 @@ test("Given a device with an open Session, When its owner disconnects it while t
     }
 }, 60_000);
 
-/** The owner's computer with a connected Runtime, and the requests a browser or the owner make against it. */
+/** The owner's computer with a connected Computer, and the requests a browser or the owner make against it. */
 async function sharedComputer(cloud: Awaited<ReturnType<typeof createIdentityFixture>>) {
     const owner = await cloud.createAnonymousUser();
     const runtime = await cloud.connectAgent(owner.computerId, owner.token);

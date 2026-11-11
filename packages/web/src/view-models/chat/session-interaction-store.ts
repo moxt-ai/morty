@@ -28,7 +28,7 @@ export interface SessionInteractionStore {
     readonly editAnswer: (interactionId: string, fieldName: string, value: ElicitationFieldValue) => void;
     readonly submissions: ReadonlyMap<string, InteractionOperation>;
     /**
-     * The Runtime's account now leaves `pending` the questions still waiting for an answer. Drafts last only while
+     * The Computer's account now leaves `pending` the questions still waiting for an answer. Drafts last only while
      * their question is pending; an answered or withdrawn question drops its draft.
      */
     readonly questionsChanged: (pending: ReadonlySet<string>) => void;

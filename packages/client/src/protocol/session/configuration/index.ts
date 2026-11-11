@@ -71,7 +71,7 @@ export type SessionConfigureCommand = z.infer<typeof sessionConfigureCommandSche
 const sessionConfigUpdatedEventSchema = z
     .object({
         configOptions: sessionConfigOptionsSchema,
-        // An opaque Runtime generation token.
+        // An opaque Computer generation token.
         configurationRevision: IDENTIFIER,
         kind: z.literal(SESSION_CONFIG_UPDATED_KIND),
         requestId: IDENTIFIER,
@@ -109,7 +109,7 @@ export type SessionConfigReadCommand = z.infer<typeof sessionConfigReadCommandSc
 const sessionConfigReadResultSchema = z
     .object({
         configOptions: sessionConfigOptionsSchema,
-        // An opaque Runtime generation token.
+        // An opaque Computer generation token.
         configurationRevision: IDENTIFIER,
         kind: z.literal(SESSION_CONFIG_READ_RESULT_KIND),
         requestId: IDENTIFIER,

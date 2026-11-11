@@ -2,15 +2,15 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-import { decodeMessageKind, decodeRuntimeDiagnosticsResult } from "@morty-build/client/protocol";
+import { decodeComputerDiagnosticsResult, decodeMessageKind } from "@morty-build/client/protocol";
 import { expect, test } from "vitest";
 import { z } from "zod";
 import { ControlledAcpAgentSpecification } from "../support/agents/controlled-acp.ts";
 import { withControlledDaemonConnection } from "../support/agents/real-daemon.ts";
 import { writeControlledAcpExecutable } from "../support/controlled-acp-executable.ts";
 
-// @no-uc: Technical regression; process lifecycle logs must reach Runtime bug reports.
-test("Given a daemon, When a bug report is read through the Runtime, Then it carries the daemon startup and readiness records", async () => {
+// @no-uc: Technical regression; process lifecycle logs must reach Computer bug reports.
+test("Given a daemon, When a bug report is read through the Computer, Then it carries the daemon startup and readiness records", async () => {
     const directory = await mkdtemp(join(tmpdir(), "morty-lifecycle-diagnostics-"));
     const executableDirectory = await writeControlledAcpExecutable(directory);
     try {
@@ -21,16 +21,16 @@ test("Given a daemon, When a bug report is read through the Runtime, Then it car
                 PATH: executableDirectory,
             },
             async (peer) => {
-                peer.send(JSON.stringify({ kind: "runtime.diagnostics.read", requestId: "lifecycle-report" }));
+                peer.send(JSON.stringify({ kind: "computer.diagnostics.read", requestId: "lifecycle-report" }));
                 for (;;) {
                     const message = await peer.nextMessage();
-                    if (decodeMessageKind(message) !== "runtime.diagnostics.result") {
+                    if (decodeMessageKind(message) !== "computer.diagnostics.result") {
                         continue;
                     }
-                    const exported = decodeRuntimeDiagnosticsResult(message);
+                    const exported = decodeComputerDiagnosticsResult(message);
                     expect(exported.requestId).toBe("lifecycle-report");
                     // Process logs live beside shared control state; diagnostics
-                    // must include them alongside this Runtime's own daemon.log.
+                    // must include them alongside this Computer's own daemon.log.
                     const kinds = exported.entries.map((entry) => entry["kind"] ?? "");
                     expect(kinds).toContain("daemon_started");
                     expect(kinds).toContain("daemon_ready");
@@ -48,7 +48,7 @@ test("Given a daemon, When a bug report is read through the Runtime, Then it car
                     // including its strict top-level shape and original bounds.
                     const boundedReport = z
                         .strictObject({
-                            kind: z.literal("runtime.diagnostics.result"),
+                            kind: z.literal("computer.diagnostics.result"),
                             requestId: z
                                 .string()
                                 .min(1)
@@ -72,7 +72,7 @@ test("Given a daemon, When a bug report is read through the Runtime, Then it car
     }
 }, 180_000);
 
-test("Given a discovered executable with a known version, When diagnostics are requested through the public Runtime protocol, Then the current inventory reports its version without paths or environment values", async () => {
+test("Given a discovered executable with a known version, When diagnostics are requested through the public Computer protocol, Then the current inventory reports its version without paths or environment values", async () => {
     const directory = await mkdtemp(join(tmpdir(), "morty-inventory-diagnostics-"));
     const executableDirectory = await writeControlledAcpExecutable(directory);
     try {
@@ -84,13 +84,13 @@ test("Given a discovered executable with a known version, When diagnostics are r
                 PRIVATE_DIAGNOSTIC_SECRET: "PRIVATE_ENVIRONMENT_VALUE",
             },
             async (peer) => {
-                peer.send(JSON.stringify({ kind: "runtime.diagnostics.read", requestId: "inventory-report" }));
+                peer.send(JSON.stringify({ kind: "computer.diagnostics.read", requestId: "inventory-report" }));
                 for (;;) {
                     const message = await peer.nextMessage();
-                    if (decodeMessageKind(message) !== "runtime.diagnostics.result") {
+                    if (decodeMessageKind(message) !== "computer.diagnostics.result") {
                         continue;
                     }
-                    const exported = decodeRuntimeDiagnosticsResult(message);
+                    const exported = decodeComputerDiagnosticsResult(message);
                     expect(exported.entries).toContainEqual(
                         expect.objectContaining({
                             event: "agent_inventory",

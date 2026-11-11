@@ -31,8 +31,8 @@ import { AcpAgentDefinition } from "../../src/engine/acp/agent/agent-definition.
 import { RuntimeLocalContext } from "../../src/engine/runtime/config.ts";
 import { runRuntime } from "../../src/engine/runtime/run.ts";
 import { ControlledAcpConnection } from "../support/agents/controlled-acp-connection.ts";
+import { memoryComputerCredentials } from "../support/computer-credentials.ts";
 import { createControlledRuntimeConfig as createRuntimeConfig } from "../support/controlled-runtime-config.ts";
-import { memoryRuntimeCredentials } from "../support/runtime-credentials.ts";
 
 const websocketGuid = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 const fakeAgentPath = fileURLToPath(new URL("./fixtures/acp-peer.ts", import.meta.url));
@@ -261,7 +261,7 @@ describe("daemon session configuration boundary", () => {
                     "Upgrade: websocket\r\n" +
                     `Sec-WebSocket-Accept: ${accept}\r\n\r\n`,
             );
-            sendText(socket, JSON.stringify({ kind: "runtime.liveness.ready" }));
+            sendText(socket, JSON.stringify({ kind: "computer.liveness.ready" }));
             socketReady.resolve(socket);
         });
         await listen(relay);
@@ -288,7 +288,7 @@ describe("daemon session configuration boundary", () => {
                 computerId: "channel_alpha",
                 defaultWorkspace: workspace,
                 relayUrl,
-                credentials: memoryRuntimeCredentials("d".repeat(43)),
+                credentials: memoryComputerCredentials("d".repeat(43)),
             },
             [agent],
             new RuntimeLocalContext(stateDirectory, process.env),
@@ -360,7 +360,7 @@ describe("daemon session configuration boundary", () => {
                     "Upgrade: websocket\r\n" +
                     `Sec-WebSocket-Accept: ${accept}\r\n\r\n`,
             );
-            sendText(socket, JSON.stringify({ kind: "runtime.liveness.ready" }));
+            sendText(socket, JSON.stringify({ kind: "computer.liveness.ready" }));
             socketReady.resolve(socket);
         });
         await listen(relay);
@@ -392,7 +392,7 @@ describe("daemon session configuration boundary", () => {
                 computerId: "channel_alpha",
                 defaultWorkspace: workspace,
                 relayUrl,
-                credentials: memoryRuntimeCredentials("d".repeat(43)),
+                credentials: memoryComputerCredentials("d".repeat(43)),
             },
             [agent],
             new RuntimeLocalContext(stateDirectory, process.env),
@@ -474,7 +474,7 @@ describe("daemon session configuration boundary", () => {
                     "Upgrade: websocket\r\n" +
                     `Sec-WebSocket-Accept: ${accept}\r\n\r\n`,
             );
-            sendText(socket, JSON.stringify({ kind: "runtime.liveness.ready" }));
+            sendText(socket, JSON.stringify({ kind: "computer.liveness.ready" }));
             socketReady.resolve(socket);
         });
         await listen(relay);
@@ -503,7 +503,7 @@ describe("daemon session configuration boundary", () => {
                 computerId: "channel_alpha",
                 defaultWorkspace: workspace,
                 relayUrl,
-                credentials: memoryRuntimeCredentials("d".repeat(43)),
+                credentials: memoryComputerCredentials("d".repeat(43)),
             },
             [agent],
             new RuntimeLocalContext(stateDirectory, process.env),
@@ -587,7 +587,7 @@ describe("daemon session configuration boundary", () => {
                     "Upgrade: websocket\r\n" +
                     `Sec-WebSocket-Accept: ${accept}\r\n\r\n`,
             );
-            sendText(socket, JSON.stringify({ kind: "runtime.liveness.ready" }));
+            sendText(socket, JSON.stringify({ kind: "computer.liveness.ready" }));
             socketReady.resolve(socket);
         });
         await listen(relay);
@@ -624,7 +624,7 @@ describe("daemon session configuration boundary", () => {
                 computerId: "channel_alpha",
                 defaultWorkspace: workspace,
                 relayUrl,
-                credentials: memoryRuntimeCredentials("d".repeat(43)),
+                credentials: memoryComputerCredentials("d".repeat(43)),
             },
             [agent],
             new RuntimeLocalContext(stateDirectory, process.env),
@@ -699,7 +699,7 @@ describe("daemon session configuration boundary", () => {
                     "Upgrade: websocket\r\n" +
                     `Sec-WebSocket-Accept: ${accept}\r\n\r\n`,
             );
-            sendText(socket, JSON.stringify({ kind: "runtime.liveness.ready" }));
+            sendText(socket, JSON.stringify({ kind: "computer.liveness.ready" }));
             socketReady.resolve(socket);
         });
         await listen(relay);
@@ -728,7 +728,7 @@ describe("daemon session configuration boundary", () => {
                 computerId: "channel_alpha",
                 defaultWorkspace: workspace,
                 relayUrl,
-                credentials: memoryRuntimeCredentials("d".repeat(43)),
+                credentials: memoryComputerCredentials("d".repeat(43)),
             },
             [agent],
             new RuntimeLocalContext(stateDirectory, process.env),
@@ -806,7 +806,7 @@ describe("daemon session configuration boundary", () => {
                     "Upgrade: websocket\r\n" +
                     `Sec-WebSocket-Accept: ${accept}\r\n\r\n`,
             );
-            sendText(socket, JSON.stringify({ kind: "runtime.liveness.ready" }));
+            sendText(socket, JSON.stringify({ kind: "computer.liveness.ready" }));
             socketReady.resolve(socket);
         });
         await listen(relay);
@@ -840,7 +840,7 @@ describe("daemon session configuration boundary", () => {
                 computerId: "channel_alpha",
                 defaultWorkspace: workspace,
                 relayUrl,
-                credentials: memoryRuntimeCredentials("d".repeat(43)),
+                credentials: memoryComputerCredentials("d".repeat(43)),
             },
             [agent],
             new RuntimeLocalContext(stateDirectory, process.env),
@@ -933,7 +933,7 @@ describe("daemon session configuration boundary", () => {
                     "Upgrade: websocket\r\n" +
                     `Sec-WebSocket-Accept: ${accept}\r\n\r\n`,
             );
-            sendText(socket, JSON.stringify({ kind: "runtime.liveness.ready" }));
+            sendText(socket, JSON.stringify({ kind: "computer.liveness.ready" }));
             socketReady.resolve(socket);
         });
         await listen(relay);
@@ -963,7 +963,7 @@ describe("daemon session configuration boundary", () => {
                 computerId: "channel_alpha",
                 defaultWorkspace: workspace,
                 relayUrl,
-                credentials: memoryRuntimeCredentials("d".repeat(43)),
+                credentials: memoryComputerCredentials("d".repeat(43)),
             },
             [agent],
             new RuntimeLocalContext(stateDirectory, process.env),

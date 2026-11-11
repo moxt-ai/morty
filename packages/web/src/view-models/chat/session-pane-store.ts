@@ -14,7 +14,7 @@ import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
 import { saveLastHarnessPreference } from "../../services/chat/last-harness-preference.ts";
 import { recordBrowserDiagnostic } from "../../services/diagnostics/browser-diagnostics.ts";
 import type { Clock } from "../../services/time/clock.ts";
-import { formatError, isRetryableRuntimeConnectionFailure, isSessionClosedFailure } from "../format-error.ts";
+import { formatError, isRetryableComputerConnectionFailure, isSessionClosedFailure } from "../format-error.ts";
 import { reportApplicationError } from "../report-error.ts";
 import { agentQuestionAnswer, openAgentQuestions } from "./agent-question-answer.ts";
 import type { ComposerAttachmentStore } from "./composer-attachment-store.ts";
@@ -26,7 +26,7 @@ import { type SessionActivityState, workingCommandId } from "./session-activity-
 import type { SessionComposerStore } from "./session-composer-store.ts";
 import {
     connectionFailure,
-    connectionWaitsForRuntime,
+    connectionWaitsForComputer,
     disconnectedConnection,
     type SessionConnection,
     sessionReconnectAttempt,
@@ -132,8 +132,8 @@ export function sessionTitleEdit(draft: string | null, rename: SessionRename): T
 export type { SessionConnection } from "./session-connection.ts";
 
 /**
- * The pane's account of its Session's work, including submissions the Runtime never saw; none until its connection
- * first reaches the Runtime, as the Session's execution state has nothing of the Runtime's yet.
+ * The pane's account of its Session's work, including submissions the Computer never saw; none until its connection
+ * first reaches the Computer, as the Session's execution state has nothing of the Computer's yet.
  */
 export function paneActivity(
     connection: SessionConnection,
@@ -165,8 +165,8 @@ export interface SessionPaneStore {
     readonly recover: (signal: AbortSignal) => Promise<void>;
     readonly retryNow: () => void;
     /**
-     * Records that the Runtime closed the Session and stops the connection until it is reopened. `reason` is the
-     * Runtime's explanation, or null when a failed operation was the only sign of the closing.
+     * Records that the Computer closed the Session and stops the connection until it is reopened. `reason` is the
+     * Computer's explanation, or null when a failed operation was the only sign of the closing.
      */
     readonly sessionClosed: (reason: string | null) => void;
     /** Reopens a closed Session on the user's request, then connects to it again. */
@@ -385,7 +385,7 @@ async function readSessionHistory(
             throw new Error("The Session reloaded while message history was loading.");
         }
         if (requestedCursor !== null && page.nextCursor === requestedCursor) {
-            throw new Error("The Runtime returned the same message-history cursor twice.");
+            throw new Error("The Computer returned the same message-history cursor twice.");
         }
         sessionGenerationId = page.sessionGenerationId;
         events = mergeSessionEvents(page.events, events);
@@ -400,7 +400,7 @@ async function readSessionHistory(
                 !events.some((event) => event.eventId === loadedRange.firstEventId)))
     );
     if (sessionGenerationId === null || throughPosition === null) {
-        throw new Error("The Runtime returned no Session history generation.");
+        throw new Error("The Computer returned no Session history generation.");
     }
     return { events, nextCursor, sessionGenerationId, throughPosition };
 }
@@ -440,7 +440,7 @@ export function createSessionPaneModel(options: {
     readonly sessionPage: SessionPageState;
     readonly attachmentSignal: AbortSignal;
     readonly computerId: string;
-    readonly requests: Pick<BotChatApi, "connectSession" | "managedSession" | "runtimeConfiguration">;
+    readonly requests: Pick<BotChatApi, "connectSession" | "managedSession" | "computerConfiguration">;
     /**
      * Hands the owner this pane's last account of the Session's work when the pane stops, or null when it had none.
      * While it runs, the owner derives the Session's status from the pane's account instead.
@@ -449,10 +449,10 @@ export function createSessionPaneModel(options: {
     readonly titles: SessionTitlesStore;
     /** Whether the connection header reports this Session's connection available, network and Machine included. */
     readonly connectionAvailable: (connection: SessionConnection) => boolean;
-    /** The connection reached the Session through the Runtime. */
+    /** The connection reached the Session through the Computer. */
     readonly onConnected: () => void;
     /** The connection used up its automatic retries and waits for the owner's `reconnect`. */
-    readonly onWaitingForRuntime: () => void;
+    readonly onWaitingForComputer: () => void;
 }) {
     const { session, computerId, requests, clock, titles } = options;
     const { composer, delivery, execution, queue: messageQueue, rename, settings, tasks } = options.sessionPage;
@@ -471,7 +471,7 @@ export function createSessionPaneModel(options: {
     let client: MortyClient | null = null;
     let recoveryRequested = false;
     let countdownInterrupt: AbortController | null = null;
-    // The Runtime closed the Session. The connect loop turns this into the closed connection state.
+    // The Computer closed the Session. The connect loop turns this into the closed connection state.
     let closure: { readonly reason: string | null } | null = null;
     // The running connection attempt, which a closing of the Session interrupts.
     let attempt: AbortController | null = null;
@@ -567,8 +567,8 @@ export function createSessionPaneModel(options: {
         };
         /**
          * Submits `commandId` through `connected`. The service's acceptance is a fact about the Session's execution: a
-         * message the Runtime runs at once becomes the current turn, dated by `startedAt`, when this browser sent it,
-         * until the Runtime reports its start; until then the turn is its delivery's. A message the Runtime queued
+         * message the Computer runs at once becomes the current turn, dated by `startedAt`, when this browser sent it,
+         * until the Computer reports its start; until then the turn is its delivery's. A message the Computer queued
          * starts no turn yet.
          */
         const submitCommand =
@@ -622,7 +622,7 @@ export function createSessionPaneModel(options: {
             }
             return read;
         };
-        /** Reads the Runtime's execution and applies it; the Session's execution state decides whether it is news. */
+        /** Reads the Computer's execution and applies it; the Session's execution state decides whether it is news. */
         const readExecution = async (
             connected: MortyClient,
             signal: AbortSignal,
@@ -821,7 +821,7 @@ export function createSessionPaneModel(options: {
             if (!canSubmit(operationFacts())) {
                 return;
             }
-            // Shown in the queue while a turn runs, otherwise as the next turn, until the Runtime says which it is.
+            // Shown in the queue while a turn runs, otherwise as the next turn, until the Computer says which it is.
             const placement: DeliveryPlacement = execution.getState().state.turn.kind === "current" ? "queue" : "turn";
             const message: SubmittedMessage = { ...submitted, placement };
             const { commandId } = message;
@@ -868,7 +868,7 @@ export function createSessionPaneModel(options: {
                 ? null
                 : agentQuestionAnswer(questions, composer.getState().answerChoices.get(messageId) ?? {});
         };
-        /** Sends a message the user wrote, which the Runtime runs now or queues behind the Session's earlier work. */
+        /** Sends a message the user wrote, which the Computer runs now or queues behind the Session's earlier work. */
         const sendMessage = async (
             content: string,
             attachments: readonly ComposerAttachment[],
@@ -1117,7 +1117,7 @@ export function createSessionPaneModel(options: {
                         if (closure !== null) {
                             continue;
                         }
-                        const retryable = isRetryableRuntimeConnectionFailure(cause);
+                        const retryable = isRetryableComputerConnectionFailure(cause);
                         if (recoveryRequested) {
                             recoveryRequested = false;
                             consecutiveFailures = 0;
@@ -1163,9 +1163,9 @@ export function createSessionPaneModel(options: {
                                 }
                             } else {
                                 if (retryable) {
-                                    // The automatic retries are used up: the owner retries once it sees the Runtime
+                                    // The automatic retries are used up: the owner retries once it sees the Computer
                                     // reachable again, and the user can retry at any time.
-                                    options.onWaitingForRuntime();
+                                    options.onWaitingForComputer();
                                 }
                                 await new Promise<void>((resolve) => {
                                     if (retrySignal.aborted) {
@@ -1206,7 +1206,7 @@ export function createSessionPaneModel(options: {
             },
             sessionClosed: (reason) => {
                 const current = get().connection;
-                // A failed operation and the Runtime's notice can both report one closing; the notice has the reason.
+                // A failed operation and the Computer's notice can both report one closing; the notice has the reason.
                 if (current.kind === "closed") {
                     if (current.reason === null && reason !== null) {
                         set({ connection: { ...current, reason } });
@@ -1298,10 +1298,10 @@ export function createSessionPaneModel(options: {
                 const state = delivery.getState().state;
                 const message =
                     state.kind === "preparation-failed"
-                        ? // Nothing reached the Runtime, so the message keeps its identity.
+                        ? // Nothing reached the Computer, so the message keeps its identity.
                           state.message
                         : state.kind === "failed"
-                          ? // The Runtime definitively rejected this identity and will not run it again.
+                          ? // The Computer definitively rejected this identity and will not run it again.
                             { ...journalMessage(state.journal), commandId: crypto.randomUUID() }
                           : null;
                 if (message === null || !canRetryFailedMessage(operationFacts())) {
@@ -1448,11 +1448,11 @@ export function createSessionPaneModel(options: {
     };
     /**
      * Starts the next attempt of a connection that used up its automatic retries, without restoring them: the owner
-     * calls it when it sees the Runtime reachable again, and a failed attempt waits for the owner's next call.
+     * calls it when it sees the Computer reachable again, and a failed attempt waits for the owner's next call.
      */
     const reconnect = (): void => {
-        if (connectionWaitsForRuntime(store.getState().connection)) {
-            countdownInterrupt?.abort(new Error("The Runtime is reachable again."));
+        if (connectionWaitsForComputer(store.getState().connection)) {
+            countdownInterrupt?.abort(new Error("The Computer is reachable again."));
         }
     };
     /**

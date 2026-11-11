@@ -50,7 +50,7 @@ test("Given the draft agent settings are still loading, When they settle, Then t
     expect(titleMark).not.toBeNull();
     expect(titleMark?.getAttribute("data-harness-product")).toBeNull();
 
-    // The Runtime's first installed Agent is the draft's default; whatever it is, its mark replaces the skeleton.
+    // The Computer's first installed Agent is the draft's default; whatever it is, its mark replaces the skeleton.
     await app.waitForView(() => expect(harnessProduct(app)).not.toBeNull());
     expect(app.optionalElementByTestId(dataTestId.harnessMarkSkeleton)).toBeNull();
 });
@@ -101,7 +101,7 @@ test("Given a Pi conversation is active, When the user starts a New Session, The
         connectAgent: true,
     });
     await waitForComposer(app);
-    // The Runtime lists Codex first, so an unremembered draft starts there.
+    // The Computer lists Codex first, so an unremembered draft starts there.
     await waitForHarness(app, "codex");
 
     await selectHarness(app, "Pi", "pi");
@@ -161,7 +161,7 @@ test("Given a Pi conversation is active, When the user starts a New Session, The
     );
 });
 
-test("Given a Pi draft, When a Codex switch cannot finish because the Runtime goes offline, Then the next draft stays on Pi", {
+test("Given a Pi draft, When a Codex switch cannot finish because the Computer goes offline, Then the next draft stays on Pi", {
     timeout: 60_000,
 }, async () => {
     const app = await createTestApp({
@@ -179,12 +179,12 @@ test("Given a Pi draft, When a Codex switch cannot finish because the Runtime go
     await app.user.click(await app.queryElementByTestId(dataTestId.agentConfiguration));
     const configuration = getByRole(document.body, "dialog", { name: "Agent configuration" });
     if (app.daemon === null) {
-        throw new Error("Expected a connected Runtime");
+        throw new Error("Expected a connected Computer");
     }
     await app.user.click(getByRole(configuration, "radio", { name: "Codex" }));
     await app.daemon.disconnect();
 
-    // The switch cannot be applied while the Runtime is offline. Reloading
+    // The switch cannot be applied while the Computer is offline. Reloading
     // abandons it, so the next draft must fall back to the last applied
     // harness instead of the one that never loaded.
     const reloaded = await app.reload();

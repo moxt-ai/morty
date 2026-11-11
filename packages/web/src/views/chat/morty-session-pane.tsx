@@ -802,7 +802,7 @@ function MortySessionPaneBody({
     readonly workspace: ChatWorkspace;
 }) {
     const home = useStore(workspace.home);
-    const runtimeConfiguration = home.runtimeConfiguration;
+    const computerConfiguration = home.computerConfiguration;
     const model = useStore(pane.store);
     const composer = useStore(pane.composer);
     const timeline = sessionProjectionTimeline(model.projection);
@@ -819,7 +819,7 @@ function MortySessionPaneBody({
     const messageQueue = useStore(pane.messageQueue);
     const taskControls = useStore(pane.tasks);
     const welcome = useStore(pane.welcome, (state) => state.state);
-    const harness = sessionHarnessSelection(runtimeConfiguration?.runtime ?? null, pane.harness);
+    const harness = sessionHarnessSelection(computerConfiguration?.computer ?? null, pane.harness);
 
     const run = (action: (signal: AbortSignal) => Promise<void>) => {
         const signal = pane.operationsSignal();
@@ -851,7 +851,7 @@ function MortySessionPaneBody({
         settingsModel,
         executionContext.available,
     );
-    // An answer to an Agent's question goes out as the composer's message would, which the Runtime runs or queues.
+    // An answer to an Agent's question goes out as the composer's message would, which the Computer runs or queues.
     const answer = (messageId: string): void =>
         runAndFollow(async () => {
             await pane.store.getState().sendAnswer(messageId);

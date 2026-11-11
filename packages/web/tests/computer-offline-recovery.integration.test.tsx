@@ -6,8 +6,8 @@ import { refreshSessions, sendPrompt, showReconnectNotice } from "./infra/applic
 import { createTestApp, type TestApp } from "./infra/test-app.tsx";
 import { TestClock } from "./infra/test-clock.ts";
 
-// The Worker checks the Runtime every 5 s and retries a failed check 5 s later, so one change can take two checks.
-const RUNTIME_CHANGE_TIMEOUT_MS = 20_000;
+// The Worker checks the Computer every 5 s and retries a failed check 5 s later, so one change can take two checks.
+const COMPUTER_CHANGE_TIMEOUT_MS = 20_000;
 
 function connectionStatus(app: TestApp): string | null {
     return app.elementByTestId(dataTestId.botConnectionStatus).getAttribute("data-connection-status");
@@ -41,7 +41,7 @@ function agentAnswered(app: TestApp, text: string): boolean {
     return app.elementsByTestId(dataTestId.agentResponse).some((message) => message.textContent?.includes(text));
 }
 
-test("Given a saved conversation, When reloading it while its Runtime is offline, Then its title and connection notice remain and reconnect restores history and the unsent draft", {
+test("Given a saved conversation, When reloading it while its Computer is offline, Then its title and connection notice remain and reconnect restores history and the unsent draft", {
     timeout: 90_000,
 }, async () => {
     const app = await createTestApp({ connectAgent: true });
@@ -79,8 +79,8 @@ test("Given a saved conversation, When reloading it while its Runtime is offline
         expect(getByRole(document.body, "log", { name: "Messages" }).textContent).toContain(
             "History is temporarily unavailable. It will load when the connection returns.",
         );
-        expect(document.body.textContent).not.toContain("Your Morty Runtime is disconnected.");
-    }, RUNTIME_CHANGE_TIMEOUT_MS);
+        expect(document.body.textContent).not.toContain("Your Morty Computer is disconnected.");
+    }, COMPUTER_CHANGE_TIMEOUT_MS);
 
     // Connection and history recover independently. Every rendered recovery snapshot
     // must agree with the sidebar, including while the session read is still pending.
@@ -108,14 +108,14 @@ test("Given a saved conversation, When reloading it while its Runtime is offline
             expect(getByRole(document.body, "log", { name: "Messages" }).textContent).not.toContain(
                 "Keep this follow-up unsent",
             );
-        }, RUNTIME_CHANGE_TIMEOUT_MS);
+        }, COMPUTER_CHANGE_TIMEOUT_MS);
         expect(contradictoryNotices).toEqual([]);
     } finally {
         observer.disconnect();
     }
 });
 
-test("Given a saved conversation, When a new-session page opens while the Runtime is offline and the Runtime comes back, Then the sidebar lists the conversation without a refresh", {
+test("Given a saved conversation, When a new-session page opens while the Computer is offline and the Computer comes back, Then the sidebar lists the conversation without a refresh", {
     timeout: 90_000,
 }, async () => {
     const app = await createTestApp({ connectAgent: true });
@@ -130,23 +130,23 @@ test("Given a saved conversation, When a new-session page opens while the Runtim
 
     await daemon.disconnect();
     const reopened = await app.reload();
-    // The sessions are read through the Runtime, so the sidebar cannot list them while it is offline.
+    // The sessions are read through the Computer, so the sidebar cannot list them while it is offline.
     await reopened.waitForView(() => {
         expect(connectionStatus(reopened)).toBe("disconnected");
         expect(sidebarAlerts()).toEqual([]);
         expect(document.body.textContent).toContain("Computer is offline. Sessions will appear when it reconnects.");
         expect(directoryTitles(reopened)).toHaveLength(0);
-    }, RUNTIME_CHANGE_TIMEOUT_MS);
+    }, COMPUTER_CHANGE_TIMEOUT_MS);
 
     await daemon.reconnect();
     await reopened.waitForView(() => {
         expect(connectionStatus(reopened)).toBe("connected");
         expect(directoryTitles(reopened).some((title) => title.includes("Keep this conversation"))).toBe(true);
         expect(sidebarAlerts()).toEqual([]);
-    }, RUNTIME_CHANGE_TIMEOUT_MS);
+    }, COMPUTER_CHANGE_TIMEOUT_MS);
 });
 
-test("Given a background reply is running when the Runtime goes offline, When the Runtime comes back, Then the sidebar shows that reply no longer working", {
+test("Given a background reply is running when the Computer goes offline, When the Computer comes back, Then the sidebar shows that reply no longer working", {
     timeout: 90_000,
 }, async () => {
     const app = await createTestApp({ connectAgent: true });
@@ -161,7 +161,7 @@ test("Given a background reply is running when the Runtime goes offline, When th
     });
     await app.user.click(app.elementByTestId(dataTestId.newConversation));
     await app.waitForView(() => expect(directoryTitles(app)).toHaveLength(1));
-    // Another page starts a reply in the background conversation that is still running when the Runtime goes away.
+    // Another page starts a reply in the background conversation that is still running when the Computer goes away.
     const viewer = await app.openViewer();
     // A conversation opens only once its page is connected, and the draft page's composer is ready before that.
     await viewer.user.click(
@@ -184,14 +184,14 @@ test("Given a background reply is running when the Runtime goes offline, When th
     await viewer.close();
 
     await daemon.disconnect();
-    await app.waitForView(() => expect(connectionStatus(app)).toBe("disconnected"), RUNTIME_CHANGE_TIMEOUT_MS);
+    await app.waitForView(() => expect(connectionStatus(app)).toBe("disconnected"), COMPUTER_CHANGE_TIMEOUT_MS);
     await daemon.reconnect();
-    await app.waitForView(() => expect(connectionStatus(app)).toBe("connected"), RUNTIME_CHANGE_TIMEOUT_MS);
+    await app.waitForView(() => expect(connectionStatus(app)).toBe("connected"), COMPUTER_CHANGE_TIMEOUT_MS);
 
     await refreshSessions(app);
     await app.waitForView(
         () => expect(entryStatus(app, "Background conversation")).not.toBe("Session working"),
-        RUNTIME_CHANGE_TIMEOUT_MS,
+        COMPUTER_CHANGE_TIMEOUT_MS,
     );
 });
 
@@ -202,7 +202,7 @@ for (const context of ["missing", "malformed", "different-session", "different-i
         const app = await createTestApp({ connectAgent: true });
         const daemon = app.daemon;
         if (daemon === null) {
-            throw new Error("Expected a connected Runtime");
+            throw new Error("Expected a connected Computer");
         }
         await sendPrompt(app, await readyComposer(app), "Private saved conversation");
         await app.waitForView(() => expect(agentAnswered(app, "Codex turn 1: Private saved conversation")).toBe(true));
@@ -233,11 +233,11 @@ for (const context of ["missing", "malformed", "different-session", "different-i
             expect(getByRole(document.body, "log", { name: "Messages" }).textContent).toContain(
                 "History is temporarily unavailable. It will load when the connection returns.",
             );
-        }, RUNTIME_CHANGE_TIMEOUT_MS);
+        }, COMPUTER_CHANGE_TIMEOUT_MS);
         await daemon.reconnect();
         await reopened.waitForView(
             () => expect(agentAnswered(reopened, "Codex turn 1: Private saved conversation")).toBe(true),
-            RUNTIME_CHANGE_TIMEOUT_MS,
+            COMPUTER_CHANGE_TIMEOUT_MS,
         );
     });
 }
@@ -285,7 +285,7 @@ test("Given an open conversation, When its computer goes offline, Then the notic
         const element = app.elementByTestId(dataTestId.sessionReconnectNotice);
         expect(element.textContent).toContain("Computer is offline");
         return element;
-    }, RUNTIME_CHANGE_TIMEOUT_MS);
+    }, COMPUTER_CHANGE_TIMEOUT_MS);
     expect(getByRole(notice, "code").textContent).toBe("npx @morty-build/cli@latest start");
     await app.user.click(getByRole(notice, "button", { name: "Copy command" }));
     expect(await navigator.clipboard.readText()).toBe("npx @morty-build/cli@latest start");
@@ -303,7 +303,7 @@ test("Given the New Session page while the computer is offline, When an attachme
     const reopened = await app.reload();
     await reopened.waitForView(
         () => expect(connectionStatus(reopened)).toBe("disconnected"),
-        RUNTIME_CHANGE_TIMEOUT_MS,
+        COMPUTER_CHANGE_TIMEOUT_MS,
     );
     const composer = await readyComposer(reopened);
     if (!(composer instanceof HTMLTextAreaElement) || composer.form === null) {

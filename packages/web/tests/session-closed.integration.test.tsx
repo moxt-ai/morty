@@ -120,7 +120,7 @@ test("Given a closed Session, When the user reopens it, Then the notice goes awa
     );
 });
 
-test("Given a closed Session and an offline Runtime, When the user tries to reopen it, Then Chat explains why it failed and the user can try again", {
+test("Given a closed Session and an offline Computer, When the user tries to reopen it, Then Chat explains why it failed and the user can try again", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({ connectAgent: true });
@@ -151,7 +151,7 @@ test("Given a closed Session and an offline Runtime, When the user tries to reop
     expect(queryByRole(form, "alert")).toBeNull();
 });
 
-test("Given a conversation whose Runtime restarted and then closed its Session while Chat was waiting to reconnect, When Chat reconnects, Then it shows that the session is closed and the user can reopen it", {
+test("Given a conversation whose Computer restarted and then closed its Session while Chat was waiting to reconnect, When Chat reconnects, Then it shows that the session is closed and the user can reopen it", {
     timeout: 30_000,
 }, async () => {
     const clock = new TestClock("2026-10-13T08:00:00Z");
@@ -184,7 +184,7 @@ test("Given a conversation whose Runtime restarted and then closed its Session w
 
     await act(async () => clock.advanceBy(10_000));
 
-    // Chat may or may not hear the Runtime announce the closing, so the reason is not part of this scenario.
+    // Chat may or may not hear the Computer announce the closing, so the reason is not part of this scenario.
     await app.waitForView(() => expect(closedNoticeText(app)).toMatch(/^The session is closed\./));
     expect(reconnectStatusText(app)).toBeNull();
     await app.user.click(

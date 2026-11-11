@@ -31,7 +31,7 @@ export function computerManagementStore(computerId: string, storage: DurableObje
 }
 
 /** Internal Runtime DO scenarios enter after public pairing has registered the Runtime in an active Project. */
-export async function registerRuntimeFixture(computerId: string): Promise<void> {
+export async function registerComputerFixture(computerId: string): Promise<void> {
     const registeredAt = Date.UTC(2026, 9, 27);
     const userId = `user_${computerId}`;
     const directory = computerDirectoryDrizzle(env.RELAY_DIRECTORY_DATABASE);

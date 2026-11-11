@@ -220,7 +220,7 @@ for (const [label, optionId] of [
     });
 }
 
-test("Given a pending permission card, When the Runtime drops and the retry notice appears, Then the notice joins the flow above the composer instead of covering the card's actions", {
+test("Given a pending permission card, When the Computer drops and the retry notice appears, Then the notice joins the flow above the composer instead of covering the card's actions", {
     timeout: 30_000,
 }, async () => {
     const clock = new TestClock("2026-10-30T08:00:00Z");
@@ -235,7 +235,7 @@ test("Given a pending permission card, When the Runtime drops and the retry noti
     );
     expect(getByRole(permission, "button", { name: "Allow" })).toBeDefined();
     if (app.daemon === null) {
-        throw new Error("Expected the connected Runtime");
+        throw new Error("Expected the connected Computer");
     }
     await app.daemon.disconnect();
     await showReconnectNotice(app, clock);

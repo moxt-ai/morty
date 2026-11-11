@@ -21,7 +21,7 @@ function failFirstRuntimeInitialization(clientCapabilities: unknown, selectedAge
     mkdirSync(stateDirectory, { recursive: true });
     const markerPath = join(
         stateDirectory,
-        `${selectedAgentName.toLowerCase().replaceAll(" ", "-")}.runtime-initialization-failed`,
+        `${selectedAgentName.toLowerCase().replaceAll(" ", "-")}.computer-initialization-failed`,
     );
     if (existsSync(markerPath)) {
         return;

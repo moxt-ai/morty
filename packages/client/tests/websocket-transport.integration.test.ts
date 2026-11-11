@@ -19,7 +19,7 @@ const sessionClaims = btoa(
     .replace(/=+$/u, "");
 const sessionCredential = `msession_${sessionClaims}.${"A".repeat(43)}`;
 
-function runtimeRequest(address: string, init?: RequestInit): Request {
+function computerRequest(address: string, init?: RequestInit): Request {
     const url = new URL(address);
     if (!url.pathname.startsWith("/morty/api/v1/computers/")) {
         url.pathname = `/morty/api/v1/computers/project-1/harnesses/claude/sessions/session-1${url.pathname}`;
@@ -160,9 +160,9 @@ it("Given a browser bound to one computer, When it opens another Session or addr
     const connector = new BrowserWebSocketConnector();
     const transport = new WsTransport({ connector });
     try {
-        await transport.fetch(runtimeRequest("https://relay.example.test/first"));
+        await transport.fetch(computerRequest("https://relay.example.test/first"));
         const events = await transport.openSessionLiveEvents(
-            runtimeRequest(
+            computerRequest(
                 "https://relay.example.test/morty/api/v1/computers/project-1/harnesses/claude/sessions/session-2/events-v2",
             ),
         );
@@ -170,12 +170,12 @@ it("Given a browser bound to one computer, When it opens another Session or addr
         expect(connector.sockets[0]?.url).toBe("wss://relay.example.test/morty/api/v1/computers/project-1/transport");
         await expect(
             transport.fetch(
-                runtimeRequest(
+                computerRequest(
                     "https://relay.example.test/morty/api/v1/computers/project-2/harnesses/claude/sessions/session-1/configuration",
                 ),
             ),
         ).rejects.toThrow("cannot connect to multiple computers");
-        expect((await transport.fetch(runtimeRequest("https://relay.example.test/after-rejection"))).status).toBe(204);
+        expect((await transport.fetch(computerRequest("https://relay.example.test/after-rejection"))).status).toBe(204);
         await events.cancel();
     } finally {
         transport.close();
@@ -188,7 +188,7 @@ it("Given a quiet subscription with connection heartbeats, When multiple idle de
     const connector = new BrowserWebSocketConnector(0, "", "responsive");
     const transport = new WsTransport({ connector });
     const stream = await transport.openSessionLiveEvents(
-        runtimeRequest("https://relay.example.test/session/events-v2"),
+        computerRequest("https://relay.example.test/session/events-v2"),
     );
     const reader = stream.getReader();
     try {
@@ -225,7 +225,7 @@ it("Given a transport whose peer stops answering heartbeats, When the ten-second
     const connector = new BrowserWebSocketConnector(0, "", "silent");
     const transport = new WsTransport({ connector });
     const stream = await transport.openSessionLiveEvents(
-        runtimeRequest("https://relay.example.test/session/events-v2"),
+        computerRequest("https://relay.example.test/session/events-v2"),
     );
     const reader = stream.getReader();
     try {
@@ -233,7 +233,7 @@ it("Given a transport whose peer stops answering heartbeats, When the ten-second
         const failed = expect(reader.read()).rejects.toBeInstanceOf(MortyConnectionError);
         await vi.advanceTimersByTimeAsync(10_000);
         await failed;
-        expect((await transport.fetch(runtimeRequest("https://relay.example.test/after-recovery"))).status).toBe(204);
+        expect((await transport.fetch(computerRequest("https://relay.example.test/after-recovery"))).status).toBe(204);
     } finally {
         transport.close();
         reader.releaseLock();
@@ -247,7 +247,7 @@ it("Given a Unicode JSON request and response, When the browser uses the WebSock
     const requestBody = JSON.stringify({ prompt: "show café ☕" });
 
     const response = await transport.fetch(
-        runtimeRequest(
+        computerRequest(
             "https://relay.example.test/morty/api/v1/computers/project/harnesses/claude/sessions/session-1/turns",
             {
                 body: requestBody,
@@ -268,14 +268,14 @@ it("Given an idle browser transport, When its connection expires, Then it closes
     const connector = new BrowserWebSocketConnector();
     const transport = new WsTransport({ connector, idleTimeoutMilliseconds: 1_000 });
 
-    expect((await transport.fetch(runtimeRequest("https://relay.example.test/first"))).status).toBe(204);
+    expect((await transport.fetch(computerRequest("https://relay.example.test/first"))).status).toBe(204);
     await vi.advanceTimersByTimeAsync(1_000);
 
     expect(connector.sockets[0]?.closedWith).toEqual({
         code: 4000,
         reason: "Morty transport idle timeout",
     });
-    expect((await transport.fetch(runtimeRequest("https://relay.example.test/second"))).status).toBe(204);
+    expect((await transport.fetch(computerRequest("https://relay.example.test/second"))).status).toBe(204);
     expect(connector.sockets).toHaveLength(2);
 
     transport.close();
@@ -285,19 +285,19 @@ it("Given a replacement WebSocket carries a live subscription, When the old sock
     const connector = new BrowserWebSocketConnector();
     const transport = new WsTransport({ connector });
 
-    expect((await transport.fetch(runtimeRequest("https://relay.example.test/first"))).status).toBe(204);
+    expect((await transport.fetch(computerRequest("https://relay.example.test/first"))).status).toBe(204);
     const first = connector.sockets[0];
     if (first === undefined) {
         throw new Error("Expected the first WebSocket connection");
     }
     first.dispatchEvent(new Event("error"));
-    expect((await transport.fetch(runtimeRequest("https://relay.example.test/second"))).status).toBe(204);
+    expect((await transport.fetch(computerRequest("https://relay.example.test/second"))).status).toBe(204);
     const second = connector.sockets[1];
     if (second === undefined) {
         throw new Error("Expected the replacement WebSocket connection");
     }
     const events = await transport.openSessionLiveEvents(
-        runtimeRequest(
+        computerRequest(
             "https://relay.example.test/morty/api/v1/computers/project/harnesses/claude/sessions/session/events-v2",
         ),
     );

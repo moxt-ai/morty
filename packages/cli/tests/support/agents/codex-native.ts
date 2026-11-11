@@ -16,8 +16,8 @@ import { WorkspaceDirectoryService } from "../../../src/engine/session/workspace
 import { SessionCreationTable } from "../../../src/engine/storage/session/session-creation-table.ts";
 import { openAcpSessionDatabase } from "../../../src/engine/storage/sqlite/local-databases.ts";
 import { systemTimer } from "../../../src/engine/util/timer.ts";
+import { memoryComputerCredentials } from "../computer-credentials.ts";
 import { FakeOpenAiProvider } from "../llm/openai.ts";
-import { memoryRuntimeCredentials } from "../runtime-credentials.ts";
 import { SessionRuntimeFixture as SessionManager } from "../session-runtime.ts";
 import { UnretainedExternalContentStore } from "../unretained-external-content-store.ts";
 import { CodexFixture } from "./codex.ts";
@@ -54,7 +54,7 @@ export async function codexFixture(
     });
     const config = createRuntimeConfig(
         {
-            credentials: memoryRuntimeCredentials("r".repeat(43)),
+            credentials: memoryComputerCredentials("r".repeat(43)),
             defaultWorkspace: workspace,
             computerId: "test-channel",
             relayUrl: new URL("ws://localhost/"),

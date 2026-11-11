@@ -23,7 +23,7 @@ export function sessionTitle(
     return (sessionTarget === null ? undefined : titles.get(sessionTarget)?.title) ?? fallback;
 }
 
-/** One display title per Session. The Runtime is authoritative; in-flight reads cannot undo newer observations. */
+/** One display title per Session. The Computer is authoritative; in-flight reads cannot undo newer observations. */
 export function createSessionTitlesStore(identityKey: string | null) {
     let rememberedId: NativeSessionTarget | null = null;
     return createStore<{
@@ -103,7 +103,7 @@ export function createSessionTitlesStore(identityKey: string | null) {
                 const titles = new NativeSessionMap(get().titles);
                 for (const session of sessions) {
                     const current = titles.get(session.target);
-                    // A new Session keeps its first-prompt title until the Runtime confirms it was prompted.
+                    // A new Session keeps its first-prompt title until the Computer confirms it was prompted.
                     if (
                         (current?.kind === "created" && !session.prompted) ||
                         (current !== undefined && current !== startedWith.get(session.target))

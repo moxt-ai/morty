@@ -16,14 +16,14 @@ import { PairingDirectoryError } from "../../management/entity/pairing.ts";
 import { ComputerScope } from "../entity/session.ts";
 import type { RuntimeContext } from "../runtime-context.ts";
 import {
-    type RuntimeControlCommand,
-    type RuntimeControlResult,
-    requestRuntimeAgentSettings,
-    requestRuntimeContentWrite,
-    requestRuntimeControl,
-    requestRuntimeFile,
-    requestRuntimeWorkspace,
-} from "./runtime-control-request.ts";
+    type ComputerControlCommand,
+    type ComputerControlResult,
+    requestComputerAgentSettings,
+    requestComputerContentWrite,
+    requestComputerControl,
+    requestComputerFile,
+    requestComputerWorkspace,
+} from "./computer-control-request.ts";
 
 export type LocalSessionOperations = Readonly<ReturnType<typeof createLocalSessionOperations>>;
 
@@ -31,11 +31,11 @@ export function createLocalSessionOperations(cx: RuntimeContext, computerId: str
     const checkTarget = (requestedComputer: string) => {
         const latest = cx.services.connections.latest();
         if (requestedComputer !== computerId || latest?.computerId !== computerId) {
-            throw new PairingDirectoryError("runtime_access_denied", "The selected Runtime is unavailable");
+            throw new PairingDirectoryError("computer_access_denied", "The selected Computer is unavailable");
         }
         const daemon = cx.gateways.peers.sockets().find(({ identity }) => identity.role === "daemon");
         if (daemon !== undefined && daemon.identity.computerId !== computerId) {
-            throw new PairingDirectoryError("runtime_access_denied", "The selected Runtime is unavailable");
+            throw new PairingDirectoryError("computer_access_denied", "The selected Computer is unavailable");
         }
     };
     const connect = async (requestId: string, target: NativeSessionTarget | undefined, signal: AbortSignal) => {
@@ -73,13 +73,13 @@ export function createLocalSessionOperations(cx: RuntimeContext, computerId: str
     };
     const requestComputerScopeControl = async (
         scope: ComputerScope,
-        command: RuntimeControlCommand,
+        command: ComputerControlCommand,
         signal: AbortSignal,
-    ): Promise<RuntimeControlResult> => {
+    ): Promise<ComputerControlResult> => {
         checkTarget(scope.computerId);
         const target = "target" in command ? command.target : undefined;
         const socket = await connect(requestReplyAddress(command), target, signal);
-        return await requestRuntimeControl(socket, command, signal);
+        return await requestComputerControl(socket, command, signal);
     };
     return {
         forkNativeSession: async (
@@ -97,7 +97,7 @@ export function createLocalSessionOperations(cx: RuntimeContext, computerId: str
             signal: AbortSignal,
         ): Promise<WorkspaceEntriesEvent> => {
             checkTarget(scope.computerId);
-            return await requestRuntimeWorkspace(await connect(command.requestId, undefined, signal), command, signal);
+            return await requestComputerWorkspace(await connect(command.requestId, undefined, signal), command, signal);
         },
         requestAgentSettings: async (
             scope: ComputerScope,
@@ -105,7 +105,7 @@ export function createLocalSessionOperations(cx: RuntimeContext, computerId: str
             signal: AbortSignal,
         ): Promise<AgentSettingsDiscoveredEvent> => {
             checkTarget(scope.computerId);
-            return await requestRuntimeAgentSettings(
+            return await requestComputerAgentSettings(
                 await connect(command.requestId, undefined, signal),
                 command,
                 signal,
@@ -126,7 +126,7 @@ export function createLocalSessionOperations(cx: RuntimeContext, computerId: str
             await cx.services.runtime.expireSilentDaemons();
             checkTarget(scope.computerId);
             if (!cx.services.runtime.isOnline(computerId)) {
-                throw new PairingDirectoryError("runtime_offline", "The Runtime is offline");
+                throw new PairingDirectoryError("computer_offline", "The Computer is offline");
             }
             return cx.gateways.peers.accept({
                 role: "viewer",
@@ -148,7 +148,7 @@ export function createLocalSessionOperations(cx: RuntimeContext, computerId: str
             checkTarget(scope.computerId);
             const socket = await connect(command.requestId, command.target, signal);
             try {
-                const stream = await requestRuntimeFile(socket, command, signal);
+                const stream = await requestComputerFile(socket, command, signal);
                 cx.utilities.waitUntil(stream.finished);
                 return stream.response;
             } catch (cause) {
@@ -165,7 +165,7 @@ export function createLocalSessionOperations(cx: RuntimeContext, computerId: str
             checkTarget(scope.computerId);
             const socket = await connect(command.requestId, command.target, signal);
             try {
-                return await requestRuntimeContentWrite(socket, command, body, signal);
+                return await requestComputerContentWrite(socket, command, body, signal);
             } catch (cause) {
                 socket.close(1000, "Content upload ended");
                 throw cause;

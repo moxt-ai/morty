@@ -1,6 +1,6 @@
 import { normalizePairingCode, validateToken } from "../entity/pairing.ts";
 
-const RUNTIME_PAIRING_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+const COMPUTER_PAIRING_CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
 async function deriveSecret(secret: string, computerId: string, idempotencyKey: string, purpose: string) {
     const key = await crypto.subtle.importKey(
@@ -27,7 +27,7 @@ function encodeToken(bytes: Uint8Array): string {
     return btoa(binary).replaceAll("+", "-").replaceAll("/", "_").replaceAll("=", "");
 }
 
-export async function deriveRuntimeDaemonToken(
+export async function deriveComputerDaemonToken(
     pairingCode: string,
     computerId: string,
     pollTokenHash: string,
@@ -39,16 +39,16 @@ export async function deriveRuntimeDaemonToken(
         pollTokenHash,
         computerId,
         `${computerId}\u0000${normalizePairingCode(pairingCode)}`,
-        "runtime-daemon-token-v1",
+        "computer-daemon-token-v1",
     );
     return `${computerId}_${encodeToken(bytes)}`;
 }
 
-export async function deriveRuntimePairingSecrets(ownerToken: string, computerId: string, idempotencyKey: string) {
+export async function deriveComputerPairingSecrets(ownerToken: string, computerId: string, idempotencyKey: string) {
     const codeBytes = await deriveSecret(ownerToken, computerId, idempotencyKey, "pairing-code");
     let code = "";
     for (const byte of codeBytes.slice(0, 20)) {
-        code += RUNTIME_PAIRING_CODE_ALPHABET.charAt(byte % RUNTIME_PAIRING_CODE_ALPHABET.length);
+        code += COMPUTER_PAIRING_CODE_ALPHABET.charAt(byte % COMPUTER_PAIRING_CODE_ALPHABET.length);
     }
     return {
         pairingCode: code.match(/.{1,4}/g)?.join("-") ?? code,

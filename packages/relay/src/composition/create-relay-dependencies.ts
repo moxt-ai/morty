@@ -39,7 +39,7 @@ export function createRelayDependencies(infrastructure: {
         ...cx,
         services: {
             pairings,
-            runtimePairings: new PairingService(cx),
+            computerPairings: new PairingService(cx),
             computerConnections: new ComputerConnectionService(cx),
         },
     };

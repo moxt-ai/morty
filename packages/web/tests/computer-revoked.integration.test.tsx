@@ -4,7 +4,7 @@ import { dataTestId } from "../src/data-testid.ts";
 import { createTestApp } from "./infra/test-app.tsx";
 import { TestClock } from "./infra/test-clock.ts";
 
-test("Given a connected computer, When Morty revokes its Runtime, Then the page says it was disconnected for security and how to reconnect it, without offering a retry", {
+test("Given a connected computer, When Morty revokes its Computer, Then the page says it was disconnected for security and how to reconnect it, without offering a retry", {
     timeout: 45_000,
 }, async () => {
     const clock = new TestClock("2026-11-09T08:00:00Z");
@@ -14,7 +14,7 @@ test("Given a connected computer, When Morty revokes its Runtime, Then the page 
         (element) => element instanceof HTMLTextAreaElement && !element.disabled,
     );
     if (app.daemon === null) {
-        throw new Error("Expected the connected Runtime");
+        throw new Error("Expected the connected Computer");
     }
 
     await app.daemon.revoke();

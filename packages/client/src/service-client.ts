@@ -772,7 +772,7 @@ export class MortyTurnResources {
             turnId,
         );
 
-    /** Withdraws a queued prompt only when the Runtime confirms it did not execute. */
+    /** Withdraws a queued prompt only when the Computer confirms it did not execute. */
     readonly cancelQueued = async (
         sessionTarget: NativeSessionTarget,
         turnId: string,

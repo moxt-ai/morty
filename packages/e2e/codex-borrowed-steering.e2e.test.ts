@@ -86,7 +86,7 @@ test("Given desktop Codex owns a conversation, When I open it in Morty and queue
         await chat.useBrowserIdentity({ computerId, token });
         const pairing = await chat.createPairing();
         const engine = new MortyRuntimeEngine({
-            engineDataDir: join(harness.workDirectory, "runtime"),
+            engineDataDir: join(harness.workDirectory, "computer"),
             agentLaunchEnvironment: environment,
         });
         const paired = await engine.pair(

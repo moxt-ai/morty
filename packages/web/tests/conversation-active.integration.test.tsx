@@ -293,13 +293,13 @@ test("Given a running reply, When the user reads the conversation, Then its work
     });
 });
 
-test("Given a message waited in the queue, When its turn starts, Then the working timer counts from the Runtime's start, not from when it was queued", {
+test("Given a message waited in the queue, When its turn starts, Then the working timer counts from the Computer's start, not from when it was queued", {
     timeout: 60_000,
 }, async () => {
     const app = await createTestApp({ connectAgent: true });
     const daemon = app.daemon;
     if (daemon === null) {
-        throw new Error("Expected a real Runtime");
+        throw new Error("Expected a real Computer");
     }
     await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "wait for steering");
     await app.waitForView(() => expect(document.body.textContent).toContain("Waiting for steering"));

@@ -511,7 +511,7 @@ const starterFailures = [
 
 for (const [failure, scenario] of starterFailures) {
     test.runIf(process.platform !== "win32")(
-        `Given an offline managed Runtime, ${scenario}`,
+        `Given an offline managed Computer, ${scenario}`,
         async () => {
             const directory = await mkdtemp(join(tmpdir(), "morty-setup-start-"));
             const state = join(directory, "state");
@@ -662,7 +662,7 @@ process.exitCode = await runSetup(process.argv.slice(2), {
                 expect(retries, output).toHaveLength(failure === "cancel" || failure === "recover" ? 1 : 2);
                 if (failure === "recover") {
                     expect(events.at(-1)).toMatchObject({ status: "ready" });
-                    expect(events).toContainEqual(expect.objectContaining({ status: "runtime_online" }));
+                    expect(events).toContainEqual(expect.objectContaining({ status: "computer_online" }));
                     return;
                 }
                 expect(events.at(-1)).toMatchObject({
@@ -762,7 +762,7 @@ for (const segments of [4, 8]) {
             const fixture = await createIdentityFixture();
             const runtime = new ControlledSetupRuntime(
                 { harness: "codex", agentName: "Codex", reply: mortyReply },
-                "Setup test Runtime",
+                "Setup test Computer",
             );
             const events: Readonly<Record<string, unknown>>[] = [];
             let time = Date.parse("2026-09-15T12:00:00Z");
@@ -920,7 +920,7 @@ async function withUpgradeMachine(
     const fixture = await createIdentityFixture();
     const runtime = new ControlledSetupRuntime(
         { harness: "settings-test", agentName: "Settings Agent", reply: mortyReply },
-        "Setup test Runtime",
+        "Setup test Computer",
         upgrade,
         release,
     );
@@ -938,7 +938,7 @@ async function withUpgradeMachine(
     }
 }
 
-test("Given a paired machine whose online daemon runs an outdated release, When the user reruns setup, Then setup reuses the running Runtime without restarting it", {
+test("Given a paired machine whose online daemon runs an outdated release, When the user reruns setup, Then setup reuses the running Computer without restarting it", {
     timeout: 90_000,
 }, async () => {
     await withUpgradeMachine(
@@ -951,7 +951,7 @@ test("Given a paired machine whose online daemon runs an outdated release, When 
             runtime.setUpgrade("available");
             const rerun = await setupMachine(runtime, paths);
             expect(rerun.code, JSON.stringify(rerun.events)).toBe(0);
-            expect(rerun.events).toContainEqual(expect.objectContaining({ status: "runtime_already_online" }));
+            expect(rerun.events).toContainEqual(expect.objectContaining({ status: "computer_already_online" }));
             expect(rerun.events.at(-1)).toMatchObject({ status: "ready", workspace: paths.workspace });
             expect(runtime.daemonRelease()).toBe("outdated");
         },
@@ -959,13 +959,13 @@ test("Given a paired machine whose online daemon runs an outdated release, When 
     );
 });
 
-test("Given setup was stopped after pairing its Runtime, When the user runs setup again and again, Then each run continues on that Runtime and setup finishes", {
+test("Given setup was stopped after pairing its Computer, When the user runs setup again and again, Then each run continues on that Computer and setup finishes", {
     timeout: 120_000,
 }, async () => {
     await withUpgradeMachine("unavailable", async (runtime, paths) => {
-        // A Project holds at most eight Runtimes; each stopped run must not leave another one behind.
+        // A Project holds at most eight Computers; each stopped run must not leave another one behind.
         for (let attempt = 1; attempt <= 8; attempt += 1) {
-            const stopped = await setupMachine(runtime, paths, undefined, { interruptAt: "runtime_paired" });
+            const stopped = await setupMachine(runtime, paths, undefined, { interruptAt: "computer_paired" });
             expect(stopped.code, JSON.stringify(stopped.events)).not.toBe(0);
         }
         const finished = await setupMachine(runtime, paths);
@@ -1010,7 +1010,7 @@ test("Given a shared Machine whose local pairing was removed, When setup has no 
             expect(blocked.events.at(-1)).toMatchObject({
                 error: {
                     code: "PROJECT_REPLACEMENT_REQUIRED",
-                    replacement: { computerId: config.computer_id, reason: "managed_runtime_missing" },
+                    replacement: { computerId: config.computer_id, reason: "managed_computer_missing" },
                 },
             });
             expect((await session()).status).toBe(200);
@@ -1151,7 +1151,7 @@ test.each(["replacement_access_revoked", "project_replaced"])(
     },
 );
 
-test("Given a Machine bound by setup, When the user runs setup again, Then setup finishes on the Worker's bound Runtime without a local binding copy", {
+test("Given a Machine bound by setup, When the user runs setup again, Then setup finishes on the Worker's bound Computer without a local binding copy", {
     timeout: 90_000,
 }, async () => {
     await withUpgradeMachine("unavailable", async (runtime, paths) => {
@@ -1168,7 +1168,7 @@ test("Given a Machine bound by setup, When the user runs setup again, Then setup
 
         const rerun = await setupMachine(runtime, paths);
         expect(rerun.code, JSON.stringify(rerun.events)).toBe(0);
-        expect(rerun.events).toContainEqual(expect.objectContaining({ status: "runtime_reused" }));
+        expect(rerun.events).toContainEqual(expect.objectContaining({ status: "computer_reused" }));
         expect(rerun.events.at(-1)).toMatchObject({ status: "ready", workspace: paths.workspace });
     });
 });

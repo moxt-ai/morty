@@ -3,11 +3,11 @@ import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
-    encodeRuntimeLivenessReadyEvent,
-    RUNTIME_HEARTBEAT_ACK_MESSAGE,
-    RUNTIME_HEARTBEAT_MESSAGE,
-    RUNTIME_LIVENESS_READY_KIND,
-    RUNTIME_SUCCESSOR_CREDENTIAL_HEADER,
+    COMPUTER_HEARTBEAT_ACK_MESSAGE,
+    COMPUTER_HEARTBEAT_MESSAGE,
+    COMPUTER_LIVENESS_READY_KIND,
+    COMPUTER_SUCCESSOR_CREDENTIAL_HEADER,
+    encodeComputerLivenessReadyEvent,
 } from "@morty-build/client/protocol";
 import { listen, port } from "@morty-build/relay-test-support/websocket";
 import { expect, it } from "vitest";
@@ -28,7 +28,7 @@ it("Given an explicit data directory, When a host constructs Engine and reopens 
                 computerId: "embedded_channel",
                 defaultWorkspace: join(directory, "workspace"),
                 relayOrigin: new URL("https://relay.example.com/"),
-                runtimeCredential: "a".repeat(43),
+                computerCredential: "a".repeat(43),
             },
             signal,
         );
@@ -58,7 +58,7 @@ it("Given a fresh installation, When a host concurrently saves connections, Then
                         computerId: `concurrent_channel_${index}`,
                         defaultWorkspace: join(directory, "workspace"),
                         relayOrigin: new URL("https://relay.example.com/"),
-                        runtimeCredential: "a".repeat(43),
+                        computerCredential: "a".repeat(43),
                     },
                     signal,
                 ),
@@ -105,17 +105,17 @@ it("Given a saved connection with an opaque credential, When a host serves and c
     relay.on("connection", (socket, request) => {
         requests.push(request.url ?? "");
         authorizations.push(request.headers.authorization);
-        const successor = request.headers[RUNTIME_SUCCESSOR_CREDENTIAL_HEADER];
+        const successor = request.headers[COMPUTER_SUCCESSOR_CREDENTIAL_HEADER];
         successors.push(typeof successor === "string" ? successor : undefined);
         socket.once("close", () => disconnected.resolve());
         if (revoke) {
-            socket.close(1008, "Runtime revoked");
+            socket.close(1008, "Computer revoked");
             return;
         }
-        socket.send(encodeRuntimeLivenessReadyEvent({ kind: RUNTIME_LIVENESS_READY_KIND }));
+        socket.send(encodeComputerLivenessReadyEvent({ kind: COMPUTER_LIVENESS_READY_KIND }));
         socket.on("message", (encoded) => {
-            if (encoded.toString() === RUNTIME_HEARTBEAT_MESSAGE) {
-                socket.send(RUNTIME_HEARTBEAT_ACK_MESSAGE);
+            if (encoded.toString() === COMPUTER_HEARTBEAT_MESSAGE) {
+                socket.send(COMPUTER_HEARTBEAT_ACK_MESSAGE);
             }
         });
     });
@@ -138,7 +138,7 @@ it("Given a saved connection with an opaque credential, When a host serves and c
                 computerId: "loop_channel",
                 defaultWorkspace: join(directory, "workspace"),
                 relayOrigin: new URL(origin),
-                runtimeCredential: "a".repeat(73),
+                computerCredential: "a".repeat(73),
             },
             deadline,
         );
@@ -174,7 +174,7 @@ it("Given a saved connection with an opaque credential, When a host serves and c
         await expect(
             engine.runLoop({ pairingGeneration: saved.pairingGeneration, signal: deadline }),
         ).rejects.toMatchObject({
-            code: "runtime_relay_revoked",
+            code: "computer_relay_revoked",
         });
         await disconnected.promise;
         expect(authorizations.at(-1)).toBe(`Bearer ${savedSuccessor}`);

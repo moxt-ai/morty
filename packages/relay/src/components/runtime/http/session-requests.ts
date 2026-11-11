@@ -4,7 +4,7 @@ import { PairingDirectoryError } from "../../management/entity/pairing.ts";
 
 // The request bodies of the operations every Session API offers on one Session. Each API states the Session in its own
 // way and shapes its own response, but a request for the same operation means the same thing on every API. The
-// limits mirror the Runtime protocol's, so a request the Runtime would refuse fails before any Runtime round trip.
+// limits mirror the Computer protocol's, so a request the Computer would refuse fails before any Computer round trip.
 
 const identifier = v.custom<Identifier>(isIdentifier);
 
@@ -14,7 +14,7 @@ const turnSubmissionEntries = {
     disposition: v.optional(v.picklist(["append", "steer"]), "append"),
     idempotencyKey: identifier,
     sessionConfigurations: v.optional(v.pipe(v.array(v.unknown()), v.maxLength(100)), []),
-    // Only a steering submission names the Turn it joins; the Runtime protocol refuses a target on an appended one.
+    // Only a steering submission names the Turn it joins; the Computer protocol refuses a target on an appended one.
     targetCommandId: v.optional(identifier),
 };
 

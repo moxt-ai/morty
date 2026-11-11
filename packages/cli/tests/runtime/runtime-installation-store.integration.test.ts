@@ -9,7 +9,7 @@ import {
     type RuntimeInstallationStoreError,
 } from "../../src/engine/runtime/connection/runtime-installation-store.ts";
 
-describe("Runtime installation storage", () => {
+describe("Computer installation storage", () => {
     it("Given an ordinary data directory name, When a host saves a connection, Then local storage accepts the path without treating it as an application identity", async () => {
         const directory = await mkdtemp(join(tmpdir(), "morty-engine-directory-"));
         const signal = new AbortController().signal;
@@ -20,7 +20,7 @@ describe("Runtime installation storage", () => {
                     computerId: "channel_directory",
                     defaultWorkspace: join(directory, "workspace"),
                     relayOrigin: new URL("https://relay.example.com/"),
-                    runtimeCredential: "a".repeat(43),
+                    computerCredential: "a".repeat(43),
                 },
                 signal,
             );
@@ -49,7 +49,7 @@ describe("Runtime installation storage", () => {
                     computerId: "channel_context",
                     defaultWorkspace: join(stateRoot, "workspace"),
                     relayOrigin: new URL("https://relay.example.com/"),
-                    runtimeCredential: "a".repeat(43),
+                    computerCredential: "a".repeat(43),
                 },
                 signal,
             );
@@ -63,7 +63,7 @@ describe("Runtime installation storage", () => {
                     computerId: "channel_new",
                     defaultWorkspace: join(stateRoot, "workspace"),
                     relayOrigin: new URL("https://relay.example.com/"),
-                    runtimeCredential: "b".repeat(43),
+                    computerCredential: "b".repeat(43),
                 },
                 signal,
             );
@@ -78,8 +78,8 @@ describe("Runtime installation storage", () => {
         }
     });
 
-    it("Given two isolated Engine data directories, When each saves a Runtime connection, Then each resumes only its own opaque connection", async () => {
-        const stateRoot = await mkdtemp(join(tmpdir(), "morty-runtime-installations-"));
+    it("Given two isolated Engine data directories, When each saves a Computer connection, Then each resumes only its own opaque connection", async () => {
+        const stateRoot = await mkdtemp(join(tmpdir(), "morty-computer-installations-"));
         const signal = new AbortController().signal;
         const computerId = "shared:channel";
         try {
@@ -90,7 +90,7 @@ describe("Runtime installation storage", () => {
                     computerId,
                     defaultWorkspace: "/workspace/morty",
                     relayOrigin: new URL("https://relay.example.com/"),
-                    runtimeCredential: "a".repeat(43),
+                    computerCredential: "a".repeat(43),
                 },
                 signal,
             );
@@ -99,7 +99,7 @@ describe("Runtime installation storage", () => {
                     computerId,
                     defaultWorkspace: "/workspace/moxt",
                     relayOrigin: new URL("https://relay.example.com/"),
-                    runtimeCredential: "b".repeat(43),
+                    computerCredential: "b".repeat(43),
                 },
                 signal,
             );
@@ -109,7 +109,7 @@ describe("Runtime installation storage", () => {
             expect(resumed.computerId).toBe(computerId);
             expect(resumed).toBeInstanceOf(VerifiedComputerConnection);
             if (!(resumed instanceof VerifiedComputerConnection)) {
-                throw new Error("Expected a verified Runtime connection");
+                throw new Error("Expected a verified Computer connection");
             }
             expect(resumed.computerId).toBe(computerId);
             await expect(moxt.listConnections(signal)).resolves.toEqual([resumed]);

@@ -346,7 +346,7 @@ const acpSessionUpdateSchema = z.discriminatedUnion("sessionUpdate", [
 export type AcpSessionUpdate = z.infer<typeof acpSessionUpdateSchema>;
 
 const lifecycleBase = { commandId: identifier };
-// The user message the Agent recorded for the prompt, as its message identity. Agents that report none, and Runtimes
+// The user message the Agent recorded for the prompt, as its message identity. Agents that report none, and Computers
 // before it existed, omit it.
 const promptMessageId = z.string().min(1).max(2_048);
 export interface PromptExecutionContext {
@@ -380,7 +380,7 @@ const promptFailedSchema = z
     })
     .readonly();
 const lifecycleMetadataSchema = z.discriminatedUnion("kind", [
-    // `changedByCommandId` names the command whose admission to or departure from the queue changed it. Runtimes
+    // `changedByCommandId` names the command whose admission to or departure from the queue changed it. Computers
     // before it existed omit it, so a reader must treat an unnamed change as possibly any command's.
     z.object({ changedByCommandId: identifier.optional(), kind: z.literal("session.queue.changed") }).readonly(),
     z
@@ -408,10 +408,10 @@ const lifecycleMetadataSchema = z.discriminatedUnion("kind", [
     z
         .object({ ...lifecycleBase, attemptId: identifier, epoch: identifier, kind: z.literal("prompt.started") })
         .readonly(),
-    // The Runtime did not run this prompt itself: it handed it to the native session's owner, another client of the
+    // The Computer did not run this prompt itself: it handed it to the native session's owner, another client of the
     // Agent such as the Codex app, which runs queued input on its own terms. `queued`: the owner holds the prompt and
     // may keep holding it; Codex pauses its queue after an interrupted turn until its user continues. `started`: the
-    // owner began running it, so only the owner can stop it and cancelling it here leaves it running. Runtimes before
+    // owner began running it, so only the owner can stop it and cancelling it here leaves it running. Computers before
     // this event never delegate.
     z
         .object({ ...lifecycleBase, kind: z.literal("prompt.delegated"), stage: z.enum(["queued", "started"]) })
@@ -458,7 +458,7 @@ export const isPromptTerminal = (payload: LifecycleMetadata): payload is PromptT
 };
 
 /**
- * How a completed prompt ended. Agents report a cancelled prompt with the ACP stop reason `cancelled`, the Runtime
+ * How a completed prompt ended. Agents report a cancelled prompt with the ACP stop reason `cancelled`, the Computer
  * reports a prompt folded into another one as `steered`, and `execution` marks a prompt withdrawn before it started.
  * Readers classify a completion here instead of comparing stop reasons themselves.
  */
@@ -487,7 +487,7 @@ const sessionEventPayloadSchema = z.discriminatedUnion("type", [
 export type SessionEventPayload = z.infer<typeof sessionEventPayloadSchema>;
 const positionSchema = z.string().regex(/^(0|[1-9][0-9]*)$/);
 /**
- * `restated` marks a lifecycle event that restates an outcome the Runtime already recorded for its command, answering a
+ * `restated` marks a lifecycle event that restates an outcome the Computer already recorded for its command, answering a
  * retried request about that command or republishing it after a restart. It is not a new fact: it reaches clients and
  * the request it answers, but never status notifications.
  */
@@ -504,7 +504,7 @@ const sharedSessionEventFields = {
 };
 const sessionLiveEventFields = { ...sharedSessionEventFields, position: positionSchema };
 /**
- * A Session history entry: the Agent's events, and the lifecycle of each turn the Runtime ran, in the order they
+ * A Session history entry: the Agent's events, and the lifecycle of each turn the Computer ran, in the order they
  * happened. A history page is read in the same order as the live stream, so its reader needs no other record to tell
  * which command a message belongs to or where its turn ended.
  */

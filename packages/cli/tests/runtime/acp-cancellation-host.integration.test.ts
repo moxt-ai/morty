@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { expect, test } from "vitest";
 
 // @no-uc: A cancelled external ACP startup must not leak a rejected promise into
-// the Runtime host's process-level fatal handler and terminate unrelated work.
+// the Computer host's process-level fatal handler and terminate unrelated work.
 test.each(["before-observation", "while-pending"])(
     "settles %s ACP startup cancellation and serves later settings in the same process",
     async (cancellation) => {

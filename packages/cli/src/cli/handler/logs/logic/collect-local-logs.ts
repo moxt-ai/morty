@@ -26,7 +26,7 @@ export interface CollectedLocalLogs {
  * root. Works with the daemon stopped: a report about a daemon that will not
  * start, or a worker that died silently, has to be collectable from disk alone.
  *
- * Covers both log owners: the Runtime's own `daemon.log` under the version-scoped
+ * Covers both log owners: the Computer's own `daemon.log` under the version-scoped
  * CLI installation, and the manager-written worker lifecycle and unhandled
  * rejection logs under the control installation.
  *

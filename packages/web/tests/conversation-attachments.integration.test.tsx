@@ -181,7 +181,7 @@ test("Given an existing Session draft, When Chat remounts during an attachment r
     const app = await createTestApp({ connectAgent: true, sessionIds: new Set(["draft-lifetime"]) });
     await app.user.click(await app.waitForView(() => getByRole(document.body, "button", { name: "Open Session" })));
     const dialog = await app.waitForView(() => getByRole(document.body, "dialog", { name: "Open Session" }));
-    // The first entry is previewed automatically; reselecting it can overlap that Runtime operation.
+    // The first entry is previewed automatically; reselecting it can overlap that Computer operation.
     await app.waitForView(() =>
         expect(getByRole(dialog, "button", { name: "Native draft-lifetime" }).getAttribute("aria-pressed")).toBe(
             "true",

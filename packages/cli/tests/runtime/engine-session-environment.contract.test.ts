@@ -4,12 +4,12 @@ import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import {
+    COMPUTER_HEARTBEAT_ACK_MESSAGE,
+    COMPUTER_HEARTBEAT_MESSAGE,
     decodeDaemonToServiceMessage,
     encodeSessionCreateCommand,
     encodeSessionPrepareCommand,
     type NativeSessionTarget,
-    RUNTIME_HEARTBEAT_ACK_MESSAGE,
-    RUNTIME_HEARTBEAT_MESSAGE,
 } from "@morty-build/client/protocol";
 import { listen, port } from "@morty-build/relay-test-support/websocket";
 import { expect, test, vi } from "vitest";
@@ -70,10 +70,10 @@ createInterface({ input: process.stdin }).on("line", (line) => {
     });
     const relay = new WebSocketServer({ server: http });
     relay.on("connection", (socket) => {
-        socket.send(JSON.stringify({ kind: "runtime.liveness.ready" }));
+        socket.send(JSON.stringify({ kind: "computer.liveness.ready" }));
         socket.on("message", (encoded) => {
-            if (encoded.toString() === RUNTIME_HEARTBEAT_MESSAGE) {
-                socket.send(RUNTIME_HEARTBEAT_ACK_MESSAGE);
+            if (encoded.toString() === COMPUTER_HEARTBEAT_MESSAGE) {
+                socket.send(COMPUTER_HEARTBEAT_ACK_MESSAGE);
             }
         });
     });
@@ -98,7 +98,7 @@ createInterface({ input: process.stdin }).on("line", (line) => {
                 computerId: "environment-channel",
                 defaultWorkspace: workspace,
                 relayOrigin: new URL(origin),
-                runtimeCredential: "r".repeat(43),
+                computerCredential: "r".repeat(43),
             },
             signal,
         );
@@ -127,7 +127,7 @@ createInterface({ input: process.stdin }).on("line", (line) => {
                 const receive = async () => {
                     for await (const [encoded] of on(socket, "message", { signal: loopSignal })) {
                         const text = String(encoded);
-                        if (text === RUNTIME_HEARTBEAT_MESSAGE) {
+                        if (text === COMPUTER_HEARTBEAT_MESSAGE) {
                             continue;
                         }
                         const message = decodeDaemonToServiceMessage(text);

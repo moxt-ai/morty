@@ -18,7 +18,7 @@ import { AgentProcessPool } from "../../src/engine/session/process/agent-process
 
 export type TestSessionPrepareOptions = Omit<SessionPrepareOptions, "adapter">;
 
-/** Composes real session resources for direct session scenarios, with Runtime owning the adapters. */
+/** Composes real session resources for direct session scenarios, with Computer owning the adapters. */
 export class SessionRuntimeFixture {
     readonly sessions: SessionManager;
     readonly adapters: AdapterRegistry;

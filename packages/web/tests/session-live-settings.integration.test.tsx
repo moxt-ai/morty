@@ -10,7 +10,7 @@ test("Given a streaming response, When I change its session model, Then the chan
     const app = await createTestApp({ connectAgent: true });
     const daemon = app.daemon;
     if (daemon === null) {
-        throw new Error("Expected the connected Runtime");
+        throw new Error("Expected the connected Computer");
     }
     await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "wait for steering");
     await app.queryElementByTestId(

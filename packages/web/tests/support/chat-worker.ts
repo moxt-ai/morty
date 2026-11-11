@@ -67,7 +67,7 @@ export async function createChatWorkerEnvironment(
                 harness: agents[0]?.harness ?? "codex",
             });
             if (setup.status !== 202) {
-                throw new Error(`Could not prepare the test Runtime: ${setup.status} ${await setup.text()}`);
+                throw new Error(`Could not prepare the test Computer: ${setup.status} ${await setup.text()}`);
             }
             const sessionClient = async (
                 target: { readonly harness: string; readonly sessionId: string },
@@ -88,7 +88,7 @@ export async function createChatWorkerEnvironment(
             return {
                 failure: runtime.failure,
                 continueReply: runtime.continueReply,
-                /** Closes a Session through the Relay, the way another Morty client of this Runtime would. */
+                /** Closes a Session through the Relay, the way another Morty client of this Computer would. */
                 closeSession: async (sessionId: string): Promise<void> => {
                     const response = await cloud.dispatchFetch(
                         `${origin}/__test/computers/${runtime.computerId}/harnesses/${agents[0]?.harness ?? "codex"}/sessions/${encodeURIComponent(sessionId)}/close`,
@@ -120,7 +120,7 @@ export async function createChatWorkerEnvironment(
                         client.close();
                     }
                 },
-                /** Starts a turn through the Relay, the way another Morty client of this Runtime would. */
+                /** Starts a turn through the Relay, the way another Morty client of this Computer would. */
                 submitTurn: async (sessionId: string, content: string): Promise<void> => {
                     const signal = AbortSignal.timeout(30000);
                     const target = { harness: agents[0]?.harness ?? "codex", sessionId };
@@ -135,11 +135,11 @@ export async function createChatWorkerEnvironment(
                         client.close();
                     }
                 },
-                /** Restarts the Runtime offering these Agents, as when the user installs or removes one. */
+                /** Restarts the Computer offering these Agents, as when the user installs or removes one. */
                 replaceAgents: async (replacement: readonly ControlledAgent[]): Promise<void> => {
                     const [first, ...others] = replacement;
                     if (first === undefined) {
-                        throw new Error("A controlled Runtime needs at least one Agent");
+                        throw new Error("A controlled Computer needs at least one Agent");
                     }
                     await runtime.restartWithAgents({
                         additionalAgents: others.map((agent) => ({ harness: agent.harness, name: agent.label })),
@@ -147,7 +147,7 @@ export async function createChatWorkerEnvironment(
                         agentName: first.label,
                     });
                 },
-                /** Reads the current title through a separate client's production Runtime API. */
+                /** Reads the current title through a separate client's production Computer API. */
                 readSessionTitle: async (sessionId: string) => {
                     const session = await runtime.api.managedSession(
                         { harness: agents[0]?.harness ?? "codex", sessionId },
@@ -155,7 +155,7 @@ export async function createChatWorkerEnvironment(
                     );
                     return session.entry.title;
                 },
-                /** Renames a Session through the Relay, the way another Morty client of this Runtime would. */
+                /** Renames a Session through the Relay, the way another Morty client of this Computer would. */
                 renameSession: async (sessionId: string, title: string): Promise<void> => {
                     const signal = AbortSignal.timeout(30000);
                     const target = { harness: agents[0]?.harness ?? "codex", sessionId };
@@ -168,8 +168,8 @@ export async function createChatWorkerEnvironment(
                 },
                 disconnect: runtime.disconnect,
                 reconnect: runtime.reconnect,
-                /** Revokes the Runtime through the Relay, as the Relay does when its credential was reused. */
-                revoke: async (): Promise<void> => await cloud.revokeRuntime(identity.computerId),
+                /** Revokes the Computer through the Relay, as the Relay does when its credential was reused. */
+                revoke: async (): Promise<void> => await cloud.revokeComputer(identity.computerId),
                 writeFiles: runtime.writeFiles,
             };
         };

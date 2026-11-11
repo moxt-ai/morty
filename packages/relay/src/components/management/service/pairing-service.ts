@@ -18,73 +18,74 @@ export class PairingService {
         this.#pairings = cx.services.pairings;
     }
 
-    readonly createProjectRuntimePairing = (
+    readonly createProjectComputerPairing = (
         computerId: string,
         pairingKey: string,
         idempotencyKey: string,
         signal: AbortSignal,
-    ) => this.#pairings.createProjectRuntimePairing(computerId, pairingKey, idempotencyKey, signal);
+    ) => this.#pairings.createProjectComputerPairing(computerId, pairingKey, idempotencyKey, signal);
 
     readonly probeProject = async (computerId: string, signal: AbortSignal): Promise<void> => {
-        await this.#pairings.authorizeProject(computerId, ProjectPermission.RuntimeRead, signal);
+        await this.#pairings.authorizeProject(computerId, ProjectPermission.ComputerRead, signal);
     };
 
-    readonly listProjectRuntimes = async (computerId: string, signal: AbortSignal) => {
-        const channels = await this.#pairings.listProjectRuntimes(computerId, signal);
+    readonly listProjectComputers = async (computerId: string, signal: AbortSignal) => {
+        const channels = await this.#pairings.listProjectComputers(computerId, signal);
         return await Promise.all(
             channels.map(
                 async (channel) =>
                     new ComputerSummary(
                         channel,
-                        await this.#channels.readRuntimeStatus({ computerId: channel.computerId }, signal),
+                        await this.#channels.readComputerStatus({ computerId: channel.computerId }, signal),
                     ),
             ),
         );
     };
 
-    readonly getRuntimeAgents = async (computerId: string, signal: AbortSignal) => {
-        const channels = await this.#pairings.listProjectRuntimes(computerId, signal);
+    readonly getComputerAgents = async (computerId: string, signal: AbortSignal) => {
+        const channels = await this.#pairings.listProjectComputers(computerId, signal);
         const channel = channels.find((candidate) => candidate.computerId === computerId);
         if (channel === undefined) {
-            // A revoked Runtime is not listed; saying so lets its Machine be paired again instead of waiting for it.
-            if (await this.#pairings.isProjectRuntimeRevoked(computerId, signal)) {
-                throw new PairingDirectoryError("runtime_revoked", "The Runtime has been revoked");
+            // A revoked Computer is not listed; saying so lets its Machine be paired again instead of waiting for it.
+            if (await this.#pairings.isProjectComputerRevoked(computerId, signal)) {
+                throw new PairingDirectoryError("computer_revoked", "The Computer has been revoked");
             }
             throw new PairingDirectoryError(
-                "runtime_access_denied",
-                "The project credential cannot access this Runtime",
+                "computer_access_denied",
+                "The project credential cannot access this Computer",
             );
         }
         return new ComputerSummary(
             channel,
-            await this.#channels.readRuntimeStatus({ computerId: channel.computerId }, signal),
+            await this.#channels.readComputerStatus({ computerId: channel.computerId }, signal),
         );
     };
 
-    readonly readProjectRuntimePairing = (computerId: string, signal: AbortSignal) =>
-        this.#pairings.readProjectRuntimePairing(computerId, signal);
+    readonly readProjectComputerPairing = (computerId: string, signal: AbortSignal) =>
+        this.#pairings.readProjectComputerPairing(computerId, signal);
 
-    readonly redeemRuntimePairing: PairingDirectoryService["redeemRuntimePairing"] = async (
+    readonly redeemComputerPairing: PairingDirectoryService["redeemComputerPairing"] = async (
         computerId,
         pairingCode,
         machineName,
         workspaceName,
         agents,
         signal,
-    ) => await this.#pairings.redeemRuntimePairing(computerId, pairingCode, machineName, workspaceName, agents, signal);
+    ) =>
+        await this.#pairings.redeemComputerPairing(computerId, pairingCode, machineName, workspaceName, agents, signal);
 
     readonly authorizePairedHost = async (computerId: string, signal: AbortSignal) =>
         await this.#pairings.authorizePairedHost(computerId, signal);
 
-    readonly revokeProjectRuntime = async (computerId: string, signal: AbortSignal): Promise<void> => {
-        const revoked = await this.#pairings.revokeProjectRuntime(computerId, signal);
+    readonly revokeProjectComputer = async (computerId: string, signal: AbortSignal): Promise<void> => {
+        const revoked = await this.#pairings.revokeProjectComputer(computerId, signal);
         try {
-            await this.#channels.disconnectRuntime(revoked.access, signal);
+            await this.#channels.disconnectComputer(revoked.access, signal);
         } catch (cause) {
             signal.throwIfAborted();
             throw new PairingDirectoryError(
-                "runtime_disconnect_failed",
-                "The Runtime was revoked but its active connection could not be closed",
+                "computer_disconnect_failed",
+                "The Computer was revoked but its active connection could not be closed",
                 { cause },
             );
         }

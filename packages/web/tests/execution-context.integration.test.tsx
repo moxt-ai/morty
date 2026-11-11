@@ -79,7 +79,7 @@ test("Given a connected computer on mobile, When the user views the conversation
     }
 });
 
-test("Given a connected Runtime, When a saved conversation disconnects and recovers, Then its shared connection indicator and details follow the session without losing its directory", {
+test("Given a connected Computer, When a saved conversation disconnects and recovers, Then its shared connection indicator and details follow the session without losing its directory", {
     timeout: 30_000,
 }, async () => {
     const clock = new TestClock("2026-10-21T08:00:00Z");
@@ -108,7 +108,7 @@ test("Given a connected Runtime, When a saved conversation disconnects and recov
     expect(details.textContent).toContain("Online");
     await app.user.keyboard("{Escape}");
     if (app.daemon === null) {
-        throw new Error("Expected a connected Runtime");
+        throw new Error("Expected a connected Computer");
     }
     await app.daemon.disconnect();
     await showReconnectNotice(app, clock);
@@ -206,7 +206,7 @@ test("Given a saved conversation and a different draft directory, When the user 
     }
 });
 
-test("Given no paired Runtime, When the user dismisses setup and inspects the computer, Then execution details distinguish pairing from a session that has not started", {
+test("Given no paired Computer, When the user dismisses setup and inspects the computer, Then execution details distinguish pairing from a session that has not started", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp();

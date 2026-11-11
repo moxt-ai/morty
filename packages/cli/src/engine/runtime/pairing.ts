@@ -13,14 +13,14 @@ import { publishAgentCatalog } from "./catalog/publish-agent-catalog.ts";
 import { createCatalogAgentResolver } from "./catalog/resolve-catalog-agent.ts";
 import { createRuntimeConfig, type RuntimeConfig, RuntimeLocalContext } from "./config.ts";
 import type { VerifiedComputerConnection } from "./connection/computer-connection.ts";
-import type { RuntimeCredentials } from "./connection/runtime-credentials.ts";
+import type { ComputerCredentials } from "./connection/computer-credentials.ts";
 import type { RuntimeInstallationStore } from "./connection/runtime-installation-store.ts";
 
 const PAIRING_TIMEOUT_MILLISECONDS = 20_000;
 const PAIRING_CODE_PATTERN = /^[A-HJ-NP-Z2-9]{4}(?:-[A-HJ-NP-Z2-9]{4}){4}$/;
 const TOKEN_PATTERN = /^[a-zA-Z0-9_-]{32,256}$/;
 
-const REDEEM_RESPONSE_KEYS = ["computerId", "runtimeCredential"] as const;
+const REDEEM_RESPONSE_KEYS = ["computerId", "computerCredential"] as const;
 
 interface PairCommandOptions {
     readonly code: string;
@@ -31,10 +31,10 @@ interface PairCommandOptions {
 
 interface ClaimPairingResponse {
     readonly computerId: string;
-    readonly runtimeCredential: string;
+    readonly computerCredential: string;
 }
 
-export interface MortyRuntimePairingOptions {
+export interface MortyComputerPairingOptions {
     readonly defaultWorkspace: string;
     readonly pairingCode: string;
     readonly computerId: string;
@@ -91,7 +91,7 @@ export function parsePairingCode(value: string): string {
 
 export function validateComputerId(value: string): string {
     if (!isIdentifier(value)) {
-        throw new PairingClientError("invalid_computer_id", "The Runtime pairing ID is invalid");
+        throw new PairingClientError("invalid_computer_id", "The Computer pairing ID is invalid");
     }
     return value;
 }
@@ -145,17 +145,17 @@ function decodePairingResponse(value: unknown): ClaimPairingResponse {
     if (!isRecord(value) || !hasExactKeys(value, REDEEM_RESPONSE_KEYS)) {
         throw new PairingClientError("invalid_relay_response", "The relay returned an invalid pairing response");
     }
-    const runtimeCredential = value["runtimeCredential"];
+    const computerCredential = value["computerCredential"];
     const computerId = value["computerId"];
     if (
         typeof computerId !== "string" ||
         !isIdentifier(computerId) ||
-        typeof runtimeCredential !== "string" ||
-        !TOKEN_PATTERN.test(runtimeCredential)
+        typeof computerCredential !== "string" ||
+        !TOKEN_PATTERN.test(computerCredential)
     ) {
         throw new PairingClientError("invalid_relay_response", "The relay returned an invalid pairing response");
     }
-    return { computerId, runtimeCredential };
+    return { computerId, computerCredential };
 }
 
 async function claimPairing(
@@ -200,12 +200,12 @@ async function claimPairing(
 
 function buildSavedRuntimeConfig(
     connection: VerifiedComputerConnection,
-    credentials: RuntimeCredentials,
+    credentials: ComputerCredentials,
     defaultWorkspace: string,
     inventory: LocalAgentInventory,
     localContext: RuntimeLocalContext,
 ): RuntimeConfig {
-    const relayUrl = mortyApiUrl(connection.relayOrigin, "/v1/runtimes/connect");
+    const relayUrl = mortyApiUrl(connection.relayOrigin, "/v1/computers/connect");
     relayUrl.protocol = relayUrl.protocol === "https:" ? "wss:" : "ws:";
 
     const config: RuntimeConfig = createRuntimeConfig(
@@ -246,7 +246,7 @@ function buildSavedRuntimeConfig(
     return config;
 }
 
-async function pairRuntime(
+async function pairComputer(
     installation: RuntimeInstallationStore,
     options: PairCommandOptions,
     signal: AbortSignal,
@@ -266,20 +266,20 @@ async function pairRuntime(
             computerId: claim.computerId,
             defaultWorkspace,
             relayOrigin: options.relayOrigin,
-            runtimeCredential: claim.runtimeCredential,
+            computerCredential: claim.computerCredential,
         },
         signal,
     );
     return connection;
 }
 
-export async function pairRuntimeConnection(
+export async function pairComputerConnection(
     installation: RuntimeInstallationStore,
-    options: MortyRuntimePairingOptions,
+    options: MortyComputerPairingOptions,
     signal: AbortSignal,
     environment: Readonly<NodeJS.ProcessEnv>,
 ): Promise<VerifiedComputerConnection> {
-    return await pairRuntime(
+    return await pairComputer(
         installation,
         {
             code: parsePairingCode(options.pairingCode),
@@ -292,7 +292,7 @@ export async function pairRuntimeConnection(
     );
 }
 
-export async function prepareRuntimeConnection(
+export async function prepareComputerConnection(
     installation: RuntimeInstallationStore,
     connection: VerifiedComputerConnection,
     signal: AbortSignal,
@@ -312,7 +312,7 @@ export async function prepareRuntimeConnection(
     );
     return buildSavedRuntimeConfig(
         connection,
-        installation.runtimeCredentials(connection.pairingGeneration),
+        installation.computerCredentials(connection.pairingGeneration),
         defaultWorkspace,
         inventory,
         localContext,

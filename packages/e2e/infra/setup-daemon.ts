@@ -6,9 +6,9 @@ import {
     connectControlledAgentRuntime,
     createMortyFakeDaemon,
 } from "../../../tests/support/fake-daemon/runtime.ts";
-import type { RuntimeCredentials } from "../../cli/src/engine/runtime/connection/runtime-credentials.ts";
+import type { ComputerCredentials } from "../../cli/src/engine/runtime/connection/computer-credentials.ts";
 import type { SetupRuntime } from "../../cli/src/setup/setup.ts";
-import { memoryRuntimeCredentials } from "../../cli/tests/support/runtime-credentials.ts";
+import { memoryComputerCredentials } from "../../cli/tests/support/computer-credentials.ts";
 import { jsonRequest, text } from "./chat-api.ts";
 
 type Connection = Readonly<{
@@ -42,7 +42,7 @@ type DaemonRelease = "outdated" | "latest";
 export class ControlledSetupRuntime implements SetupRuntime {
     readonly #saved = new Map<string, Connection>();
     /** Each saved connection's relay credential, which rotates on every connection like the daemon's saved one. */
-    readonly #credentials = new Map<string, RuntimeCredentials>();
+    readonly #credentials = new Map<string, ComputerCredentials>();
     readonly #active = new Map<string, Awaited<ReturnType<typeof connectControlledAgentRuntime>>>();
     readonly #failed = Promise.withResolvers<never>();
     readonly failure = this.#failed.promise;
@@ -50,7 +50,7 @@ export class ControlledSetupRuntime implements SetupRuntime {
     #options: ControlledAgentBehavior;
     /** What `morty agents --output-json` reports as unavailable; `null` is a release without that option. */
     #unavailableAgents: readonly UnavailableAgentReport[] | null = null;
-    /** Agents `morty agents` reports ready although the running Runtime did not publish them. */
+    /** Agents `morty agents` reports ready although the running Computer did not publish them. */
     #unpublishedReadyAgents: readonly { readonly harness: string; readonly label: string }[] = [];
     readonly #machineName: string;
     #upgrade: ControlledUpgrade;
@@ -99,7 +99,7 @@ export class ControlledSetupRuntime implements SetupRuntime {
         if (args[0] === "agents") {
             const output = args.find((argument) => argument.startsWith("--output-json="));
             if (output === undefined || this.#unavailableAgents === null) {
-                throw new Error("Unsupported controlled Runtime command: agents");
+                throw new Error("Unsupported controlled Computer command: agents");
             }
             await writeFile(
                 output.slice("--output-json=".length),
@@ -126,13 +126,13 @@ export class ControlledSetupRuntime implements SetupRuntime {
         if (args[0] === "start") {
             const connection = Array.from(this.#saved.values()).at(-1);
             if (connection === undefined) {
-                throw new Error("Unknown controlled Runtime connection");
+                throw new Error("Unknown controlled Computer connection");
             }
             await this.#connect(connection, signal);
             return result;
         }
         if (args[0] !== "pair") {
-            throw new Error(`Unsupported controlled Runtime command: ${args[0]}`);
+            throw new Error(`Unsupported controlled Computer command: ${args[0]}`);
         }
         // Like the released CLI's `--code-stdin`: the code arrives on standard input and never in the arguments.
         if (!args.includes("--code-stdin") || input === undefined || args.includes(input.trim())) {
@@ -152,11 +152,11 @@ export class ControlledSetupRuntime implements SetupRuntime {
         const connection: Connection = {
             computer_id: text(claim["computerId"], "Channel ID"),
             pairingGeneration: crypto.randomUUID(),
-            credential: text(claim["runtimeCredential"], "Runtime credential"),
+            credential: text(claim["computerCredential"], "Computer credential"),
             origin,
         };
         this.#saved.set(connection.pairingGeneration, connection);
-        this.#credentials.set(connection.pairingGeneration, memoryRuntimeCredentials(connection.credential));
+        this.#credentials.set(connection.pairingGeneration, memoryComputerCredentials(connection.credential));
         await this.#connect(connection, signal);
         return result;
     };
@@ -176,7 +176,7 @@ export class ControlledSetupRuntime implements SetupRuntime {
 
     /**
      * Sets what this machine's Morty reports: Agents it cannot offer, such as one the user has not signed in to, and
-     * Agents that are ready now but missing from the catalog a running Runtime published at startup.
+     * Agents that are ready now but missing from the catalog a running Computer published at startup.
      */
     readonly reportAgentInventory = (
         unavailable: readonly UnavailableAgentReport[],
@@ -212,7 +212,7 @@ export class ControlledSetupRuntime implements SetupRuntime {
                 return await cancelled();
             case "interrupted-switch": {
                 // The manager has stopped the old worker and keeps starting the new one
-                // after the CLI stops waiting, so the Runtime comes back on its own.
+                // after the CLI stops waiting, so the Computer comes back on its own.
                 const switching = this.#switchRelease(signal);
                 this.#pendingSwitch = switching;
                 await this.#switchStarted.promise;
@@ -274,8 +274,8 @@ export class ControlledSetupRuntime implements SetupRuntime {
             if (this.#active.get(connection.pairingGeneration) !== daemon) {
                 return;
             }
-            // Like the manager's daemon, a revoked Runtime stops its own connection and the others keep running.
-            if (Reflect.get(Object(error), "code") === "runtime_relay_revoked") {
+            // Like the manager's daemon, a revoked Computer stops its own connection and the others keep running.
+            if (Reflect.get(Object(error), "code") === "computer_relay_revoked") {
                 this.#active.delete(connection.pairingGeneration);
                 return;
             }
@@ -283,10 +283,10 @@ export class ControlledSetupRuntime implements SetupRuntime {
         });
     }
 
-    #savedCredentials(pairingGeneration: string): RuntimeCredentials {
+    #savedCredentials(pairingGeneration: string): ComputerCredentials {
         const credentials = this.#credentials.get(pairingGeneration);
         if (credentials === undefined) {
-            throw new Error("The saved connection has no Runtime credential");
+            throw new Error("The saved connection has no Computer credential");
         }
         return credentials;
     }
@@ -317,7 +317,7 @@ export class ControlledSetupRuntime implements SetupRuntime {
         await Promise.all(Array.from(this.#active.values(), (daemon) => daemon.reconnect()));
     };
 
-    /** Simulates the manager forgetting every saved Runtime connection. */
+    /** Simulates the manager forgetting every saved Computer connection. */
     readonly forgetConnections = async (): Promise<void> => {
         await this.disconnect();
         this.#saved.clear();

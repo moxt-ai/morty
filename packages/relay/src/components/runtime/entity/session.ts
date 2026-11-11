@@ -18,7 +18,7 @@ function sessionRuntimeErrorStatus(code: string): number {
         code === SESSION_CLOSED_ERROR_CODE ||
         code === "session_conflict" ||
         code === "idempotency_conflict" ||
-        // An operation the Runtime started but cannot tell the end of: repeating it cannot answer differently.
+        // An operation the Computer started but cannot tell the end of: repeating it cannot answer differently.
         code === "session_creation_outcome_unknown" ||
         code === "command_result_expired" ||
         code === "turn_already_started" ||
@@ -62,7 +62,7 @@ export class SessionRuntimeError extends Error implements HttpError {
 }
 
 /**
- * The Runtime answered a control command with its own `session.operation.failed`: it finished handling that command
+ * The Computer answered a control command with its own `session.operation.failed`: it finished handling that command
  * without a result. Unlike a lost connection, timeout or invalid reply, nothing about the command is still in flight.
  */
 export class RuntimeOperationFailedError extends SessionRuntimeError {}

@@ -4,19 +4,19 @@ import { join } from "node:path";
 import { agent as acpAgent, methods, PROTOCOL_VERSION } from "@agentclientprotocol/sdk/unstable";
 import {
     AGENT_SETTINGS_DISCOVERED_KIND,
+    COMPUTER_HEARTBEAT_ACK_MESSAGE,
+    COMPUTER_HEARTBEAT_MESSAGE,
+    COMPUTER_LIVENESS_READY_KIND,
     encodeAgentSettingsDiscoverCommand,
-    encodeRuntimeLivenessReadyEvent,
-    RUNTIME_HEARTBEAT_ACK_MESSAGE,
-    RUNTIME_HEARTBEAT_MESSAGE,
-    RUNTIME_LIVENESS_READY_KIND,
+    encodeComputerLivenessReadyEvent,
 } from "@morty-build/client/protocol";
 import { type ControlledAcpPeer, ControlledEndpointConnection } from "@morty-build/runtime-test-support/fake-daemon";
 import { WebSocketServer } from "ws";
 import { AcpAgentDefinition } from "../../../src/engine/acp/agent/agent-definition.ts";
 import { RuntimeLocalContext } from "../../../src/engine/runtime/config.ts";
 import { RuntimeLoop } from "../../../src/engine/runtime/runtime-loop.ts";
+import { memoryComputerCredentials } from "../../support/computer-credentials.ts";
 import { createControlledRuntimeConfig as createRuntimeConfig } from "../../support/controlled-runtime-config.ts";
-import { memoryRuntimeCredentials } from "../../support/runtime-credentials.ts";
 
 // External Agent failure modes: cancellation before its initialization promise is
 // observed, cancellation while initialization is pending, and ordinary startup failure.
@@ -31,7 +31,7 @@ if (directory === undefined || cancellation === undefined) {
     throw new Error("Missing fixture arguments");
 }
 const controller = new AbortController();
-const reason = new Error("The Runtime owner cancelled initialization");
+const reason = new Error("The Computer owner cancelled initialization");
 let cancelled = false;
 let endpointClosed = false;
 const http = createServer((request, response) => {
@@ -81,11 +81,11 @@ const endpoint = (): ControlledAcpPeer => {
 };
 
 relay.on("connection", (socket) => {
-    socket.send(encodeRuntimeLivenessReadyEvent({ kind: RUNTIME_LIVENESS_READY_KIND }));
+    socket.send(encodeComputerLivenessReadyEvent({ kind: COMPUTER_LIVENESS_READY_KIND }));
     socket.on("message", (encoded) => {
         const text = encoded.toString();
-        if (text === RUNTIME_HEARTBEAT_MESSAGE) {
-            socket.send(RUNTIME_HEARTBEAT_ACK_MESSAGE);
+        if (text === COMPUTER_HEARTBEAT_MESSAGE) {
+            socket.send(COMPUTER_HEARTBEAT_ACK_MESSAGE);
         } else if (JSON.parse(text).kind === AGENT_SETTINGS_DISCOVERED_KIND) {
             settings.resolve();
         }
@@ -110,7 +110,7 @@ const config = createRuntimeConfig(
         computerId: "cancellation-test",
         defaultWorkspace: join(directory, "workspace"),
         relayUrl: new URL(`ws://127.0.0.1:${address.port}/daemon`),
-        credentials: memoryRuntimeCredentials("r".repeat(43)),
+        credentials: memoryComputerCredentials("r".repeat(43)),
     },
     [
         new AcpAgentDefinition(

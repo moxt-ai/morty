@@ -2,7 +2,7 @@ import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import { parseArgs } from "node:util";
 import * as v from "valibot";
-import { memoryRuntimeCredentials } from "../packages/cli/tests/support/runtime-credentials.ts";
+import { memoryComputerCredentials } from "../packages/cli/tests/support/computer-credentials.ts";
 import { connectControlledAgentRuntime, createMortyFakeDaemon } from "../tests/support/fake-daemon/runtime.ts";
 import { mortyReply } from "../tests/support/fake-daemon/scenarios.ts";
 
@@ -60,7 +60,7 @@ const pairing = v.parse(
 const behavior = { harness: "codex", agentName: "Controlled verification Agent", reply: mortyReply };
 const harness = createMortyFakeDaemon(behavior);
 const claim = v.parse(
-    v.object({ runtimeCredential: v.string() }),
+    v.object({ computerCredential: v.string() }),
     await request(`/morty/api/v1/pairings/${owner.computerId}/redeem`, 200, undefined, {
         pairingCode: pairing.pairingCode,
         machineName: "Deployment verification",
@@ -74,7 +74,7 @@ await using _runtime = await connectControlledAgentRuntime({
     connection: {
         computerId: owner.computerId,
         origin: origin.origin,
-        credentials: memoryRuntimeCredentials(claim.runtimeCredential),
+        credentials: memoryComputerCredentials(claim.computerCredential),
     },
 });
 const chat = `/morty/api/chat/computers/${owner.computerId}`;

@@ -16,7 +16,7 @@ import { CodexFixture } from "../support/agents/codex.ts";
 import { prepareNewRealSession, withRealDaemon } from "../support/agents/real-daemon.ts";
 import { FakeOpenAiProvider } from "../support/llm/openai.ts";
 
-test("Given a newly created real Codex Session, When Chat requests its V2 history before the first prompt, Then Runtime returns an empty replay without resuming the active Codex thread", async () => {
+test("Given a newly created real Codex Session, When Chat requests its V2 history before the first prompt, Then Computer returns an empty replay without resuming the active Codex thread", async () => {
     await using provider = await FakeOpenAiProvider.start("morty-test-model", "UNUSED_REPLY");
     await using agent = await CodexFixture.create(provider);
     await withRealDaemon(new CodexAgentSpecification(), agent.environment, async (peer) => {

@@ -1,7 +1,7 @@
 import {
+    COMPUTER_HEARTBEAT_ACK_KIND,
+    COMPUTER_LIVENESS_READY_KIND,
     decodeKnownServiceToDaemonMessage,
-    RUNTIME_HEARTBEAT_ACK_KIND,
-    RUNTIME_LIVENESS_READY_KIND,
     type RuntimeUpgradeResult,
     readUndecodedRequestAddress,
 } from "@morty-build/client/protocol";
@@ -20,11 +20,11 @@ import { createRuntimeCommandDispatcher } from "../command/dispatcher.ts";
 import { send } from "../command/transport.ts";
 import { replyFailure } from "../command/turn-replies.ts";
 import type { RuntimeConfig } from "../config.ts";
+import { ComputerRelayRevokedError, isComputerRelayRevocation } from "./computer-revocation.ts";
 import { connectRelay } from "./connect.ts";
 import type { RelayConnectionDiagnostics } from "./diagnostics.ts";
 import { RelayConnectionLiveness } from "./liveness.ts";
 import { relayCredentialHeaders } from "./relay-authentication.ts";
-import { isRuntimeRelayRevocation, RuntimeRelayRevokedError } from "./runtime-revocation.ts";
 import type { RuntimeSessionEventPublisher } from "./session-event-publisher.ts";
 
 /** A bounded local write of the credential the Relay accepted. */
@@ -93,7 +93,7 @@ export async function runRelayConnection({
     });
     const { socket } = relay;
     // Saving the rotation waits for the Relay to confirm the connection: a Relay can also open a socket only to close it,
-    // as it does for a revoked Runtime. Until then the next connection repeats the same rotation, which is harmless.
+    // as it does for a revoked Computer. Until then the next connection repeats the same rotation, which is harmless.
     let rotationSaved: Promise<void> = Promise.resolve();
     diagnostics.connectionOpened(connectionEpoch);
     const connectionController = new AbortController();
@@ -202,8 +202,8 @@ export async function runRelayConnection({
             signal.addEventListener("abort", stop, { once: true });
             const handleClose = (event: CloseEvent): void => {
                 diagnostics.connectionClosed(connectionEpoch, event.code, event.reason, "relay");
-                if (isRuntimeRelayRevocation(event.code, event.reason)) {
-                    rejectConnection(new RuntimeRelayRevokedError(event.code, event.reason));
+                if (isComputerRelayRevocation(event.code, event.reason)) {
+                    rejectConnection(new ComputerRelayRevokedError(event.code, event.reason));
                     return;
                 }
                 resolveConnection();
@@ -245,7 +245,7 @@ export async function runRelayConnection({
                         return;
                     }
                     const kind = message.kind;
-                    if (kind === RUNTIME_LIVENESS_READY_KIND) {
+                    if (kind === COMPUTER_LIVENESS_READY_KIND) {
                         if (ready) {
                             return;
                         }
@@ -261,9 +261,9 @@ export async function runRelayConnection({
                                 return;
                             }
                             failAndClose(
-                                new Error("The rotated Runtime credential could not be saved", { cause: error }),
+                                new Error("The rotated Computer credential could not be saved", { cause: error }),
                                 1011,
-                                "Runtime credential unavailable",
+                                "Computer credential unavailable",
                                 "credential",
                             );
                         });
@@ -272,7 +272,7 @@ export async function runRelayConnection({
                         onConnected();
                         return;
                     }
-                    if (kind === RUNTIME_HEARTBEAT_ACK_KIND) {
+                    if (kind === COMPUTER_HEARTBEAT_ACK_KIND) {
                         connectionLiveness.acknowledge();
                         return;
                     }
@@ -305,7 +305,7 @@ export async function runRelayConnection({
 }
 
 /**
- * Answers a request this Runtime cannot run, as sent, so its sender learns at once that nothing was executed instead of
+ * Answers a request this Computer cannot run, as sent, so its sender learns at once that nothing was executed instead of
  * waiting out its deadline. Only a message naming its own `requestId` can be answered.
  */
 function refuseUnsupportedRequest(socket: WebSocket, encoded: string): void {
@@ -318,6 +318,6 @@ function refuseUnsupportedRequest(socket: WebSocket, encoded: string): void {
         request.requestId,
         request.target,
         "unsupported_operation",
-        "This Morty Runtime does not support the requested operation.",
+        "This Morty Computer does not support the requested operation.",
     );
 }

@@ -1,9 +1,9 @@
 /**
- * A Runtime daemon's relay credential rotates on every connection: the daemon saves a successor before connecting
+ * A Computer daemon's relay credential rotates on every connection: the daemon saves a successor before connecting
  * and presents it in this header beside its current credential, and the Relay makes the successor current as it
  * accepts the connection.
  */
-export const RUNTIME_SUCCESSOR_CREDENTIAL_HEADER = "morty-successor-runtime-credential";
+export const COMPUTER_SUCCESSOR_CREDENTIAL_HEADER = "morty-successor-computer-credential";
 
 const SECRET_LENGTH = 43;
 const CREDENTIAL_PATTERN = /^[A-Za-z0-9_-]{43,256}$/u;
@@ -20,15 +20,15 @@ function encodeSecret(bytes: Uint8Array): string {
  * The credential that succeeds `current`: the same routing prefix with a new 256-bit secret. A credential ends with
  * its 43-character secret, so a successor keeps reaching the Project the current credential belongs to.
  */
-export function runtimeCredentialSuccessor(current: string): string {
+export function computerCredentialSuccessor(current: string): string {
     if (!CREDENTIAL_PATTERN.test(current)) {
-        throw new TypeError("The Runtime credential is invalid");
+        throw new TypeError("The Computer credential is invalid");
     }
     return `${current.slice(0, -SECRET_LENGTH)}${encodeSecret(crypto.getRandomValues(new Uint8Array(32)))}`;
 }
 
-/** Whether `successor` is a credential `runtimeCredentialSuccessor(current)` could have produced. */
-export function isRuntimeCredentialSuccessor(current: string, successor: string): boolean {
+/** Whether `successor` is a credential `computerCredentialSuccessor(current)` could have produced. */
+export function isComputerCredentialSuccessor(current: string, successor: string): boolean {
     return (
         CREDENTIAL_PATTERN.test(current) &&
         CREDENTIAL_PATTERN.test(successor) &&

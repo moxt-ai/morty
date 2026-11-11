@@ -62,22 +62,22 @@ async function project(_name = "Runtime pairing") {
         pair: async (key: string): Promise<Pairing> =>
             v.parse(pairingSchema, await responseJson(await create(key), 201)),
         status: async (_pairing: Pairing) => management("GET"),
-        claim: async (pairing: Pairing, endpoint: "claim" | "redeem" = "redeem", machineName = "Runtime machine") =>
+        claim: async (pairing: Pairing, endpoint: "claim" | "redeem" = "redeem", machineName = "Computer machine") =>
             request(endpoint === "claim" ? "/pairings/claim" : `/v1/pairings/${pairing.computerId}/redeem`, "POST", {
                 pairingCode: pairing.pairingCode,
                 machineName,
-                workspaceName: "Runtime workspace",
+                workspaceName: "Computer workspace",
                 agents: [],
             }),
         revoke: async (_pairing: Pairing) => {
             try {
-                await backend.revokeRuntime(AbortSignal.timeout(10000));
+                await backend.revokeComputer(AbortSignal.timeout(10000));
                 return new Response(null, { status: 204 });
             } catch {
                 return new Response(null, { status: 500 });
             }
         },
-        list: async () => Response.json({ runtimes: await backend.runtimes(AbortSignal.timeout(10000)) }),
+        list: async () => Response.json({ computers: await backend.computers(AbortSignal.timeout(10000)) }),
         publish: async (pairing: Pairing, token: string) =>
             request(`/channels/${pairing.computerId}/catalog`, "PUT", { agents: [] }, token),
         storage: async <T>(operation: (storage: DurableObjectStorage) => Promise<T> | T): Promise<T> =>
@@ -102,12 +102,12 @@ it("Given pending reservations at capacity, When their deadline passes without e
     const app = await project();
     const first = await app.pair("reservation-0");
     expect(await responseJson(await app.create("over-capacity"), 429)).toMatchObject({
-        error: { code: "runtime_quota_exceeded" },
+        error: { code: "computer_quota_exceeded" },
     });
     // Expiry is the passage of time. Neither reading it nor reclaiming capacity
     // may require persisting a lifecycle transition, even when that write fails.
     await app.sql(`CREATE TRIGGER reject_expiry_maintenance BEFORE INSERT ON audit_events
-        WHEN NEW.action = 'runtime_pairing.expired'
+        WHEN NEW.action = 'computer_pairing.expired'
         BEGIN SELECT RAISE(ABORT, 'Expiry maintenance is unavailable'); END`);
     vi.setSystemTime(new Date(first.expiresAt));
     expect(await responseJson(await app.status(first), 200)).toEqual({ status: "expired" });
@@ -137,7 +137,7 @@ it("Given a delayed claim, When newer requests have reused expired capacity, The
             {
                 computerId: pairing.computerId,
                 codeHash,
-                daemonHash: await hashPairingCredential("delayed-runtime-credential"),
+                daemonHash: await hashPairingCredential("delayed-computer-credential"),
                 now: claimTime,
                 machineName: "Delayed machine",
                 workspaceName: "Delayed workspace",
@@ -149,24 +149,24 @@ it("Given a delayed claim, When newer requests have reused expired capacity, The
     );
     expect(claimed).toBe(false);
     expect(await responseJson(await app.status(pairing), 200)).toMatchObject({ status: "pending" });
-    expect(await responseJson(await app.list(), 200)).toEqual({ runtimes: [] });
+    expect(await responseJson(await app.list(), 200)).toEqual({ computers: [] });
 });
 
 it("Given a claim whose audit cannot commit, When the caller retries after recovery, Then the request is still pending and can be claimed once", async () => {
     const app = await project();
     const pairing = await app.pair("claim-rollback");
     await app.sql(`CREATE TRIGGER reject_claim BEFORE INSERT ON audit_events
-        WHEN NEW.action = 'runtime_pairing.claimed'
+        WHEN NEW.action = 'computer_pairing.claimed'
         BEGIN SELECT RAISE(ABORT, 'Controlled claim failure'); END`);
     expect((await app.claim(pairing)).status).toBe(500);
     expect(await responseJson(await app.status(pairing), 200)).toMatchObject({ status: "pending" });
-    expect(await responseJson(await app.list(), 200)).toEqual({ runtimes: [] });
+    expect(await responseJson(await app.list(), 200)).toEqual({ computers: [] });
     await app.sql("DROP TRIGGER reject_claim");
     const claimed = v.parse(
-        v.object({ runtimeCredential: v.string() }),
+        v.object({ computerCredential: v.string() }),
         await responseJson(await app.claim(pairing), 200),
     );
-    expect((await app.publish(pairing, claimed.runtimeCredential)).status).toBe(204);
+    expect((await app.publish(pairing, claimed.computerCredential)).status).toBe(204);
     expect(await responseJson(await app.claim(pairing), 200)).toMatchObject(claimed);
 });
 
@@ -187,16 +187,16 @@ it.each(["redeem"] as const)(
         // A retry returns the exact current redemption contract.
         const identity = { computerId: v.string() };
         const credential = v.pipe(v.string(), v.regex(/^[a-zA-Z0-9_-]{32,256}$/));
-        const runtimeCredential = v.parse(
-            v.strictObject({ ...identity, runtimeCredential: credential }),
+        const computerCredential = v.parse(
+            v.strictObject({ ...identity, computerCredential: credential }),
             response,
-        ).runtimeCredential;
+        ).computerCredential;
         expect(response).toMatchObject({
             computerId: pairing.computerId,
         });
-        expect((await app.publish(pairing, runtimeCredential)).status).toBe(204);
+        expect((await app.publish(pairing, computerCredential)).status).toBe(204);
         expect(await responseJson(await app.list(), 200)).toMatchObject({
-            runtimes: [{ computerId: pairing.computerId, machineName: "Runtime machine" }],
+            computers: [{ computerId: pairing.computerId, machineName: "Computer machine" }],
         });
         expect(
             await app.storage((storage) =>
@@ -204,12 +204,12 @@ it.each(["redeem"] as const)(
                     .exec("SELECT action FROM audit_events WHERE category = 'pairing' ORDER BY action")
                     .toArray(),
             ),
-        ).toEqual([{ action: "runtime_pairing.claimed" }, { action: "runtime_pairing.requested" }]);
+        ).toEqual([{ action: "computer_pairing.claimed" }, { action: "computer_pairing.requested" }]);
         expect((await app.revoke(pairing)).status).toBe(204);
         expect(await responseJson(await app.claim(pairing, endpoint), 400)).toMatchObject({
             error: { code: "invalid_pairing_code" },
         });
-        expect((await app.publish(pairing, runtimeCredential)).status).toBe(401);
+        expect((await app.publish(pairing, computerCredential)).status).toBe(401);
     },
 );
 
@@ -217,25 +217,25 @@ it("Given a revocation whose audit cannot commit, When it is retried, Then acces
     const app = await project();
     const pairing = await app.pair("revoke-rollback");
     const claimed = v.parse(
-        v.object({ runtimeCredential: v.string() }),
+        v.object({ computerCredential: v.string() }),
         await responseJson(await app.claim(pairing), 200),
     );
     await app.sql(`CREATE TRIGGER reject_revocation BEFORE INSERT ON audit_events
-        WHEN NEW.action = 'runtime_pairing.revoked'
+        WHEN NEW.action = 'computer_pairing.revoked'
         BEGIN SELECT RAISE(ABORT, 'Controlled revocation failure'); END`);
     expect((await app.revoke(pairing)).status).toBe(500);
     expect(await responseJson(await app.status(pairing), 200)).toMatchObject({ status: "paired" });
-    expect((await app.publish(pairing, claimed.runtimeCredential)).status).toBe(204);
+    expect((await app.publish(pairing, claimed.computerCredential)).status).toBe(204);
     await app.sql("DROP TRIGGER reject_revocation");
     expect((await app.revoke(pairing)).status).toBe(204);
-    expect((await app.publish(pairing, claimed.runtimeCredential)).status).toBe(401);
+    expect((await app.publish(pairing, claimed.computerCredential)).status).toBe(401);
     expect(await responseJson(await app.status(pairing), 200)).toEqual({
         status: "revoked",
         revokedAt: new Date().toISOString(),
     });
 });
 
-it("Given one available Runtime place, When distinct requests compete, Then exactly one reserves it and retries keep the same identity", async () => {
+it("Given one available Computer place, When distinct requests compete, Then exactly one reserves it and retries keep the same identity", async () => {
     const app = await project();
     const responses = await Promise.all([app.create("competitor-a"), app.create("competitor-b")]);
     expect(responses.map((response) => response.status).sort()).toEqual([201, 429]);
@@ -250,34 +250,36 @@ it("Given one available Runtime place, When distinct requests compete, Then exac
     expect(await responseJson(await app.status(pairing), 200)).toMatchObject({ status: "pending" });
 });
 
-it("Given a pending pairing, When claims arrive concurrently, Then they return the same credential and its Runtime survives the handshake deadline", async () => {
+it("Given a pending pairing, When claims arrive concurrently, Then they return the same credential and its Computer survives the handshake deadline", async () => {
     const app = await project();
     const pairing = await app.pair("claim-once");
     const responses = await Promise.all([app.claim(pairing), app.claim(pairing)]);
     const results = await Promise.all(responses.map((response) => responseJson(response, 200)));
     expect(results[0]).toEqual(results[1]);
-    const { runtimeCredential } = v.parse(v.object({ runtimeCredential: v.string() }), results[0]);
+    const { computerCredential } = v.parse(v.object({ computerCredential: v.string() }), results[0]);
     vi.setSystemTime(new Date(Date.parse(pairing.expiresAt) + 1));
     expect(await responseJson(await app.claim(pairing), 400)).toMatchObject({
         error: { code: "invalid_pairing_code" },
     });
     expect(await responseJson(await app.status(pairing), 200)).toMatchObject({ status: "paired", agents: [] });
-    expect((await app.publish(pairing, runtimeCredential)).status).toBe(204);
-    expect(await responseJson(await app.list(), 200)).toMatchObject({ runtimes: [{ computerId: pairing.computerId }] });
+    expect((await app.publish(pairing, computerCredential)).status).toBe(204);
+    expect(await responseJson(await app.list(), 200)).toMatchObject({
+        computers: [{ computerId: pairing.computerId }],
+    });
     expect((await app.revoke(pairing)).status).toBe(204);
     const revoked = await responseJson(await app.status(pairing), 200);
     expect(revoked).toEqual({ status: "revoked", revokedAt: new Date().toISOString() });
     vi.setSystemTime(new Date(Date.now() + 1_000));
     expect((await app.revoke(pairing)).status).toBe(204);
     expect(await responseJson(await app.status(pairing), 200)).toEqual(revoked);
-    expect(await responseJson(await app.publish(pairing, runtimeCredential), 401)).toMatchObject({
+    expect(await responseJson(await app.publish(pairing, computerCredential), 401)).toMatchObject({
         error: { code: "unauthorized" },
     });
-    expect(await responseJson(await app.list(), 200)).toEqual({ runtimes: [] });
+    expect(await responseJson(await app.list(), 200)).toEqual({ computers: [] });
     expect(await app.pair("claim-once")).toEqual(pairing);
 });
 
-it("Given an unclaimed Runtime identity, When it is revoked, Then its code cannot claim it and revocation remains visible after expiry", async () => {
+it("Given an unclaimed Computer identity, When it is revoked, Then its code cannot claim it and revocation remains visible after expiry", async () => {
     const app = await project();
     const pairing = await app.pair("cancel-before-claim");
     expect((await app.revoke(pairing)).status).toBe(204);
@@ -288,12 +290,12 @@ it("Given an unclaimed Runtime identity, When it is revoked, Then its code canno
     });
     vi.setSystemTime(new Date(pairing.expiresAt));
     expect(await responseJson(await app.status(pairing), 200)).toEqual(revoked);
-    expect(await responseJson(await app.list(), 200)).toEqual({ runtimes: [] });
+    expect(await responseJson(await app.list(), 200)).toEqual({ computers: [] });
 });
 
-it("Given separate Projects, When they use the same pairing idempotency key, Then each receives its own stable Runtime identity", async () => {
+it("Given separate Projects, When they use the same pairing idempotency key, Then each receives its own stable Computer identity", async () => {
     const first = await project();
-    const second = await project("Another Runtime pairing App");
+    const second = await project("Another Computer pairing App");
     const left = await first.pair("same-key");
     const right = await second.pair("same-key");
     expect(left.computerId).not.toBe(right.computerId);
@@ -301,10 +303,10 @@ it("Given separate Projects, When they use the same pairing idempotency key, The
     expect(await second.pair("same-key")).toEqual(right);
 });
 
-it("Given a Runtime its owner revoked, When the computer is paired again, Then the old daemon credential is not accepted", async () => {
+it("Given a Computer its owner revoked, When the computer is paired again, Then the old daemon credential is not accepted", async () => {
     const app = await project();
     const original = await app.pair("original");
-    const credential = v.object({ computerId: v.string(), runtimeCredential: v.string() });
+    const credential = v.object({ computerId: v.string(), computerCredential: v.string() });
     const old = v.parse(credential, await responseJson(await app.claim(original), 200));
     expect(old.computerId).toBe(original.computerId);
     expect((await app.revoke(original)).status).toBe(204);
@@ -312,8 +314,8 @@ it("Given a Runtime its owner revoked, When the computer is paired again, Then t
     const current = v.parse(credential, await responseJson(await app.claim(replacement), 200));
     expect(current.computerId).toBe(replacement.computerId);
     expect(current.computerId).toBe(old.computerId);
-    expect(current.runtimeCredential).not.toBe(old.runtimeCredential);
-    expect((await app.publish(original, old.runtimeCredential)).status).toBe(401);
-    expect((await app.publish(replacement, old.runtimeCredential)).status).toBe(401);
-    expect((await app.publish(replacement, current.runtimeCredential)).status).toBe(204);
+    expect(current.computerCredential).not.toBe(old.computerCredential);
+    expect((await app.publish(original, old.computerCredential)).status).toBe(401);
+    expect((await app.publish(replacement, old.computerCredential)).status).toBe(401);
+    expect((await app.publish(replacement, current.computerCredential)).status).toBe(204);
 });

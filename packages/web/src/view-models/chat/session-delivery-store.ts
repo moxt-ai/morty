@@ -12,7 +12,7 @@ import { formatError } from "../format-error.ts";
 import { runtimeCoversMessage, runtimeHoldsCommand, type SessionExecutionState } from "./session-execution.ts";
 
 type SubmitRequest = Parameters<MortyClient["turns"]["submit"]>[1];
-/** The service took the message: it runs now, or the Runtime queued it behind the Session's earlier work. */
+/** The service took the message: it runs now, or the Computer queued it behind the Session's earlier work. */
 type AcceptedTurn = { readonly turnId: string; readonly queued: boolean };
 export type SubmitTurn = (request: SubmitRequest, signal: AbortSignal) => Promise<AcceptedTurn>;
 /**
@@ -31,8 +31,8 @@ type SubmissionOutcome =
     | { readonly kind: "delivery-unknown" };
 /**
  * Where this page shows a message: as the Session's next turn, or in its queue. Sending decides it from whether a
- * turn runs; once the service answers, the Runtime's admission decides it. It never changes what is submitted: the
- * Runtime alone admits a message, running it now or queueing it.
+ * turn runs; once the service answers, the Computer's admission decides it. It never changes what is submitted: the
+ * Computer alone admits a message, running it now or queueing it.
  */
 export type DeliveryPlacement = "turn" | "queue";
 
@@ -147,8 +147,8 @@ export function deliveryMessages(
 export interface SessionDeliveryStore {
     readonly state: DeliveryState;
     /**
-     * Messages the service accepted, with their files for editing, until the Runtime's account covers them. Whether
-     * the page shows one is the presentation's decision, from the Runtime's account as it stands.
+     * Messages the service accepted, with their files for editing, until the Computer's account covers them. Whether
+     * the page shows one is the presentation's decision, from the Computer's account as it stands.
      */
     readonly accepted: readonly SubmittedMessage[];
     readonly discardUnknown: () => void;
@@ -156,11 +156,11 @@ export interface SessionDeliveryStore {
     readonly awaitConnection: (message: SubmittedMessage) => void;
     readonly takeFailedMessage: () => SubmittedMessage | null;
     /**
-     * Follows the Runtime's account of the Session's execution as it now stands: an unknown delivery the Runtime holds
+     * Follows the Computer's account of the Session's execution as it now stands: an unknown delivery the Computer holds
      * is delivered, and accepted messages its account now covers release their files.
      */
     readonly observe: () => void;
-    /** The user withdrew an accepted message from the Runtime's queue, which confirmed it. */
+    /** The user withdrew an accepted message from the Computer's queue, which confirmed it. */
     readonly withdraw: (commandId: string) => void;
     /**
      * Prepares and submits a message on the Session's lifetime: the pane that started the attempt may stop before it
@@ -171,7 +171,7 @@ export interface SessionDeliveryStore {
 }
 
 /**
- * Text the Runtime has not taken: a reload returns it to the composer. A message that may have been delivered is
+ * Text the Computer has not taken: a reload returns it to the composer. A message that may have been delivered is
  * not unsent, because sending it again under a new identity could run it twice.
  */
 function unsentContent(state: DeliveryState): string | null {
@@ -218,7 +218,7 @@ export const createSessionDeliveryStore = (options: {
     readonly pendingSubmissionChanged: (journal: Omit<Journal, "attachments"> | null) => void;
     /** Persists the unsent message's text, or clears it with null. */
     readonly unsentMessageChanged: (content: string | null) => void;
-    /** The Runtime's account of the Session's execution, as the page holds it now. */
+    /** The Computer's account of the Session's execution, as the page holds it now. */
     readonly runtime: () => SessionExecutionState;
 }) => {
     type Update = {
@@ -226,14 +226,14 @@ export const createSessionDeliveryStore = (options: {
         readonly accepted?: readonly SubmittedMessage[];
     };
     /**
-     * The accepted messages the Runtime's account does not cover yet. The presentation decides what the page shows;
-     * dropping covered messages only releases their files, which nothing reads once the Runtime's account shows them.
+     * The accepted messages the Computer's account does not cover yet. The presentation decides what the page shows;
+     * dropping covered messages only releases their files, which nothing reads once the Computer's account shows them.
      */
     const uncovered = (accepted: readonly SubmittedMessage[]): readonly SubmittedMessage[] => {
         const runtime = options.runtime();
         return accepted.filter((message) => !runtimeCoversMessage(runtime, message));
     };
-    /** The service accepted the journal's message, which the page keeps until the Runtime's account covers it. */
+    /** The service accepted the journal's message, which the page keeps until the Computer's account covers it. */
     const accept = (journal: Journal, placement: DeliveryPlacement, current: SessionDeliveryStore): Update => ({
         state: { kind: "idle" },
         accepted: [
@@ -249,7 +249,7 @@ export const createSessionDeliveryStore = (options: {
     ): void => {
         set(accept(journal, placement, get()));
     };
-    /** Whether the Runtime has shown it holds the submission whose request failed, which delivered it after all. */
+    /** Whether the Computer has shown it holds the submission whose request failed, which delivered it after all. */
     const delivered = (journal: Journal): boolean => runtimeHoldsCommand(options.runtime(), journal.commandId);
     const send = async (
         journal: Journal,
@@ -340,7 +340,7 @@ export const createSessionDeliveryStore = (options: {
                 const state = current.state;
                 const confirmed: Update =
                     state.kind === "delivery-unknown" && delivered(state.journal)
-                        ? // A recovered message to run is shown by the Runtime's account; a queued one keeps its
+                        ? // A recovered message to run is shown by the Computer's account; a queued one keeps its
                           // files for editing while it waits.
                           state.journal.placement === "queue"
                             ? accept(state.journal, state.journal.placement, current)
@@ -382,7 +382,7 @@ export const createSessionDeliveryStore = (options: {
                 };
                 await send(journal, attempt.submit, signal, set, get);
             },
-            // Only an unknown delivery repeats its identity; the Runtime never runs a rejected command identity again.
+            // Only an unknown delivery repeats its identity; the Computer never runs a rejected command identity again.
             retry: async (submit) => {
                 const state = get().state;
                 return state.kind === "delivery-unknown"

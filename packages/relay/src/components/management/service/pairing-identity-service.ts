@@ -57,10 +57,10 @@ export class ComputerIdentityService {
 
     /**
      * Presents a daemon credential with its successor. The Project store rotates the credential; a retired credential
-     * presented with another successor is reported as reused, for the caller to end the Runtime's access, and one of a
-     * Runtime whose access already ended as revoked.
+     * presented with another successor is reported as reused, for the caller to end the Computer's access, and one of a
+     * Computer whose access already ended as revoked.
      */
-    readonly rotateRuntime = async (
+    readonly rotateComputer = async (
         presentedHash: string,
         successorHash: string,
         signal: AbortSignal,
@@ -76,11 +76,11 @@ export class ComputerIdentityService {
             }[] = [];
             let revoked = false;
             for (const source of this.#sources) {
-                const rotation = await source.rotateRuntimeCredential(presentedHash, successorHash, signal);
+                const rotation = await source.rotateComputerCredential(presentedHash, successorHash, signal);
                 switch (rotation.kind) {
                     case "rotated":
                     case "reused":
-                        matches.push({ source, kind: rotation.kind, row: rotation.runtime });
+                        matches.push({ source, kind: rotation.kind, row: rotation.computer });
                         break;
                     case "revoked":
                         revoked = true;
@@ -94,16 +94,16 @@ export class ComputerIdentityService {
             }
             const match = matches[0];
             if (matches.length !== 1 || match === undefined) {
-                throw new PairingDirectoryError("unauthorized", "A valid Runtime credential is required");
+                throw new PairingDirectoryError("unauthorized", "A valid Computer credential is required");
             }
             const computerId = validateIdentifier(match.row.computer_id, "computer_id");
             const project = await this.#projects.resolve(computerId, signal);
             signal.throwIfAborted();
             if (project === null) {
-                throw new PairingDirectoryError("unauthorized", "A valid Runtime credential is required");
+                throw new PairingDirectoryError("unauthorized", "A valid Computer credential is required");
             }
             if (!this.matchesPlacement(match.source, project)) {
-                throw new PairingDirectoryError("directory_unavailable", "Runtime storage is unavailable");
+                throw new PairingDirectoryError("directory_unavailable", "Computer storage is unavailable");
             }
             return {
                 kind: match.kind,
@@ -115,9 +115,9 @@ export class ComputerIdentityService {
                 throw cause;
             }
             if (cause instanceof DatabaseError && cause.code === "database_timeout") {
-                throw new PairingDirectoryError("directory_timeout", "The Runtime directory timed out", { cause });
+                throw new PairingDirectoryError("directory_timeout", "The Computer directory timed out", { cause });
             }
-            throw new PairingDirectoryError("directory_unavailable", "The Runtime directory is unavailable", {
+            throw new PairingDirectoryError("directory_unavailable", "The Computer directory is unavailable", {
                 cause,
             });
         }

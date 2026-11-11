@@ -128,7 +128,7 @@ test.each(["current", "another service origin", "retired configuration"] as cons
     },
 );
 
-test("Given the answer to setup's Runtime pairing is lost, When setup runs again, Then the Machine is bound to the Runtime of that same pairing", {
+test("Given the answer to setup's Computer pairing is lost, When setup runs again, Then the Machine is bound to the Computer of that same pairing", {
     timeout: 60_000,
 }, async () => {
     await using cleanup = new AsyncDisposableStack();
@@ -178,12 +178,12 @@ test("Given the answer to setup's Runtime pairing is lost, When setup runs again
             },
         );
 
-    const lost = network.interruptNextRuntimePairing();
+    const lost = network.interruptNextComputerPairing();
     expect(await run()).not.toBe(0);
     const pairing = await lost;
     expect(pairing.status).toBe(201);
     const lostPairing = v.parse(v.object({ computerId: v.string() }), JSON.parse(pairing.body));
-    const pairedRuntime = lostPairing.computerId;
+    const pairedComputer = lostPairing.computerId;
 
     expect(await run()).toBe(0);
     const saved = v.parse(
@@ -205,7 +205,7 @@ test("Given the answer to setup's Runtime pairing is lost, When setup runs again
     const originalStatus = v.parse(v.object({ status: v.string() }), await original.json()).status;
     expect(originalStatus).toBe("paired");
     expect(actual).toEqual({ computerPairing: "paired" });
-    expect(saved.identity.computer_id).toBe(pairedRuntime);
+    expect(saved.identity.computer_id).toBe(pairedComputer);
 });
 
 test("Given a computer whose Runtime Morty revoked, When setup runs again, Then it pairs the same Machine with a new Runtime and keeps the computer's identity", {
@@ -263,7 +263,7 @@ test("Given a computer whose Runtime Morty revoked, When setup runs again, Then 
     const savedIdentity = v.object({
         identity: v.object({ user_token: v.string(), computer_id: v.string() }),
     });
-    const machineRuntime = async () => {
+    const machineComputer = async () => {
         const { identity } = v.parse(savedIdentity, JSON.parse(await readFile(join(state, "config.json"), "utf8")));
         const response = await worker.fetch(
             new Request(`${fixture.origin}/morty/api/computers/${identity.computer_id}/management/machine`, {
@@ -278,8 +278,8 @@ test("Given a computer whose Runtime Morty revoked, When setup runs again, Then 
         };
     };
     const first = await run();
-    const before = await machineRuntime();
-    await fixture.revokeRuntime(before.identity.computer_id);
+    const before = await machineComputer();
+    await fixture.revokeComputer(before.identity.computer_id);
     const revokedWorkspace = await fixture.relayRequest(
         new Request(`${fixture.origin}/morty/api/chat/computers/${before.identity.computer_id}/workspace`, {
             method: "POST",
@@ -287,15 +287,15 @@ test("Given a computer whose Runtime Morty revoked, When setup runs again, Then 
         }),
     );
     expect(revokedWorkspace.status).toBe(401);
-    expect(await revokedWorkspace.json()).toMatchObject({ error: { code: "runtime_revoked" } });
+    expect(await revokedWorkspace.json()).toMatchObject({ error: { code: "computer_revoked" } });
 
-    expect((await machineRuntime()).computerPairing).toBe("revoked");
+    expect((await machineComputer()).computerPairing).toBe("revoked");
 
     const again = await run();
-    const after = await machineRuntime();
+    const after = await machineComputer();
 
     expect(again.events).toContainEqual(
-        expect.objectContaining({ status: "runtime_revoked", computerId: before.identity.computer_id }),
+        expect.objectContaining({ status: "computer_revoked", computerId: before.identity.computer_id }),
     );
     expect(again.ready.computerId).toBe(first.ready.computerId);
     expect(after.identity).toEqual(before.identity);

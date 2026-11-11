@@ -39,7 +39,7 @@ async function createPairingRelay(): Promise<PairingRelay> {
             response.end(
                 JSON.stringify({
                     computerId: "unattended-computer",
-                    runtimeCredential: "u".repeat(32),
+                    computerCredential: "u".repeat(32),
                 }),
             );
         });

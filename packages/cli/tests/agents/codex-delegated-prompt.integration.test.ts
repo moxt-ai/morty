@@ -104,7 +104,7 @@ test("Given the Codex app owns a thread whose last turn it interrupted, When a m
                 queue.parse(await owner.request("thread/queue/list", { threadId: thread.id }, peer.signal)).data,
             ).toEqual([]);
 
-            // Stopping a queued message leaves this Runtime following the owner's thread.
+            // Stopping a queued message leaves this Computer following the owner's thread.
             completed = Promise.withResolvers();
             await ownerTurn("Typed in the Codex app");
             await nextEvent(peer, (event) => userText(event) === "Typed in the Codex app");

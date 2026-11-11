@@ -63,7 +63,7 @@ export type SessionProjectionEffect =
       }
     /**
      * The history was loaded again: the page may have missed settings changes, and the history's settings events
-     * cannot tell the current settings, because a change made from a settings menu writes none. The Runtime is asked
+     * cannot tell the current settings, because a change made from a settings menu writes none. The Computer is asked
      * for its current settings.
      */
     | { readonly kind: "read-settings" };
@@ -104,7 +104,7 @@ function newestTitle(events: readonly SessionPresentationEvent[]): string | unde
     return undefined;
 }
 
-/** Live settings updates invalidate the display; only a Runtime read establishes current settings. */
+/** Live settings updates invalidate the display; only a Computer read establishes current settings. */
 function adoptionEffect(events: readonly SessionPresentationEvent[]): readonly SessionProjectionEffect[] {
     const title = newestTitle(events);
     const configurationChanged = events.some(
@@ -119,7 +119,7 @@ function adoptionEffect(events: readonly SessionPresentationEvent[]): readonly S
     ];
 }
 
-/** A new history baseline adopts its title, and leaves the current settings to the Runtime. */
+/** A new history baseline adopts its title, and leaves the current settings to the Computer. */
 function baselineEffects(events: readonly SessionPresentationEvent[]): readonly SessionProjectionEffect[] {
     const title = newestTitle(events);
     return [...(title === undefined ? [] : [{ kind: "adopted" as const, title }]), { kind: "read-settings" }];
@@ -271,7 +271,7 @@ export function transitionSessionProjection(
 }
 
 /**
- * Marks what the Runtime reported running and queued at this point of the timeline. A running command owns the work
+ * Marks what the Computer reported running and queued at this point of the timeline. A running command owns the work
  * that follows; a confirmed idle Session settles only the history already observed; a command seen queued keeps its
  * cancellation hidden if it never starts, even after it leaves the queue. A projection without a baseline has no
  * timeline to mark.
