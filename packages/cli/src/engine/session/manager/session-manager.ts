@@ -86,7 +86,7 @@ export class SessionManager {
     readonly #store: SessionStore;
     readonly #onSessionClosed: (event: SessionCloseNoticeEvent) => void;
     readonly #timer: Timer;
-    #observer: SessionObserver;
+    readonly #observer: SessionObserver;
 
     constructor({
         observer,
@@ -135,10 +135,6 @@ export class SessionManager {
             return false;
         }
         return await runtime.recordControlEvent(event);
-    };
-
-    readonly setObserver = (observer: SessionObserver): void => {
-        this.#observer = observer;
     };
 
     #isHeld(target: NativeSessionTarget): boolean {
@@ -963,9 +959,6 @@ export class SessionManager {
         const { sessionGenerationId, throughPosition } = this.#store.events.livePosition(session.target);
         return { sessionGenerationId, throughPosition, interactions: [] };
     };
-
-    readonly hasPreparedSession = (target: NativeSessionTarget, cwd: string): boolean =>
-        this.#executionProcesses.get(target)?.runsIn(cwd) === true;
 
     readonly createNativeSession = async (options: SessionCreationOptions): Promise<NativeSessionTarget> =>
         this.#operations.run(options, async (options) => {

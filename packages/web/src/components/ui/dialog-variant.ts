@@ -1,4 +1,4 @@
-import { type DialogSize, overlayWidthPx, resolveDialogSize } from "./overlay-width.ts";
+import { type DialogSize, overlayWidthPx } from "./overlay-width.ts";
 
 export type DialogAppearance = "default" | "setup" | "surface";
 
@@ -121,7 +121,6 @@ export function resolveDialogGeneration(options: {
     readonly mobileSheet?: boolean | undefined;
     readonly size?: DialogSize | undefined;
     readonly variant?: DialogVariant | undefined;
-    readonly wide?: boolean | undefined;
 }): {
     readonly appearance: DialogAppearance;
     readonly mobileSheet: boolean;
@@ -131,6 +130,6 @@ export function resolveDialogGeneration(options: {
     return {
         appearance: options.appearance ?? preset?.appearance ?? "default",
         mobileSheet: options.mobileSheet ?? preset?.mobileSheet ?? false,
-        size: resolveDialogSize(options.size ?? preset?.size, options.wide ?? false),
+        size: options.size ?? preset?.size ?? "standard",
     };
 }

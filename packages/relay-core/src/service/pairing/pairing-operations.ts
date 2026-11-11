@@ -1,8 +1,4 @@
-import type {
-    ProjectAccessContext,
-    ProjectPermission,
-    RuntimeAccessContext,
-} from "../../entity/authentication/project-authentication.ts";
+import type { ProjectAccessContext, ProjectPermission } from "../../entity/authentication/project-authentication.ts";
 import type {
     AgentDescriptor,
     ChannelDescriptor,
@@ -22,7 +18,7 @@ export interface PairingOperations {
         successor: string,
         signal: AbortSignal,
     ) => Promise<
-        { readonly kind: "rotated" | "reused"; readonly access: RuntimeAccessContext } | { readonly kind: "revoked" }
+        { readonly kind: "rotated" | "reused"; readonly access: VerifiedChannelAccess } | { readonly kind: "revoked" }
     >;
     readonly authorizePairedHost: (computerId: string, signal: AbortSignal) => Promise<VerifiedChannelAccess>;
     readonly authorizeProject: (

@@ -17,7 +17,6 @@ import {
     PairingDirectoryError,
     parseAgents,
     RevokedProjectRuntime,
-    VerifiedChannelAccess,
     validateIdentifier,
     validateToken,
 } from "../../entity/pairing/pairing.ts";
@@ -87,7 +86,7 @@ export class PairingDirectoryService implements PairingOperations {
         }
         // Only the daemon that saved a successor can present the retired credential with it. Another successor means
         // a copy of the credential connected first, so neither copy may keep the Runtime.
-        const storage = await this.projectStorage(rotation.access.scope, signal);
+        const storage = await this.projectStorage(rotation.access, signal);
         await storage.revokeRuntime(
             {
                 computerId: rotation.access.computerId,
@@ -114,7 +113,7 @@ export class PairingDirectoryService implements PairingOperations {
         }
         const storage = await this.projectStorage(access.scope, signal);
         const runtime = await this.readActivePairing(storage, computerId, signal);
-        return new VerifiedChannelAccess(runtime.computerId, []);
+        return { computerId: runtime.computerId };
     };
 
     readonly authorizePairing: PairingOperations["authorizePairing"] = async (computerId, permission, signal) => {
@@ -134,7 +133,7 @@ export class PairingDirectoryService implements PairingOperations {
         if (runtimeRevokedAt(row.revoked_at) !== null || row.registration === null) {
             throw new PairingDirectoryError("runtime_unavailable", "The selected Runtime is unavailable");
         }
-        return new VerifiedChannelAccess(row.computer_id, parseAgents(row.registration.agents_json));
+        return { computerId: row.computer_id };
     };
 
     private readonly decodeCreatedRuntimePairing = async (
@@ -193,7 +192,7 @@ export class PairingDirectoryService implements PairingOperations {
                     expiresAt,
                     idempotencyKey: normalizedKey,
                     ownerId: owner.actor.actorId,
-                    actorKind: owner.actor.kind.value,
+                    actorKind: owner.actor.kind,
                     actorId: owner.actor.actorId,
                     auditId: `rpa_${crypto.randomUUID()}`,
                     rejectionAuditId: `rpa_${crypto.randomUUID()}`,
@@ -241,7 +240,7 @@ export class PairingDirectoryService implements PairingOperations {
             {
                 computerId: validateIdentifier(computerId, "computer_id"),
                 now: Date.now(),
-                actorKind: owner.actor.kind.value,
+                actorKind: owner.actor.kind,
                 actorId: owner.actor.actorId,
                 auditId: `rpa_${crypto.randomUUID()}`,
             },
@@ -254,10 +253,7 @@ export class PairingDirectoryService implements PairingOperations {
         if (revokedAt === null) {
             throw new PairingDirectoryError("invalid_directory_record", "The Runtime revocation is invalid");
         }
-        return new RevokedProjectRuntime(
-            new VerifiedChannelAccess(row.computer_id, []),
-            new Date(revokedAt).toISOString(),
-        );
+        return new RevokedProjectRuntime({ computerId: row.computer_id }, new Date(revokedAt).toISOString());
     };
 
     private readonly redeemPairing = async (

@@ -50,7 +50,6 @@ export function Dialog({
     busy = false,
     variant,
     size,
-    wide = false,
     mobileSheet,
     appearance,
     testId,
@@ -66,8 +65,6 @@ export function Dialog({
     readonly variant?: DialogVariant;
     /** Overrides variant desktop max-width tier. */
     readonly size?: DialogSize;
-    /** @deprecated Prefer `size="wide"`. */
-    readonly wide?: boolean;
     /** Present as a bottom sheet on mobile, then return to a centered dialog at the sm breakpoint. */
     readonly mobileSheet?: boolean;
     readonly appearance?: DialogAppearance;
@@ -90,7 +87,6 @@ export function Dialog({
         ...(mobileSheet !== undefined ? { mobileSheet } : {}),
         ...(size !== undefined ? { size } : {}),
         ...(variant !== undefined ? { variant } : {}),
-        wide,
     });
     const setup = generated.appearance === "setup";
     const surface = generated.appearance === "surface";

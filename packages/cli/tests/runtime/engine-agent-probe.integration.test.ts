@@ -9,6 +9,7 @@ import { decodeDaemonToServiceMessage } from "@morty-build/client/protocol";
 import { listen, port } from "@morty-build/relay-test-support/websocket";
 import { expect, test, vi } from "vitest";
 import { type WebSocket, WebSocketServer } from "ws";
+import { RuntimeInstallationStore } from "../../src/engine/runtime/connection/runtime-installation-store.ts";
 import { MortyRuntimeEngine, type RunLoopParams } from "../../src/engine/runtime/engine.ts";
 import { memoryRuntimeCredentials } from "../support/runtime-credentials.ts";
 
@@ -129,7 +130,9 @@ async function createProbeEngine(options: ProbeOptions, signal: AbortSignal) {
             MORTY_TEST_PROBE_STATE: join(directory, "probe-state"),
         },
     });
-    const saved = await engine.getConnectionManager().save(
+    const saved = await (
+        await RuntimeInstallationStore.open(join(directory, "machine"), AbortSignal.timeout(5_000))
+    ).saveConnection(
         {
             computerId: "output-drain",
             defaultWorkspace: workspace,

@@ -7,6 +7,7 @@ import {
     decodeSessionConfigReadResult,
     decodeSessionConfigUpdatedEvent,
     decodeSessionRenamedEvent,
+    decodeTurn,
     type ExternalAudioContentBlock,
     type ExternalImageContentBlock,
     type ExternalResourceContentBlock,
@@ -19,6 +20,7 @@ import {
     type SessionEventLogPage,
     type SessionLiveEventBatch,
     SessionPromptDisposition,
+    type Turn,
 } from "@morty-build/client/protocol";
 import {
     MortyApiError,
@@ -31,13 +33,11 @@ import {
 } from "./errors.ts";
 import { sameNativeSession } from "./native-session.ts";
 import { nativeSessionTargetSchema } from "./protocol/session/shared/native-session-target.ts";
-import {
-    decodeMortyTurn,
-    type MortyInteractionResponseRequest,
-    type MortyPageRequest,
-    type MortyTurn,
-    type MortyTurnCancellation,
-    type SubmitMortyTurnRequest,
+import type {
+    MortyInteractionResponseRequest,
+    MortyPageRequest,
+    MortyTurnCancellation,
+    SubmitMortyTurnRequest,
 } from "./resources.ts";
 
 import {
@@ -695,14 +695,6 @@ export class MortySessionResources {
         );
     };
 
-    readonly readExternalContent = async (
-        sessionTarget: NativeSessionTarget,
-        content: MortyExternalContentBlock,
-        signal: AbortSignal,
-        maximumBytes = content.byteLength,
-    ): ReturnType<MortySessionResources["readFile"]> =>
-        await this.readFile(sessionTarget, externalContentPath(content), signal, maximumBytes);
-
     /**
      * Reads the Session's execution. Naming a command also asks for that command's delivery;
      * `command` is present when the request names a command. `lastTurn` reports how the last
@@ -756,8 +748,8 @@ export class MortyTurnResources {
         sessionTarget: NativeSessionTarget,
         request: SubmitMortyTurnRequest,
         signal: AbortSignal,
-    ): Promise<MortyTurn> => {
-        const turn = decodeMortyTurn(
+    ): Promise<Turn> => {
+        const turn = decodeTurn(
             await this.#executor.post(sessionPath(this.#computerId, sessionTarget, "turns"), request, signal),
         );
         if (turn === null) {
