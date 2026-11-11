@@ -1123,7 +1123,7 @@ function ComposerNoticeGallery() {
     return (
         <div className="grid max-w-xl gap-6">
             <Specimen layout="stack" title="Failure: computer restarted mid-request">
-                <MortyAlert>The local computer restarted while this request was running</MortyAlert>
+                <MortyAlert>The local runtime restarted while this request was running</MortyAlert>
             </Specimen>
             <Specimen layout="stack" title="Failure: attachment rejected">
                 <MortyAlert>Files must be between 1 byte and 32 MB.</MortyAlert>

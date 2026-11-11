@@ -279,7 +279,7 @@ test("Given a reply is streaming, When the Computer restarts, Then the partial r
 
     await app.waitForView(() => {
         expect(getByRole(document.body, "alert").textContent).toContain(
-            "The local computer restarted while this request was running",
+            "The local runtime restarted while this request was running",
         );
         expect(queryAllByText(document.body, "Partial reply", { exact: true })).toHaveLength(1);
         expect(agentReplies()).toHaveLength(1);
