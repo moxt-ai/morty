@@ -134,6 +134,15 @@ export class ComputerManagementService implements ProjectAccessAuthorizer {
         signal: AbortSignal,
     ): Promise<boolean> =>
         await this.storage.holdsAccess(validateIdentifier(computerId, "computer_id"), holder, signal);
+    /** The active computer's owner, read from the authoritative directory. */
+    readonly readComputerOwner = async (computerId: string, signal: AbortSignal): Promise<string | null> => {
+        const account = await this.storage.readActiveComputerScope(
+            validateIdentifier(computerId, "computer_id"),
+            signal,
+        );
+        return account?.user_id ?? null;
+    };
+
     readonly requireActiveAccount: MachineAccountDirectory["requireActiveAccount"] = async (computerId, signal) => {
         await this.#projectAccess.authorize(validateIdentifier(computerId, "computer_id"), [], signal);
     };

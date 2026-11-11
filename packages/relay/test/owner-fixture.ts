@@ -28,6 +28,7 @@ async function ownerHolder(computerId: string): Promise<SessionAccessHolder> {
         const credential = await new IdentityStorage(
             new DurableObjectDatabase(state.storage),
             computerId,
+            await createRelayAccessServices(env).control.readComputerOwner(computerId, AbortSignal.timeout(10_000)),
         ).findCredential(token, Date.now(), AbortSignal.timeout(10_000));
         if (credential === null) {
             throw new Error("Expected active owner access");

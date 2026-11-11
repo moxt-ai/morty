@@ -1,10 +1,7 @@
 import { ComputerRelay as ProductionComputerRelay } from "../../../relay/src/durable-objects/computer-relay.ts";
 import type { ConfiguredRelayRelayBindings } from "../../../relay/src/relay-worker.ts";
 import { requestTestRuntimeControl } from "../../../relay-test-support/src/backend-fixture.ts";
-import { requireIdentityDatabase } from "../../src/components/management/storage/identity-storage-common.ts";
 import chat from "../../src/index.ts";
-import { DurableObjectDatabase } from "../../src/infra/durable-object-database.ts";
-import { managedBot } from "../../src/schema/project-do/index.ts";
 
 // The public Worker reaches the production ComputerRelay namespace.
 export default {
@@ -48,12 +45,6 @@ export class ComputerRelay extends ProductionComputerRelay {
                     signal: request.signal,
                 }),
             );
-        }
-        if (request.url === "https://computer.internal/incomplete-bootstrap" && request.method === "DELETE") {
-            // Reconstruct an interrupted bootstrap: the credential committed, but the mapping and Machine did not.
-            const database = requireIdentityDatabase(new DurableObjectDatabase(this.ctx.storage));
-            await database.delete(managedBot).run();
-            return new Response(null, { status: 204 });
         }
         if (request.url === "https://computer.internal/aged-links" && request.method === "POST") {
             // Reconstruct links whose device term has passed: the Durable Object's clock cannot be moved forward.

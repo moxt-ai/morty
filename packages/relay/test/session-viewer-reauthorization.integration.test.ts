@@ -5,7 +5,11 @@ import { afterAll, expect, it } from "vitest";
 import { createTestMortyRelayApp } from "../../relay-test-support/src/app.ts";
 import { IdentityStorage } from "../../worker/src/components/management/storage/identity-storage.ts";
 import { DurableObjectDatabase } from "../../worker/src/infra/durable-object-database.ts";
-import { createRelayGateways, RelayAuthenticationConfiguration } from "../src/relay-worker.ts";
+import {
+    createRelayAccessServices,
+    createRelayGateways,
+    RelayAuthenticationConfiguration,
+} from "../src/relay-worker.ts";
 import { createOwner, issueSession, ownerRequest } from "./owner-fixture.ts";
 import { registerRuntimeFixture } from "./registered-runtime.ts";
 
@@ -123,8 +127,12 @@ it("Given a live Session view the revocation push missed, When the Project's Ses
 
     // The revocation commits, but its push never reaches the view (or reached it before the view opened).
     await runInDurableObject(env.COMPUTER_RELAY.getByName(computerId), async (_instance, state) => {
-        const identities = new IdentityStorage(new DurableObjectDatabase(state.storage), computerId);
         const signal = AbortSignal.timeout(10_000);
+        const identities = new IdentityStorage(
+            new DurableObjectDatabase(state.storage),
+            computerId,
+            await createRelayAccessServices(env).control.readComputerOwner(computerId, signal),
+        );
         const credential = await identities.findCredential(owner.token, Date.now(), signal);
         if (credential === null) {
             throw new Error("Expected the owner credential");

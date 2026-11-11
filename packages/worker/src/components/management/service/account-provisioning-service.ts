@@ -25,3 +25,8 @@ export async function provisionAccount(
         ),
     );
 }
+
+/** Resolves ownership from the directory without persisting a second copy in the computer. */
+export async function readComputerOwner(bindings: CloudBindings, computerId: string, signal: AbortSignal) {
+    return await createRelayAccessServices(relayEnvironment(bindings)).control.readComputerOwner(computerId, signal);
+}

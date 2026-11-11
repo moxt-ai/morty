@@ -32,6 +32,7 @@ export interface CloudBindings {
     readonly ASSETS?: unknown;
     readonly DATABASE?: unknown;
     readonly CHAT_COMPUTER_ID?: string;
+    readonly CHAT_OWNER_USER_ID?: string | null;
     readonly CHAT_SESSION_OPERATIONS?: ManagedSessionOperations;
     /**
      * Commits an identity change that may end access to the computer; `change` reports whether it changed anything.

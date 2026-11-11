@@ -7,14 +7,26 @@ import { holdsAccess } from "../../worker/src/components/management/service/auth
 import { IdentityStorage } from "../../worker/src/components/management/storage/identity-storage.ts";
 import { DurableObjectDatabase } from "../../worker/src/infra/durable-object-database.ts";
 import { migrateComputerStorage } from "../src/durable-objects/migrate-computer-storage.ts";
+import { createRelayAccessServices } from "../src/relay-worker.ts";
 import { machineAccount } from "../src/schema/d1/index.ts";
 import { computerDirectoryDrizzle } from "../src/storage/relay-drizzle-database.ts";
 import { SqliteComputerManagementStore } from "../src/storage/sqlite-computer-management-store.ts";
 
 /** The computer's store as its ComputerRelay composes it, answering whose access holds from the computer's identities. */
 export function computerManagementStore(computerId: string, storage: DurableObjectStorage) {
-    return new SqliteComputerManagementStore(computerId, new DurableObjectDatabaseAdapter(storage), (holder, signal) =>
-        holdsAccess(new IdentityStorage(new DurableObjectDatabase(storage), computerId), holder, signal),
+    return new SqliteComputerManagementStore(
+        computerId,
+        new DurableObjectDatabaseAdapter(storage),
+        async (holder, signal) =>
+            holdsAccess(
+                new IdentityStorage(
+                    new DurableObjectDatabase(storage),
+                    computerId,
+                    await createRelayAccessServices(env).control.readComputerOwner(computerId, signal),
+                ),
+                holder,
+                signal,
+            ),
     );
 }
 

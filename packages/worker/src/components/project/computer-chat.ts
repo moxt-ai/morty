@@ -9,6 +9,7 @@ import { cloudComputerId } from "../../middleware/computer-context.ts";
 import { ManagedSessionOperations } from "../chat/infra/managed-session-operations.ts";
 import { computerBootstrap } from "../management/entity/computer-bootstrap.ts";
 import { relayIdentifier } from "../management/entity/computer-management.ts";
+import { readComputerOwner } from "../management/service/account-provisioning-service.ts";
 import { holdsAccess } from "../management/service/authentication-service.ts";
 import { IdentityStorage } from "../management/storage/identity-storage.ts";
 
@@ -38,13 +39,18 @@ export class ComputerChat {
     readonly holdsAccess = async (
         computerId: string,
         holder: SessionAccessHolder,
+        env: CloudBindings,
         signal: AbortSignal,
     ): Promise<boolean> => {
         if (!this.#owns(computerId)) {
             throw new Error("Durable Object computer identity does not match the request.");
         }
         this.#database ??= new DurableObjectDatabase(this.#storage);
-        return await holdsAccess(new IdentityStorage(this.#database, computerId), holder, signal);
+        return await holdsAccess(
+            new IdentityStorage(this.#database, computerId, await readComputerOwner(env, computerId, signal)),
+            holder,
+            signal,
+        );
     };
 
     #database: DurableObjectDatabase | undefined;
@@ -69,7 +75,7 @@ export class ComputerChat {
         }
         return await createComputerApplication(this.#runtime(validatedComputerId)).fetch(
             request,
-            this.#bindings(validatedComputerId, env),
+            await this.#bindings(validatedComputerId, env, request.signal),
         );
     }
 
@@ -84,7 +90,7 @@ export class ComputerChat {
                 method: "POST",
                 signal: request.signal,
             }),
-            this.#bindings(parsed.computer.computerId, env),
+            await this.#bindings(parsed.computer.computerId, env, request.signal),
         );
     };
 
@@ -128,11 +134,16 @@ export class ComputerChat {
         }
     };
 
-    readonly #bindings = (computerId: string, env: CloudBindings): CloudBindings => {
+    readonly #bindings = async (
+        computerId: string,
+        env: CloudBindings,
+        signal: AbortSignal,
+    ): Promise<CloudBindings> => {
         this.#database ??= new DurableObjectDatabase(this.#storage);
         return {
             ...env,
             CHAT_COMPUTER_ID: computerId,
+            CHAT_OWNER_USER_ID: await readComputerOwner(env, computerId, signal),
             CHAT_SESSION_OPERATIONS: this.#sessionOperations,
             CHAT_END_ACCESS: this.#endAccess,
             CHAT_CREDENTIAL_KEY: this.#credentialKey,

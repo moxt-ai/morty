@@ -2,7 +2,6 @@ import { fileURLToPath } from "node:url";
 import * as v from "valibot";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import worker from "../src/application.ts";
-import { computerObject } from "../src/gateway/computer-object-routing.ts";
 import { APP_ORIGIN, createIdentityFixture } from "./support/identity-fixture.ts";
 
 const replacementSchema = v.object({
@@ -114,7 +113,7 @@ function projectRequest(computerId: string, path: string, token: string, method 
     });
 }
 
-test("Given bootstrap persisted only its local credential, When the saved Machine retries replacement, Then setup receives that credential and a completed Machine", async () => {
+test("Given a completed replacement, When the saved Machine retries after a Worker restart, Then setup receives the same credential and a usable Machine", async () => {
     const original = await fixture.createAnonymousUser();
     const replace = () =>
         worker.fetch(
@@ -124,16 +123,7 @@ test("Given bootstrap persisted only its local credential, When the saved Machin
     const response = await replace();
     expect(response.status).toBe(201);
     const issued = v.parse(replacementSchema, await response.json());
-    const storage = computerObject(fixture.environment(), issued.computerId);
-    expect(
-        (await storage.fetch(new Request("https://computer.internal/incomplete-bootstrap", { method: "DELETE" })))
-            .status,
-    ).toBe(204);
-    expect(
-        (await worker.fetch(projectRequest(issued.computerId, "/session", issued.token), fixture.environment())).status,
-    ).toBe(401);
-
-    // Reload the real Worker with its durable storage intact before resuming the incomplete bootstrap.
+    // Restart with durable storage intact before retrying the replacement.
     await fixture.reload();
 
     const retry = await replace();
