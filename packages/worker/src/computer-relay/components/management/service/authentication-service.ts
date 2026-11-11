@@ -2,9 +2,9 @@ import type { SessionAccessHolder } from "@morty-build/client/protocol";
 import * as v from "valibot";
 import {
     accessHolder,
-    anonymousToken,
     type Credential,
     type CredentialOperation,
+    computerToken,
     type DeviceAccessDuration,
     issuedLinkTerms,
     mayPerform,
@@ -68,7 +68,7 @@ type Authorization<Operation extends CredentialOperation> =
 type EndAccessResult = { readonly kind: "ended" | "unauthenticated" | "forbidden" };
 
 type ComputerLinkResult =
-    | { readonly kind: "linked"; readonly userId: string; readonly computerId: string }
+    | { readonly kind: "linked"; readonly computerId: string }
     | { readonly kind: "unauthenticated" | "revoked" | "mismatch" };
 
 /** Who shared the link a device joined through, as the owner recognizes it. */
@@ -99,7 +99,7 @@ function classifyCredential(stored: StoredCredential): CredentialLookup {
             return stored.held
                 ? {
                       kind: "active",
-                      credential: { kind: stored.kind, credentialId: stored.credentialId, userId: stored.userId },
+                      credential: { kind: stored.kind, credentialId: stored.credentialId },
                   }
                 : { kind: "ended" };
         case "browser":
@@ -113,7 +113,6 @@ function classifyCredential(stored: StoredCredential): CredentialLookup {
                       credential: {
                           kind: stored.kind,
                           credentialId: stored.credentialId,
-                          userId: stored.userId,
                           transferId: stored.transferId,
                           deviceId: stored.deviceId,
                           accessExpiresAt: stored.accessHeldUntil,
@@ -145,7 +144,7 @@ export class AuthenticationService {
     readonly #computerId: string;
 
     readonly linkComputer = async (
-        userId: string,
+        computerId: string,
         token: string | undefined,
         signal: AbortSignal,
     ): Promise<ComputerLinkResult> => {
@@ -153,13 +152,10 @@ export class AuthenticationService {
         if (access.kind !== "authenticated") {
             return access;
         }
-        if (this.#computerId === null) {
-            return { kind: "unauthenticated" };
-        }
-        if (access.session.userId !== userId) {
+        if (access.session.computerId !== computerId) {
             return { kind: "mismatch" };
         }
-        return { kind: "linked", userId, computerId: this.#computerId };
+        return { kind: "linked", computerId: this.#computerId };
     };
 
     constructor(cx: {
@@ -173,7 +169,7 @@ export class AuthenticationService {
     }
 
     readonly #lookup = async (token: string | undefined, signal: AbortSignal): Promise<CredentialLookup> => {
-        const parsed = v.safeParse(anonymousToken, token);
+        const parsed = v.safeParse(computerToken, token);
         if (!parsed.success) {
             return { kind: "unknown" };
         }
@@ -187,7 +183,7 @@ export class AuthenticationService {
             case "active":
                 return {
                     kind: "authenticated",
-                    session: { authentication: { kind: "anonymous" }, userId: found.credential.userId },
+                    session: { authentication: { kind: "anonymous" }, computerId: this.#computerId },
                     accessExpiresAt: found.credential.kind === "browser" ? found.credential.accessExpiresAt : null,
                     holder: accessHolder(found.credential),
                     credentialKind: found.credential.kind,
@@ -200,13 +196,12 @@ export class AuthenticationService {
         }
     };
 
-    readonly createAnonymous = async (
-        userId: string,
+    readonly createComputer = async (
         computerId: string,
         signal: AbortSignal,
         token: string,
     ): Promise<AnonymousIdentity> => {
-        const identity = await this.identities.createAnonymous(userId, computerId, Date.now(), signal, token);
+        const identity = await this.identities.createComputer(computerId, Date.now(), signal, token);
         if (identity === null) {
             throw new ManagementError("LOCAL_CREDENTIAL_UNAVAILABLE", "The credential is no longer available.", 409);
         }
@@ -254,7 +249,6 @@ export class AuthenticationService {
         const code = await sharingOperationCredential(this.#computerId, access.token, request.operationId, signal);
         const requestHash = await digest(JSON.stringify([request.duration, request.replaces]));
         const issued = await this.identities.createTransfer(
-            access.credential.userId,
             access.token,
             now,
             sharedLinkTerms(access.credential, now, request.duration),
@@ -284,12 +278,7 @@ export class AuthenticationService {
         if (access.kind !== "authorized") {
             return refused(access);
         }
-        const issued = await this.identities.createRecoveryToken(
-            access.credential.userId,
-            access.token,
-            Date.now(),
-            signal,
-        );
+        const issued = await this.identities.createRecoveryToken(access.token, Date.now(), signal);
         return issued === null ? { kind: "unauthenticated" } : { kind: "issued", token: issued };
     };
 
@@ -325,7 +314,7 @@ export class AuthenticationService {
         switch (access.kind) {
             case "authorized": {
                 const own = access.credential.kind === "browser" ? access.credential.deviceId : null;
-                const stored = await this.identities.linkedDevices(access.credential.userId, Date.now(), signal);
+                const stored = await this.identities.linkedDevices(Date.now(), signal);
                 const devices = stored.flatMap((device) => {
                     const heldUntil = device.accessHeldUntil;
                     // Only a device that holds access now is listed, with the term it holds it until.
@@ -366,9 +355,7 @@ export class AuthenticationService {
             return refused(access);
         }
         if (
-            !(await this.#endAccess(() =>
-                this.identities.revokeAllAccess(access.credential.userId, access.token, successor, Date.now(), signal),
-            ))
+            !(await this.#endAccess(() => this.identities.revokeAllAccess(access.token, successor, Date.now(), signal)))
         ) {
             return { kind: "unauthenticated" };
         }
@@ -388,7 +375,7 @@ export class AuthenticationService {
             return refused(access);
         }
         await this.#endAccess(async () => {
-            await this.identities.revokeOtherAccess(access.credential.userId, access.token, Date.now(), signal);
+            await this.identities.revokeOtherAccess(access.token, Date.now(), signal);
             return true;
         });
         return { kind: "revoked" };
@@ -408,7 +395,6 @@ export class AuthenticationService {
         }
         await this.#endAccess(async () => {
             await this.identities.endOtherBrowserAccess(
-                access.credential.userId,
                 access.credential.kind === "browser" ? access.credential.deviceId : null,
                 Date.now(),
                 signal,
@@ -438,11 +424,7 @@ export class AuthenticationService {
         if (access.credential.kind === "browser" && access.credential.deviceId === deviceId) {
             return { kind: "own" };
         }
-        if (
-            !(await this.#endAccess(() =>
-                this.identities.endDeviceAccess(access.credential.userId, deviceId, Date.now(), signal),
-            ))
-        ) {
+        if (!(await this.#endAccess(() => this.identities.endDeviceAccess(deviceId, Date.now(), signal)))) {
             return { kind: "unknown" };
         }
         return { kind: "ended" };
@@ -463,9 +445,9 @@ export class AuthenticationService {
             return refused(access);
         }
         // Ends this browser's device, so every credential of the device stops, including one another tab just received.
-        const { userId, deviceId } = access.credential;
+        const { deviceId } = access.credential;
         return {
-            kind: (await this.#endAccess(() => this.identities.endDeviceAccess(userId, deviceId, Date.now(), signal)))
+            kind: (await this.#endAccess(() => this.identities.endDeviceAccess(deviceId, Date.now(), signal)))
                 ? "ended"
                 : "unauthenticated",
         };

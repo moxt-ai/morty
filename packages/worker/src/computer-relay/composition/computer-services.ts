@@ -50,15 +50,10 @@ export class ComputerServices {
         if (!this.#owns(computerId)) {
             throw new Error("Durable Object computer identity does not match the request.");
         }
-        return await holdsAccess(
-            new IdentityStorage(
-                this.#database(),
-                computerId,
-                (await this.#readAccount(computerId, signal))?.user_id ?? null,
-            ),
-            holder,
-            signal,
-        );
+        if ((await this.#readAccount(computerId, signal)) === null) {
+            return false;
+        }
+        return await holdsAccess(new IdentityStorage(this.#database(), computerId), holder, signal);
     };
 
     readonly #sessionOperations = new ManagedSessionOperations();
@@ -83,17 +78,12 @@ export class ComputerServices {
     readonly bootstrap = async (input: unknown, env: CloudBindings, signal: AbortSignal) => {
         signal.throwIfAborted();
         const parsed = v.parse(computerBootstrap, input);
-        if ((await this.#readAccount(parsed.computer.computerId, signal))?.user_id !== parsed.userId) {
+        if ((await this.#readAccount(parsed.computer.computerId, signal)) === null) {
             throw new ManagementError("PROJECT_NOT_FOUND", "The Morty computer does not exist.", 404);
         }
         await this.#bindComputer(parsed.computer.computerId);
         const dependencies = await this.#application(parsed.computer.computerId, env, signal);
-        return await dependencies.services.management.initializeAnonymousUser(
-            parsed.userId,
-            parsed.computer,
-            signal,
-            parsed.origin,
-        );
+        return await dependencies.services.management.initializeComputer(parsed.computer, signal, parsed.origin);
     };
 
     readonly #credentialKey = async (signal: AbortSignal): Promise<Uint8Array> => {
@@ -141,12 +131,14 @@ export class ComputerServices {
         env: CloudBindings,
         signal: AbortSignal,
     ): Promise<ApplicationContext> => {
-        const ownerUserId = (await this.#readAccount(computerId, signal))?.user_id ?? null;
+        if ((await this.#readAccount(computerId, signal)) === null) {
+            throw new ManagementError("PROJECT_NOT_FOUND", "The Morty computer does not exist.", 404);
+        }
         return createApplicationDependencies({
             bindings: env,
             computer: this.#runtime(computerId),
-            identity: { computerId, ownerUserId },
-            identities: new IdentityStorage(this.#database(), computerId, ownerUserId),
+            identity: { computerId },
+            identities: new IdentityStorage(this.#database(), computerId),
             sessionOperations: this.#sessionOperations,
             identityOperations: { commitAccessEnd: this.#endAccess, credentialKey: this.#credentialKey },
         });

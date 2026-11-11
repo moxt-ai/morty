@@ -41,7 +41,7 @@ export function createIdentityAccess(options: {
     readonly onAccessEnded: () => void;
     readonly currentAccess: (
         signal: AbortSignal,
-    ) => Promise<{ readonly computerId: string; readonly token: string } | null>;
+    ) => Promise<{ readonly computerId: string; readonly computerToken: string } | null>;
     readonly credentialRejected: () => Promise<void>;
 }): IdentityAccess {
     const api = new AnonymousIdentityApi({ fetchRequest: options.fetchRequest, origin: options.origin });
@@ -78,7 +78,7 @@ export function createIdentityAccess(options: {
             if (localIdentity === null || localIdentity.computerId !== options.identity.computerId) {
                 throw new IdentitySharingUnavailable();
             }
-            return await api.createTransfer(localIdentity.token, terms, signal);
+            return await api.createTransfer(localIdentity.computerToken, terms, signal);
         },
     };
 }

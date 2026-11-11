@@ -33,12 +33,15 @@ export default {
 /** Seeds persisted boundary conditions while keeping authentication and revocation on the production HTTP path. */
 export class ComputerRelay extends ProductionComputerRelay {
     override async fetch(request: Request): Promise<Response> {
-        if (request.url === "https://computer.internal/reassign" && request.method === "POST") {
+        if (request.url === "https://computer.internal/retire-account" && request.method === "POST") {
             const value: unknown = await request.json();
-            const input = v.parse(v.object({ computerId: v.string(), userId: v.string() }), value);
+            const input = v.parse(v.object({ computerId: v.string() }), value);
             const stored: unknown = await this.ctx.storage.get("computer-account");
             const account = v.parse(ProjectRowSchema, stored);
-            await this.ctx.storage.put("computer-account", { ...account, user_id: input.userId });
+            if (account.computer_id !== input.computerId) {
+                throw new Error("The test account does not match its Computer.");
+            }
+            await this.ctx.storage.put("computer-account", { ...account, lifecycle: "deleted" });
             return new Response(null, { status: 204 });
         }
         if (request.url === "https://computer.internal/revoked-computer" && request.method === "POST") {

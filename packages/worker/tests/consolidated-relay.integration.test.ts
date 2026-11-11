@@ -34,7 +34,13 @@ test("Given the default SDK transport and caller-neutral Morty API paths, When a
     });
     expect(created.status).toBe(201);
     expect(created.headers.has("server-timing")).toBe(false);
-    const owner = v.parse(v.object({ token: v.string(), computerId: v.string() }), await created.json());
+    const owner = v.parse(
+        v.pipe(
+            v.object({ computerToken: v.string(), computerId: v.string() }),
+            v.transform(({ computerId, computerToken }) => ({ computerId, token: computerToken })),
+        ),
+        await created.json(),
+    );
     const paired = await request(`/computers/${owner.computerId}/management/pairing`, owner.token, {
         idempotencyKey: "single-worker",
     });
@@ -160,7 +166,7 @@ test("Given the default SDK transport and caller-neutral Morty API paths, When a
         expect(new TextDecoder().decode(downloaded.bytes)).toBe("HTTP download");
         expect(downloaded).toMatchObject({ name: "entrypoint.txt", mediaType: "application/octet-stream" });
         const audienceEndpoint = await bindings.request(
-            new Request(`${bindings.origin}/morty/api/web/identity/anonymous-users`, {
+            new Request(`${bindings.origin}/morty/api/web/computers`, {
                 method: "POST",
                 body: JSON.stringify({
                     creationKey: Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("base64url"),

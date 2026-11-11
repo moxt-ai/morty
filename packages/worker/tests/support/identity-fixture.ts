@@ -119,19 +119,20 @@ async function startIdentityFixture(
                 environment(),
             );
             expect(response.status).toBe(201);
-            return v.parse(
-                v.object({ token: v.string(), userId: v.string(), computerId: v.string() }),
+            const identity = v.parse(
+                v.object({ computerToken: v.string(), computerId: v.string() }),
                 await response.json(),
             );
+            return { computerId: identity.computerId, token: identity.computerToken };
         };
         return {
-            reassignComputerOwner: async (computerId: string, userId: string) => {
+            retireComputerAccount: async (computerId: string) => {
                 const namespace = await cloudflare.getDurableObjectNamespace("COMPUTER_RELAY");
                 const response = await namespace
                     .get(namespace.idFromName(computerId))
-                    .fetch("https://computer.internal/reassign", {
+                    .fetch("https://computer.internal/retire-account", {
                         method: "POST",
-                        body: JSON.stringify({ computerId, userId }),
+                        body: JSON.stringify({ computerId }),
                         signal: AbortSignal.timeout(15_000),
                     });
                 expect(response.status).toBe(204);

@@ -15,12 +15,9 @@ function displayName(value: string): string {
 }
 
 /** A fixed creation reference recovers its computer; a new reference always allocates another one. */
-async function accountComputerId(userId: string, key: string, locationHint: ProjectLocationHint): Promise<string> {
+async function accountComputerId(key: string, locationHint: ProjectLocationHint): Promise<string> {
     const digest = new Uint8Array(
-        await crypto.subtle.digest(
-            "SHA-256",
-            new TextEncoder().encode(JSON.stringify(["morty-computer-v1", userId, key])),
-        ),
+        await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify(["morty-computer-v1", key]))),
     );
     const localId = btoa(String.fromCharCode(...digest.subarray(0, 18)))
         .replaceAll("+", "-")
@@ -48,7 +45,6 @@ export class ComputerManagementService {
     }
 
     readonly provisionComputerAccount = async (
-        userId: string,
         requestedDisplayName: string,
         idempotencyKey: string,
         requestedClientReference: string,
@@ -61,11 +57,9 @@ export class ComputerManagementService {
             "client_reference",
         );
         const normalizedDisplayName = displayName(requestedDisplayName);
-        const user = validateIdentifier(userId, "user_id");
-        const computerId = await accountComputerId(user, normalizedIdempotencyKey, locationHint);
+        const computerId = await accountComputerId(normalizedIdempotencyKey, locationHint);
         signal.throwIfAborted();
         const sameRequest = (project: ProjectRow): boolean =>
-            project.user_id === user &&
             project.computer_id === computerId &&
             project.location_hint === locationHint &&
             project.idempotency_key === normalizedIdempotencyKey &&
@@ -73,7 +67,6 @@ export class ComputerManagementService {
             project.client_reference === clientReference;
         const now = Date.now();
         const project: ProjectRow = {
-            user_id: user,
             client_reference: clientReference,
             created_at: now,
             deleted_at: null,
@@ -100,9 +93,9 @@ export class ComputerManagementService {
         await this.storage.recordAudit(
             {
                 action: "project.created",
-                actorId: project.user_id,
-                actorKind: "application",
-                actorRef: project.user_id,
+                actorId: project.computer_id,
+                actorKind: "computer",
+                actorRef: project.computer_id,
                 auditId: `pae_created_${project.computer_id}`,
                 detailsJson: "{}",
                 outcome: "succeeded",
@@ -131,15 +124,6 @@ export class ComputerManagementService {
             holder,
             signal,
         );
-    /** The active computer's owner, read from its authoritative account record. */
-    readonly readComputerOwner = async (computerId: string, signal: AbortSignal): Promise<string | null> => {
-        const account = await this.storage.readActiveComputerScope(
-            validateIdentifier(computerId, "computer_id"),
-            signal,
-        );
-        return account?.user_id ?? null;
-    };
-
     readonly isActive = async (computerId: string, signal: AbortSignal): Promise<boolean> => {
         signal.throwIfAborted();
         if (decodeComputerPlacement(computerId) === null) {

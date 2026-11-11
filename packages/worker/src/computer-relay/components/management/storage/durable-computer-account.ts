@@ -23,7 +23,7 @@ export class DurableComputerAccount implements ComputerAccounts {
     readonly readActiveComputerScope: ComputerAccounts["readActiveComputerScope"] = async (computerId, signal) => {
         const account = await this.#readAccount(signal);
         return account?.computer_id === computerId && account.lifecycle === "active"
-            ? { computer_id: computerId, user_id: account.user_id, lifecycle: account.lifecycle }
+            ? { computer_id: computerId, lifecycle: account.lifecycle }
             : null;
     };
 

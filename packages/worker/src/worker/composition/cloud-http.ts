@@ -6,7 +6,7 @@ import { computerCreationRoutes } from "../components/management/http/computer-c
 import { accountProvisioner } from "./account-provisioning.ts";
 
 const unauthenticated = () => {
-    throw new ManagementError("UNAUTHENTICATED", "Anonymous identity is required.", 401);
+    throw new ManagementError("UNAUTHENTICATED", "Computer access is required.", 401);
 };
 
 /** Worker-level requests are routed before any computer-scoped services are constructed. */

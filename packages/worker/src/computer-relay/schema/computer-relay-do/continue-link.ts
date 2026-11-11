@@ -12,7 +12,7 @@ export const continueLink = sqliteTable(
         codeHash: text("code_hash").notNull().unique(),
         /** The original issuance intent, so a retry cannot change an operation's terms or predecessor. */
         requestHash: text("request_hash").notNull(),
-        userId: text("user_id").notNull(),
+        retainedOwnerReference: text("user_id"),
         /** Until when the link can add a device. */
         expiresAt: integer("expires_at").notNull(),
         /** Until when the device the link adds keeps access. A link adds one device: the credential it issued. */

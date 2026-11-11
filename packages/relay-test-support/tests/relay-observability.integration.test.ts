@@ -115,7 +115,7 @@ async function provisionComputer() {
         },
         201,
     );
-    return { computerId: text(owner, "computerId"), appCredential: text(owner, "token") };
+    return { computerId: text(owner, "computerId"), appCredential: text(owner, "computerToken") };
 }
 
 async function pairComputer() {

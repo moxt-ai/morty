@@ -35,14 +35,12 @@ export interface RelayAuditRecord {
 }
 
 export const RelayComputerScopeRowSchema = v.object({
-    user_id: v.string(),
     lifecycle,
     computer_id: v.string(),
 });
 export type RelayComputerScopeRow = Readonly<v.InferOutput<typeof RelayComputerScopeRowSchema>>;
 
 export const ProjectRowSchema = v.object({
-    user_id: v.string(),
     client_reference: v.string(),
     created_at: nonNegativeInteger,
     deleted_at: v.nullable(nonNegativeInteger),

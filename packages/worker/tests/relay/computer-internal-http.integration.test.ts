@@ -34,9 +34,9 @@ it("Given an owned computer, When its internal HTTP boundary reads authority and
 
     const audit = {
         action: "computer.internal-http.verified",
-        actorId: owner.userId,
+        actorId: owner.computerId,
         actorKind: "application",
-        actorRef: owner.userId,
+        actorRef: owner.computerId,
         auditId: "internal-http-audit",
         computerId: owner.computerId,
         detailsJson: "{}",
@@ -61,7 +61,7 @@ it("Given an owned computer, When its internal HTTP boundary reads authority and
             computerId: owner.computerId,
             now: Date.now(),
             actorKind: "application",
-            actorId: owner.userId,
+            actorId: owner.computerId,
             auditId: "public-revocation-denied",
         }),
     ]) {
@@ -87,9 +87,9 @@ it("Given two owned computers, When an internal request names the wrong object o
     expect(audit.status).toBe(400);
     const foreignAudit = {
         action: "computer.internal-http.denied",
-        actorId: owner.userId,
+        actorId: owner.computerId,
         actorKind: "application",
-        actorRef: owner.userId,
+        actorRef: owner.computerId,
         auditId: "foreign-internal-http-audit",
         computerId: other.computerId,
         detailsJson: "{}",

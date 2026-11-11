@@ -67,14 +67,14 @@ async function request(path: string, status: number, token?: string, body?: obje
 }
 
 const owner = v.parse(
-    v.object({ token: v.string(), computerId: v.string() }),
+    v.object({ computerToken: v.string(), computerId: v.string() }),
     await request("/morty/api/computers", 201, undefined, {
         creationKey: randomBytes(32).toString("base64url"),
     }),
 );
 const pairing = v.parse(
     v.object({ pairingCode: v.string() }),
-    await request(`/morty/api/computers/${owner.computerId}/management/pairing`, 201, owner.token, {
+    await request(`/morty/api/computers/${owner.computerId}/management/pairing`, 201, owner.computerToken, {
         idempotencyKey: `verification-${randomBytes(16).toString("hex")}`,
     }),
 );
@@ -99,10 +99,10 @@ await using _runtime = await connectControlledAgentRuntime({
     },
 });
 const chat = `/morty/api/chat/computers/${owner.computerId}`;
-await request(`${chat}/setup`, 202, owner.token, { computerId: owner.computerId, harness: "codex" });
+await request(`${chat}/setup`, 202, owner.computerToken, { computerId: owner.computerId, harness: "codex" });
 const access = v.parse(
     v.object({ credential: v.string(), target: v.object({ harness: v.string(), sessionId: v.string() }) }),
-    await request(`${chat}/access`, 200, owner.token, {
+    await request(`${chat}/access`, 200, owner.computerToken, {
         harness: "codex",
         conversationKey: `verification-${randomBytes(16).toString("hex")}`,
         workspaceRef: ".",
@@ -123,8 +123,10 @@ if (!timingSafeEqual(expected, Buffer.from(signature, "base64url"))) {
 const sessionPath = `/morty/api/v1/computers/${owner.computerId}/harnesses/${access.target.harness}/sessions/${access.target.sessionId}`;
 await requestSession(`${sessionPath}/configuration`, 200, access.credential);
 await requestSession(`${sessionPath}/configuration`, 401, `${signed}.${Buffer.alloc(32).toString("base64url")}`);
-const successor = `morty_anon_v1_${randomBytes(32).toString("base64url")}`;
-await request(`/morty/api/computers/${owner.computerId}/identity/revoke-all-access`, 200, owner.token, { successor });
+const successor = `morty_computer_v1_${randomBytes(32).toString("base64url")}`;
+await request(`/morty/api/computers/${owner.computerId}/identity/revoke-all-access`, 200, owner.computerToken, {
+    successor,
+});
 await requestSession(`${sessionPath}/configuration`, 401, access.credential);
 const renewed = v.parse(
     v.object({ credential: v.string() }),

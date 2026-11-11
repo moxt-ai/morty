@@ -12,7 +12,7 @@ const bootstrapOrigin = v.variant("kind", [
         v.object({
             kind: v.literal("replacement"),
             previousComputerId: relayIdentifier,
-            token: v.pipe(v.string(), v.regex(/^morty_anon_v1_[A-Za-z0-9_-]{43}$/u)),
+            token: v.pipe(v.string(), v.regex(/^morty_computer_v1_[A-Za-z0-9_-]{43}$/u)),
         }),
         v.readonly(),
     ),
@@ -23,7 +23,6 @@ export type BootstrapOrigin = v.InferOutput<typeof bootstrapOrigin>;
 export const computerBootstrap = v.pipe(
     v.object({
         computer: computerManagementSchema,
-        userId: relayIdentifier,
         origin: bootstrapOrigin,
     }),
     v.readonly(),

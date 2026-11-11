@@ -22,5 +22,6 @@ export async function createTestOwner(
     if (response.status !== 201) {
         throw new Error(`Owner creation failed (${response.status}): ${await response.text()}`);
     }
-    return v.parse(v.object({ token: v.string(), computerId: v.string(), userId: v.string() }), await response.json());
+    const identity = v.parse(v.object({ computerToken: v.string(), computerId: v.string() }), await response.json());
+    return { computerId: identity.computerId, token: identity.computerToken };
 }

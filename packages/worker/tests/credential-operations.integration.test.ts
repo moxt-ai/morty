@@ -43,7 +43,10 @@ test("Given local, browser and recovery credentials, When their operations end a
             }),
             fixture.environment(),
         );
-    const browser = v.parse(v.object({ token: v.string() }), await (await redeem(await share())).json()).token;
+    const browser = v.parse(
+        v.object({ computerToken: v.string() }),
+        await (await redeem(await share())).json(),
+    ).computerToken;
     // Another device retains its independent browser access.
     expect((await redeem(await share())).status).toBe(200);
     const operations = [
@@ -71,7 +74,7 @@ test("Given local, browser and recovery credentials, When their operations end a
             new Request(`${APP_ORIGIN}/morty/api/computers/${owner.computerId}/identity/revoke-all-access`, {
                 method: "POST",
                 headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-                body: JSON.stringify({ successor: `morty_anon_v1_${"A".repeat(43)}` }),
+                body: JSON.stringify({ successor: `morty_computer_v1_${"A".repeat(43)}` }),
             }),
             fixture.environment(),
         );
@@ -114,7 +117,7 @@ test("Given a browser that joined through a link, When it asks for recovery acce
         }),
         fixture.environment(),
     );
-    const browser = v.parse(v.object({ token: v.string() }), await redeemed.json()).token;
+    const browser = v.parse(v.object({ computerToken: v.string() }), await redeemed.json()).computerToken;
     const recoveryResponse = await request(`${project}/identity/recovery-token`, owner.token, "POST");
     expect(recoveryResponse.status).toBe(201);
     const recovery = v.parse(v.object({ token: v.string() }), await recoveryResponse.json()).token;
@@ -168,7 +171,7 @@ test("Given browser access granted through a link, When the access term its link
         }),
         fixture.environment(),
     );
-    const browser = v.parse(v.object({ token: v.string() }), await redeemed.json()).token;
+    const browser = v.parse(v.object({ computerToken: v.string() }), await redeemed.json()).computerToken;
     expect((await session(browser)).status).toBe(200);
 
     const namespace = fixture.environment().COMPUTER_RELAY;
@@ -210,7 +213,7 @@ test("Given browser access granted through a link, When that browser shares a ne
         }),
         fixture.environment(),
     );
-    const browser = v.parse(v.object({ token: v.string() }), await redeemed.json()).token;
+    const browser = v.parse(v.object({ computerToken: v.string() }), await redeemed.json()).computerToken;
 
     const browserLink = await share(browser);
 
@@ -232,7 +235,7 @@ test("Given a well-formed Project identifier that was never created, When an una
     expect(await stored.json()).toEqual({ keys: [], tables: [] });
 });
 
-test("Given a saved owner credential, When the directory no longer assigns that computer to its user, Then the credential cannot open the computer", async () => {
+test("Given a saved Computer credential, When the directory retires that Computer, Then the credential cannot open the Computer", async () => {
     const owner = await fixture.createAnonymousUser();
     const environment = fixture.environment();
     const request = () =>
@@ -243,6 +246,6 @@ test("Given a saved owner credential, When the directory no longer assigns that 
             environment,
         );
     expect((await request()).status).toBe(200);
-    await fixture.reassignComputerOwner(owner.computerId, `usr_${crypto.randomUUID()}`);
-    expect((await request()).status).toBe(401);
+    await fixture.retireComputerAccount(owner.computerId);
+    expect((await request()).status).toBe(404);
 });

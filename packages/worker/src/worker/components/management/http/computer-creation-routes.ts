@@ -13,18 +13,6 @@ const inputSchema = v.strictObject({
     creationKey: anonymousCreationKey,
 });
 
-/** The public user ID never reveals its client-held creation key. */
-async function userIdFor(key: string): Promise<string> {
-    const digest = new Uint8Array(
-        await crypto.subtle.digest(
-            "SHA-256",
-            new TextEncoder().encode(JSON.stringify(["morty-anonymous-user-v1", key])),
-        ),
-    );
-    const hex = Array.from(digest.subarray(0, 16), (byte) => byte.toString(16).padStart(2, "0")).join("");
-    return `usr_${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
-}
-
 export const computerCreationRoutes = new Hono<{
     readonly Bindings: CloudBindings;
     readonly Variables: { readonly provisionAccount: AccountProvisioner };
@@ -36,9 +24,7 @@ export const computerCreationRoutes = new Hono<{
     signal.throwIfAborted();
     await admitAnonymousCreation(request, context.env);
     signal.throwIfAborted();
-    const userId = await userIdFor(input.creationKey);
     const project = await context.var.provisionAccount(
-        userId,
         crypto.randomUUID(),
         projectLocationHint(request) ?? "apac",
         signal,
@@ -50,7 +36,6 @@ export const computerCreationRoutes = new Hono<{
             signal,
             body: JSON.stringify({
                 computer: project,
-                userId,
                 origin: { kind: "created", creationKey: input.creationKey },
             }),
         }),

@@ -70,7 +70,7 @@ export class ChatApi {
     async useBrowserIdentity(value: unknown) {
         const identity = object(value, "anonymous identity");
         const computerId = text(identity["computerId"], "computerId");
-        const token = text(identity["token"], "anonymous token");
+        const token = text(identity["computerToken"], "Computer token");
         this.identity = {
             computerId,
             token,

@@ -116,7 +116,7 @@ export function createMortyApplication(options: {
             computerId: identity.computerId,
             getToken: async (signal) => {
                 signal.throwIfAborted();
-                return storedToken(identity.userId) ?? identity.token;
+                return storedToken(identity.computerId) ?? identity.computerToken;
             },
         };
         const access = createIdentityAccess({
@@ -131,7 +131,7 @@ export function createMortyApplication(options: {
         const requests = new BotChatApi({
             fetchRequest: transport.fetch,
             getToken: scope.getToken,
-            replacedToken: (rejected, signal) => replacedToken(identity.userId, rejected, signal),
+            replacedToken: (rejected, signal) => replacedToken(identity.computerId, rejected, signal),
             credentialRejected: () => void credentialRejected(),
             origin: options.origin,
             computerId: identity.computerId,
@@ -151,7 +151,7 @@ export function createMortyApplication(options: {
                         fetchRequest: transport.fetch,
                         getToken: async (signal) => {
                             signal.throwIfAborted();
-                            return storedToken(saved.userId) ?? saved.token;
+                            return storedToken(saved.computerId) ?? saved.computerToken;
                         },
                         origin: options.origin,
                         computerId: saved.computerId,

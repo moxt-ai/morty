@@ -33,8 +33,7 @@ const setupModule = v.custom<SetupModule>(
         typeof value === "object" && value !== null && "runSetup" in value && typeof value.runSetup === "function",
 );
 const identitySchema = v.object({
-    token: v.string(),
-    userId: v.string(),
+    computerToken: v.string(),
     computerId: v.string(),
 });
 
@@ -221,25 +220,23 @@ test("Given setup and a lost creation response without a known computer, When se
         const completed = await run();
         expect(completed.code, JSON.stringify(completed.events)).toBe(0);
         const identity = v.parse(identitySchema, completedIdentity);
-        expect(identity.userId).toBe(v.parse(identitySchema, original).userId);
         expect(identity.computerId).not.toBe(v.parse(identitySchema, original).computerId);
         expect(completed.events.at(-1)).toMatchObject({ status: "ready", workspace, computerId: identity.computerId });
         expect(await configuration()).toMatchObject({
             kind: "ready",
-            user_token: identity.token,
-            user_id: identity.userId,
+            computer_token: identity.computerToken,
             computer_id: identity.computerId,
         });
         expect(new Set(creationKeys)).toEqual(new Set([pending["creation_key"]]));
         const session = await fetch(`${origin}/morty/api/computers/${identity.computerId}/session`, {
-            headers: { authorization: `Bearer ${identity.token}` },
+            headers: { authorization: `Bearer ${identity.computerToken}` },
         });
         expect(session.status).toBe(200);
-        expect(await session.json()).toMatchObject({ userId: identity.userId });
+        expect(await session.json()).toMatchObject({ computerId: identity.computerId });
         const creationCount = creationKeys.length;
         expect((await run()).code).toBe(0);
         expect(creationKeys).toHaveLength(creationCount);
-        expect(await configuration()).toMatchObject({ user_id: identity.userId, computer_id: identity.computerId });
+        expect(await configuration()).toMatchObject({ computer_id: identity.computerId });
         expect(failures).toEqual([]);
     }
 });

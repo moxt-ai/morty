@@ -62,20 +62,23 @@ test.runIf(process.platform !== "win32")(
         expect(setup.stdout).toContain('"status":"identity_ready"');
         expect(setup.stdout).toContain('"code":"CANCELLED"');
         const configuration = v.parse(
-            v.object({ base_url: v.string(), identity: v.object({ user_token: v.string(), computer_id: v.string() }) }),
+            v.object({
+                base_url: v.string(),
+                identity: v.object({ computer_token: v.string(), computer_id: v.string() }),
+            }),
             JSON.parse(await readFile(join(state, "config.json"), "utf8")),
         );
         expect(configuration.base_url).toBe(fixture.origin);
-        expect(setup.stdout).not.toContain(configuration.identity.user_token);
+        expect(setup.stdout).not.toContain(configuration.identity.computer_token);
 
         const revoked = await run(["revoke-all-access"]);
         expect(revoked.code, revoked.stderr).toBe(0);
         expect(revoked.stdout).toContain('"status":"access_revoked"');
-        expect(revoked.stdout).not.toContain(configuration.identity.user_token);
+        expect(revoked.stdout).not.toContain(configuration.identity.computer_token);
         expect(JSON.parse(await readFile(join(state, "config.json"), "utf8"))).toMatchObject({
             identity: {
                 computer_id: configuration.identity.computer_id,
-                user_token: expect.not.stringMatching(configuration.identity.user_token),
+                computer_token: expect.not.stringMatching(configuration.identity.computer_token),
             },
         });
     },

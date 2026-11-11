@@ -51,7 +51,7 @@ test("Given the agent's shell exposes its Claude Code session, When it follows t
     expect(connected.events).not.toContainEqual(expect.objectContaining({ status: "session_id_mismatch" }));
 });
 
-test("Given a saved Computer the manager no longer manages, When the user approves its replacement, Then setup pairs a fresh Computer and keeps the user", async ({
+test("Given a saved Computer the manager no longer manages, When the user approves its replacement, Then setup pairs a fresh Computer", async ({
     runtime,
 }) => {
     const original = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
@@ -65,7 +65,6 @@ test("Given a saved Computer the manager no longer manages, When the user approv
     );
 
     expect(connected.events).not.toContainEqual(expect.objectContaining({ status: "computer_reused" }));
-    expect(connected.identity.userId).toBe(original.identity.userId);
     expect(connected.identity.computerId).not.toBe(original.identity.computerId);
     expect(connected.computerId).not.toBe(original.computerId);
     const statuses = connected.events.map((event) => event["status"]);
@@ -81,7 +80,7 @@ test("Given a browser opened the saved Computer's link, When the user approves r
     const { page } = runtime;
     await page.goto(original.url);
     await expect(page.getByRole("textbox", { name: "Message" })).toBeEnabled();
-    const previousToken = original.configuration["user_token"];
+    const previousToken = original.configuration["computer_token"];
     await runtime.forgetRuntimeConnections();
 
     const connected = await runtime.followInstructions(

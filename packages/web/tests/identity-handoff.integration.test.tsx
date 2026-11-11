@@ -621,7 +621,7 @@ test("Given other browsers joined this computer, When the user disconnects one f
                 body: JSON.stringify({ code, device }),
             }),
         );
-        return v.parse(v.object({ token: v.string() }), await redeemed.json()).token;
+        return v.parse(v.object({ computerToken: v.string() }), await redeemed.json()).computerToken;
     };
     const phone = await join("iPhone · Safari");
 

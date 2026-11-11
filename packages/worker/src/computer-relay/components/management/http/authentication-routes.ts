@@ -45,7 +45,7 @@ const revokeAllAccessInput = v.pipe(
     }),
     v.readonly(),
 );
-const computerLinkInput = v.pipe(v.strictObject({ userId: relayIdentifier }), v.readonly());
+const computerLinkInput = v.pipe(v.strictObject({ computerId: relayIdentifier }), v.readonly());
 export function createAuthenticationRoutes() {
     return new Hono<ManagementHttpEnvironment>()
         .post(
@@ -54,13 +54,13 @@ export function createAuthenticationRoutes() {
             async (context) => {
                 using deadline = new RequestDeadline(context.req.raw.signal, 15_000);
                 const result = await context.var.application.services.authentication.linkComputer(
-                    context.req.valid("json").userId,
+                    context.req.valid("json").computerId,
                     context.get("bearerToken"),
                     deadline.signal,
                 );
                 switch (result.kind) {
                     case "linked":
-                        return json({ userId: result.userId, computerId: result.computerId }, 200, {
+                        return json({ computerId: result.computerId }, 200, {
                             "Cache-Control": "no-store",
                         });
                     case "unauthenticated":

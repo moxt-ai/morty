@@ -27,11 +27,10 @@ export function computerDirectory(_input: CloudBindings, forComputer: ComputerTa
 }
 
 export function accountProvisioner(bindings: CloudBindings, forComputer: ComputerTargets): AccountProvisioner {
-    return async (userId, reference, location, signal) =>
+    return async (reference, location, signal) =>
         v.parse(
             computerManagementSchema,
             await computerDirectory(bindings, forComputer).provisionComputerAccount(
-                userId,
                 "Morty",
                 `cloud-${reference}`,
                 reference,

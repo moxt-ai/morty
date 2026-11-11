@@ -1,7 +1,6 @@
 import { runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { holdsAccess } from "../../src/computer-relay/components/management/service/authentication-service.ts";
-import { DurableComputerAccount } from "../../src/computer-relay/components/management/storage/durable-computer-account.ts";
 import { IdentityStorage } from "../../src/computer-relay/components/management/storage/identity-storage.ts";
 import { SqliteComputerManagementStore } from "../../src/computer-relay/components/management/storage/sqlite-computer-management-store.ts";
 import { DurableObjectDatabase } from "../../src/computer-relay/infra/durable-object-database.ts";
@@ -13,27 +12,16 @@ import { ComputerRelayGateway } from "../../src/worker/gateway/computer-relay.ts
 /** The computer's store as its ComputerRelay composes it, answering whose access holds from the computer's identities. */
 export function computerManagementStore(computerId: string, storage: DurableObjectStorage) {
     return new SqliteComputerManagementStore(computerId, new DurableObjectDatabase(storage), async (holder, signal) =>
-        holdsAccess(
-            new IdentityStorage(
-                new DurableObjectDatabase(storage),
-                computerId,
-                (await new DurableComputerAccount(storage).readActiveComputerScope(computerId, signal))?.user_id ??
-                    null,
-            ),
-            holder,
-            signal,
-        ),
+        holdsAccess(new IdentityStorage(new DurableObjectDatabase(storage), computerId), holder, signal),
     );
 }
 
 /** Internal Runtime DO scenarios enter after public pairing has registered the Runtime in an active Project. */
 export async function registerComputerFixture(computerId: string): Promise<void> {
     const registeredAt = Date.UTC(2026, 9, 27);
-    const userId = `user_${computerId}`;
     await new ComputerRelayGateway(env, computerId).createComputerAccount(
         {
             computer_id: computerId,
-            user_id: userId,
             display_name: "Registered test Project",
             client_reference: computerId,
             idempotency_key: computerId,

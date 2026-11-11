@@ -32,7 +32,7 @@ test("Given an anonymous visitor's creation allowance, When it is exhausted, The
     const environment = { ...fixture.environment(), ANONYMOUS_CREATION_LIMITER: new CreationBudget() };
     const first = await worker.fetch(creation({ "CF-Connecting-IP": "192.0.2.1" }), environment);
     expect(first.status).toBe(201);
-    expect(await first.json()).toMatchObject({ computerId: expect.any(String), token: expect.any(String) });
+    expect(await first.json()).toMatchObject({ computerId: expect.any(String), computerToken: expect.any(String) });
     const denied = await worker.fetch(
         creation({ "CF-Connecting-IP": "192.0.2.1", "X-Forwarded-For": "192.0.2.2" }),
         environment,
@@ -43,7 +43,7 @@ test("Given an anonymous visitor's creation allowance, When it is exhausted, The
     expect(await denied.json()).toMatchObject({ error: { code: "IDENTITY_CREATION_RATE_LIMITED" } });
     const other = await worker.fetch(creation({ "CF-Connecting-IP": "192.0.2.2" }), environment);
     expect(other.status).toBe(201);
-    expect(await other.json()).toMatchObject({ computerId: expect.any(String), token: expect.any(String) });
+    expect(await other.json()).toMatchObject({ computerId: expect.any(String), computerToken: expect.any(String) });
 });
 
 test("Given no trusted client address, When anonymous creation repeats, Then missing metadata shares a bounded allowance", async () => {

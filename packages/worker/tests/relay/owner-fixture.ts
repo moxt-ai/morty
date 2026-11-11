@@ -3,7 +3,6 @@ import { env } from "cloudflare:workers";
 import type { NativeSessionTarget, SessionAccessHolder } from "@morty-build/client/protocol";
 import { createTestComputerBackend } from "../../../relay-test-support/src/backend-fixture.ts";
 import { createTestOwner } from "../../../relay-test-support/src/identity-fixture.ts";
-import { DurableComputerAccount } from "../../src/computer-relay/components/management/storage/durable-computer-account.ts";
 import { IdentityStorage } from "../../src/computer-relay/components/management/storage/identity-storage.ts";
 import { SessionAccessSigner } from "../../src/computer-relay/components/runtime/entity/session-access-credential.ts";
 import { SessionAccessService } from "../../src/computer-relay/components/runtime/service/session-access-service.ts";
@@ -32,12 +31,6 @@ async function ownerHolder(computerId: string): Promise<SessionAccessHolder> {
         const credential = await new IdentityStorage(
             new DurableObjectDatabase(state.storage),
             computerId,
-            (
-                await new DurableComputerAccount(state.storage).readActiveComputerScope(
-                    computerId,
-                    AbortSignal.timeout(10_000),
-                )
-            )?.user_id ?? null,
         ).findCredential(token, Date.now(), AbortSignal.timeout(10_000));
         if (credential === null) {
             throw new Error("Expected active owner access");
