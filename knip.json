@@ -30,7 +30,6 @@
             "includeEntryExports": true
         },
         "packages/client": {
-            "entry": ["tests/*-types.contract.ts"],
             "includeEntryExports": true
         },
         "packages/relay": {

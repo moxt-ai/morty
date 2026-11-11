@@ -404,8 +404,6 @@ function messageFromAcpUpdate(event: SessionPresentationEvent, update: AcpSessio
         case "config_option_update":
         case "current_mode_update":
         case "plan":
-        case "plan_removed":
-        case "plan_update":
         case "session_info_update":
         case "usage_update":
             return null;

@@ -374,8 +374,6 @@ export class AcpContentExternalizer {
                 };
             }
             case "plan":
-            case "plan_update":
-            case "plan_removed":
             case "available_commands_update":
             case "current_mode_update":
             case "config_option_update":
@@ -384,6 +382,10 @@ export class AcpContentExternalizer {
             case "notice":
             case "subagent_update":
                 return { agent: update, events: [update] };
+            case "plan_update":
+            case "plan_removed":
+                // Morty does not advertise the plan capability, so these never reach a Session's events.
+                return { agent: update, events: [] };
         }
     };
 }

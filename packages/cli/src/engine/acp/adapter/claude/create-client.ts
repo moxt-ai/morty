@@ -51,7 +51,6 @@ export const initializeClaudeClient = (agent: ClaudeAcpAgent) =>
         clientInfo: { name: "morty", version: "0.0.3" },
         clientCapabilities: {
             elicitation: { form: {}, url: {} },
-            plan: {},
             session: { compaction: {}, configOptions: { boolean: {} } },
         },
     });

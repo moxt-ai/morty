@@ -154,8 +154,6 @@ export class AdapterSessionConnection {
                     case "tool_call":
                     case "tool_call_update":
                     case "plan":
-                    case "plan_update":
-                    case "plan_removed":
                         event = { kind: "content", payload };
                         break;
                     default:
