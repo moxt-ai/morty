@@ -39,11 +39,10 @@ const websocketGuid = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 const fakeAgentPath = fileURLToPath(new URL("./fixtures/acp-peer.ts", import.meta.url));
 
 class RefreshableAgentSpecification extends ControlledAcpSpecification {
-    readonly adapterVersion = "1.0.0";
     readonly agentExecutable = "controlled-acp";
     readonly harness: string;
     readonly label = "Controlled ACP";
-    override readonly minimumSupportedAgentVersion = this.adapterVersion;
+    override readonly minimumSupportedAgentVersion = "1.0.0";
 
     constructor(id: string) {
         super("MORTY_TEST_REFRESHABLE_AGENT_PATH", []);
@@ -54,7 +53,6 @@ class RefreshableAgentSpecification extends ControlledAcpSpecification {
 // A second ready Agent whose executable never changes, so a refresh of the upgraded Agent must
 // keep exactly one catalog entry for it.
 class UnchangedPeerAgentSpecification extends ControlledAcpSpecification {
-    readonly adapterVersion = "1.0.0";
     readonly agentExecutable = "controlled-acp-peer";
     readonly harness = "controlled-acp-peer";
     readonly label = "Controlled ACP Peer";

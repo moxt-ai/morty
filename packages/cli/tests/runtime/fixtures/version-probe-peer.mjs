@@ -26,7 +26,7 @@ if (process.argv.includes("--write-version")) {
     } else if (scenario === "nonzero") {
         process.stderr.write(secret);
         process.exitCode = 7;
-    } else if (scenario === "adapter-empty") {
+    } else if (scenario === "native-version-once") {
         const marker = process.env.MORTY_TEST_PROBE_STATE;
         if (!existsSync(marker)) {
             writeFileSync(marker, "agent-version-read");

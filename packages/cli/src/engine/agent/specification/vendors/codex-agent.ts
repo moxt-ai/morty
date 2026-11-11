@@ -1,16 +1,13 @@
+import type { SessionCapabilities } from "@morty-build/client/protocol";
 import { createCodexClient } from "../../../acp/adapter/codex/create-client.ts";
 import { CodexAcpAgent } from "../../../acp/harness/codex/agent.ts";
 import { normalizeAcpCapabilities } from "../../../acp/protocol/session-capabilities.ts";
-import {
-    type AgentReadinessProbeParams,
-    filterEnvironment,
-    VerifiedAcpReadiness,
-} from "../../discovery/acp-readiness-probe.ts";
 import { AgentProbeError } from "../../discovery/agent-probe-error.ts";
-import { InProcessAcpAgentSpecification } from "../agent-specification.ts";
+import { type AgentReadinessProbeParams, filterEnvironment } from "../../discovery/agent-readiness.ts";
+import { LocalAgentSpecification } from "../agent-specification.ts";
 
 // Discovery and sessions both drive the native app-server without an internal ACP endpoint.
-export class CodexAgentSpecification extends InProcessAcpAgentSpecification {
+export class CodexAgentSpecification extends LocalAgentSpecification {
     override readonly versionProbeTimeoutMilliseconds = 10_000;
     readonly agentExecutable = "codex";
     readonly createConnection = null;
@@ -22,7 +19,7 @@ export class CodexAgentSpecification extends InProcessAcpAgentSpecification {
         super("MORTY_CODEX_PATH");
     }
 
-    override readonly probeReadiness = async (params: AgentReadinessProbeParams): Promise<VerifiedAcpReadiness> => {
+    override readonly probeReadiness = async (params: AgentReadinessProbeParams): Promise<SessionCapabilities> => {
         const timeout = AbortSignal.timeout(this.acpProbeTimeoutMilliseconds);
         const signal = AbortSignal.any([params.signal, timeout]);
         const reject = async (): Promise<never> => {
@@ -39,10 +36,7 @@ export class CodexAgentSpecification extends InProcessAcpAgentSpecification {
                 signal,
             );
             try {
-                return new VerifiedAcpReadiness(
-                    CodexAcpAgent.capabilities().agentInfo.version,
-                    normalizeAcpCapabilities(CodexAcpAgent.capabilities()),
-                );
+                return normalizeAcpCapabilities(CodexAcpAgent.capabilities());
             } finally {
                 await client.dispose("graceful");
             }

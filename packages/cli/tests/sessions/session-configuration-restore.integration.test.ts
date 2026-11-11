@@ -18,7 +18,6 @@ import { ControlledAcpSpecification } from "../support/agents/controlled-acp-spe
 import { prepareNewRealSession, type RealDaemonPeer, withControlledDaemon } from "../support/agents/real-daemon.ts";
 
 class ModelDependentSettingsAgent extends ControlledAcpSpecification {
-    readonly adapterVersion = process.versions.node;
     readonly agentExecutable = "node";
     readonly harness = "controlled-acp";
     readonly label = "Controlled model-dependent settings";

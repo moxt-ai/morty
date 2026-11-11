@@ -53,13 +53,6 @@ export async function resolveAgentExecutables(
     );
 }
 
-export async function resolveAdapterExecutables(
-    specification: LocalAgentSpecification,
-    context: LocalAgentDiscoveryContext,
-): Promise<readonly ResolvedExecutable[]> {
-    return await resolveAgentExecutables(specification, context);
-}
-
 export async function probeVersion(
     executable: ResolvedExecutable,
     arguments_: readonly string[],

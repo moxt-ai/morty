@@ -9,29 +9,16 @@ import {
     type SessionNotification,
 } from "@agentclientprotocol/sdk/unstable";
 import type { SessionCapabilities } from "@morty-build/client/protocol";
-import { AcpExecutionError } from "../../acp/acp-error.ts";
-import type { AcpAgentDefinition } from "../../acp/agent/agent-definition.ts";
-import type { AcpClientHandler } from "../../acp/connection/create-client.ts";
-import { normalizeAcpCapabilities } from "../../acp/protocol/session-capabilities.ts";
-import { AgentProbeError } from "./agent-probe-error.ts";
-import { normalizeVersionOutput } from "./version-output.ts";
-
-export class VerifiedAcpReadiness {
-    readonly adapterVersion: string;
-    readonly capabilities: SessionCapabilities;
-
-    constructor(adapterVersion: string, capabilities: SessionCapabilities) {
-        this.adapterVersion = adapterVersion;
-        this.capabilities = capabilities;
-    }
-}
-
-export interface AgentReadinessProbeParams {
-    readonly agent: AcpAgentDefinition;
-    readonly environment: Readonly<NodeJS.ProcessEnv>;
-    readonly defaultWorkspace: string;
-    readonly signal: AbortSignal;
-}
+import { AcpExecutionError } from "../../../src/engine/acp/acp-error.ts";
+import type { AcpAgentDefinition } from "../../../src/engine/acp/agent/agent-definition.ts";
+import type { AcpClientHandler } from "../../../src/engine/acp/connection/create-client.ts";
+import { normalizeAcpCapabilities } from "../../../src/engine/acp/protocol/session-capabilities.ts";
+import { AgentProbeError } from "../../../src/engine/agent/discovery/agent-probe-error.ts";
+import {
+    type AgentReadinessProbeParams,
+    filterEnvironment,
+} from "../../../src/engine/agent/discovery/agent-readiness.ts";
+import { LocalAgentSpecification } from "../../../src/engine/agent/specification/agent-specification.ts";
 
 class DiscoveryAcpHandler implements AcpClientHandler {
     readonly onElicitation = (
@@ -50,18 +37,8 @@ class DiscoveryAcpHandler implements AcpClientHandler {
     readonly onUpdate = (_notification: SessionNotification): Promise<void> => Promise.resolve();
 }
 
-export function filterEnvironment(environment: Readonly<NodeJS.ProcessEnv>): Readonly<Record<string, string>> {
-    const filtered: Record<string, string> = {};
-    for (const [name, value] of Object.entries(environment)) {
-        if (typeof value === "string") {
-            filtered[name] = value;
-        }
-    }
-    return filtered;
-}
-
 /** Exercises the same adapter-owned connection used by sessions, with a bounded probe lifetime. */
-export async function probeAcpReadiness(
+async function probeAcpReadiness(
     specification: {
         readonly acpProbeTimeoutMilliseconds: number;
         readonly authenticationCommand: () => string;
@@ -70,7 +47,7 @@ export async function probeAcpReadiness(
     environment: Readonly<NodeJS.ProcessEnv>,
     defaultWorkspace: string,
     signal: AbortSignal,
-): Promise<VerifiedAcpReadiness> {
+): Promise<SessionCapabilities> {
     signal.throwIfAborted();
     const controller = new AbortController();
     let timedOut = false;
@@ -109,10 +86,7 @@ export async function probeAcpReadiness(
                             "ACP agent selected an unsupported protocol version",
                         );
                     }
-                    return new VerifiedAcpReadiness(
-                        normalizeVersionOutput(initialized.agentInfo?.version ?? ""),
-                        normalizeAcpCapabilities(initialized),
-                    );
+                    return normalizeAcpCapabilities(initialized);
                 })(),
                 "The ACP endpoint stopped during initialization",
                 controller.signal,
@@ -140,4 +114,9 @@ export async function probeAcpReadiness(
         clearTimeout(timeout);
         signal.removeEventListener("abort", abort);
     }
+}
+
+export abstract class ControlledReadinessSpecification extends LocalAgentSpecification {
+    readonly probeReadiness = (params: AgentReadinessProbeParams): Promise<SessionCapabilities> =>
+        probeAcpReadiness(this, params.agent, params.environment, params.defaultWorkspace, params.signal);
 }

@@ -79,7 +79,7 @@ export class HarnessClientEvents {
                     signal,
                 );
             }
-        }, "identified");
+        });
     }
 
     readonly receive = async (notification: SessionNotification): Promise<void> => {

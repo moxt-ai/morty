@@ -1,7 +1,8 @@
+import type { SessionCapabilities } from "@morty-build/client/protocol";
 import type { AgentConnectionFactory } from "../../acp/connection/agent-connection.ts";
 import type { ResolvedExecutable } from "../../util/process/executable.ts";
-import { type AgentReadinessProbeParams, probeAcpReadiness } from "../discovery/acp-readiness-probe.ts";
 import type { LocalAgentDiscoveryContext } from "../discovery/agent-discovery-context.ts";
+import type { AgentReadinessProbeParams } from "../discovery/agent-readiness.ts";
 import { normalizeVersionOutput } from "../discovery/version-output.ts";
 
 // A probe budget is the machine's worst-case allowance, not an optimistic guess. An Agent that is
@@ -13,20 +14,20 @@ const VERSION_PROBE_TIMEOUT_MILLISECONDS = 30_000;
 const ACP_PROBE_TIMEOUT_MILLISECONDS = 60_000;
 
 export abstract class LocalAgentSpecification {
-    readonly probeReadiness = (params: AgentReadinessProbeParams) =>
-        probeAcpReadiness(this, params.agent, params.environment, params.defaultWorkspace, params.signal);
+    abstract readonly probeReadiness: (params: AgentReadinessProbeParams) => Promise<SessionCapabilities>;
     abstract readonly createConnection: AgentConnectionFactory | null;
-    abstract readonly adapterVersion: string;
     abstract readonly agentExecutable: string;
-    abstract readonly agentOverrideVariable: string;
+    readonly agentOverrideVariable: string;
+
+    protected constructor(executableOverrideVariable: string) {
+        this.agentOverrideVariable = executableOverrideVariable;
+    }
     abstract readonly harness: string;
     abstract readonly label: string;
     readonly minimumSupportedAgentVersion: string = "0.0.0";
     readonly acpProbeTimeoutMilliseconds: number = ACP_PROBE_TIMEOUT_MILLISECONDS;
     readonly authenticationCommand = (): string => "";
-    readonly adapterVersionArguments: readonly string[] = ["--version"];
     readonly agentVersionArguments: readonly string[] = ["--version"];
-    readonly normalizeAdapterVersion = normalizeVersionOutput;
     readonly normalizeAgentVersion = normalizeVersionOutput;
     readonly versionProbeTimeoutMilliseconds: number = VERSION_PROBE_TIMEOUT_MILLISECONDS;
 
@@ -35,28 +36,7 @@ export abstract class LocalAgentSpecification {
         _context: LocalAgentDiscoveryContext,
     ): Promise<Readonly<Record<string, string>>> => Object.freeze({});
 
-    readonly recoveryCommand = (): string => "";
-
     readonly resolveInstalledAgentExecutables = (
         _context: LocalAgentDiscoveryContext,
     ): Promise<readonly ResolvedExecutable[]> => Promise.resolve([]);
-}
-
-/**
- * A vendor CLI that does not speak ACP, which Morty drives through the vendor's own protocol from an
- * ACP Agent hosted inside the daemon. There is no adapter to install or version-probe: the same
- * executable is both the Agent and the thing Morty spawns, so it shares the Agent's override
- * variable.
- *
- * The ACP factory remains available for protocol compatibility. Native integrations can override
- * readiness with direct harness operations, independently of their session adapter implementation.
- */
-export abstract class InProcessAcpAgentSpecification extends LocalAgentSpecification {
-    readonly adapterVersion = "in-process";
-    readonly agentOverrideVariable: string;
-
-    protected constructor(executableOverrideVariable: string) {
-        super();
-        this.agentOverrideVariable = executableOverrideVariable;
-    }
 }

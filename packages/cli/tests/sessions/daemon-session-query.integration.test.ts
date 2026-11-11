@@ -10,13 +10,13 @@ import {
 } from "@morty-build/client/protocol";
 import { expect, test } from "vitest";
 import type { AgentConnectionFactory } from "../../src/engine/acp/connection/agent-connection.ts";
-import { InProcessAcpAgentSpecification } from "../../src/engine/agent/specification/agent-specification.ts";
+import { ControlledReadinessSpecification } from "../support/agents/controlled-readiness-specification.ts";
 import { ControlledSessionAgent } from "../support/agents/controlled-session-agent.ts";
 import { type RealDaemonPeer, withControlledDaemon } from "../support/agents/real-daemon.ts";
 
 const NATIVE_HARNESS = "claude";
 
-class ControlledAgentSpecification extends InProcessAcpAgentSpecification {
+class ControlledAgentSpecification extends ControlledReadinessSpecification {
     readonly agentExecutable = "node";
     readonly harness = NATIVE_HARNESS;
     readonly label = "Controlled Claude";

@@ -1,7 +1,6 @@
 import {
     type AvailableAgent,
     type LocalAgentInventory,
-    MissingAdapter,
     type UnavailableAgent,
     UnsupportedAgentVersion,
 } from "../../../../engine/agent/discovery/agent-discovery.ts";
@@ -36,11 +35,7 @@ class UnavailableAgentDiagnostic {
         this.label = discovery.specification.label;
         this.message = discovery.message;
         this.recoveryCommand =
-            discovery instanceof MissingAdapter
-                ? discovery.specification.recoveryCommand()
-                : discovery.code === "authentication_required"
-                  ? discovery.specification.authenticationCommand()
-                  : "";
+            discovery.code === "authentication_required" ? discovery.specification.authenticationCommand() : "";
         this.status = discovery.status;
     }
 }
@@ -122,11 +117,7 @@ export function formatAgentDiagnostics(inventory: LocalAgentInventory, json: boo
             humanLine(unavailable.label, unavailable.status, `${unavailable.message}${detectionSuffix(unavailable)}`),
         );
         if (unavailable.recoveryCommand.length > 0) {
-            lines.push(
-                unavailable.code === "authentication_required"
-                    ? `  Authenticate locally: ${unavailable.recoveryCommand}`
-                    : `  Install adapter: ${unavailable.recoveryCommand}`,
-            );
+            lines.push(`  Authenticate locally: ${unavailable.recoveryCommand}`);
         }
     }
     return `${lines.join("\n")}\n`;

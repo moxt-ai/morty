@@ -1,30 +1,26 @@
 import { createHash } from "node:crypto";
 import { join } from "node:path";
 import { PROTOCOL_VERSION } from "@agentclientprotocol/sdk/unstable";
+import type { SessionCapabilities } from "@morty-build/client/protocol";
 import { AcpExecutionError } from "../../../acp/acp-error.ts";
 import { createPiClient } from "../../../acp/adapter/pi/create-client.ts";
 import { agentOperationError, waitForAgentOperation } from "../../../acp/connection/agent-operation.ts";
 import { normalizeAcpCapabilities } from "../../../acp/protocol/session-capabilities.ts";
 import type { ResolvedExecutable } from "../../../util/process/executable.ts";
-import {
-    type AgentReadinessProbeParams,
-    filterEnvironment,
-    VerifiedAcpReadiness,
-} from "../../discovery/acp-readiness-probe.ts";
 import type { LocalAgentDiscoveryContext } from "../../discovery/agent-discovery-context.ts";
 import { AgentProbeError } from "../../discovery/agent-probe-error.ts";
-import { normalizeVersionOutput } from "../../discovery/version-output.ts";
-import { InProcessAcpAgentSpecification } from "../agent-specification.ts";
+import { type AgentReadinessProbeParams, filterEnvironment } from "../../discovery/agent-readiness.ts";
+import { LocalAgentSpecification } from "../agent-specification.ts";
 
 const ACP_PROBE_TIMEOUT_MILLISECONDS = 30_000;
 
-export class PiAgentSpecification extends InProcessAcpAgentSpecification {
+export class PiAgentSpecification extends LocalAgentSpecification {
     readonly createConnection = null;
     override readonly acpProbeTimeoutMilliseconds = ACP_PROBE_TIMEOUT_MILLISECONDS;
     readonly agentExecutable = "pi";
 
     /** Discovery exercises the same concrete Pi client as live operations, without local ACP dispatch. */
-    override readonly probeReadiness = async (params: AgentReadinessProbeParams): Promise<VerifiedAcpReadiness> => {
+    override readonly probeReadiness = async (params: AgentReadinessProbeParams): Promise<SessionCapabilities> => {
         const timeout = AbortSignal.timeout(this.acpProbeTimeoutMilliseconds);
         const signal = AbortSignal.any([params.signal, timeout]);
         const runtime = {
@@ -74,10 +70,7 @@ export class PiAgentSpecification extends InProcessAcpAgentSpecification {
                 if (result.stopReason !== "end_turn") {
                     throw new AgentProbeError("acp_incompatible", "Pi did not complete its readiness turn");
                 }
-                return new VerifiedAcpReadiness(
-                    normalizeVersionOutput(initialized.agentInfo?.version ?? ""),
-                    normalizeAcpCapabilities(initialized),
-                );
+                return normalizeAcpCapabilities(initialized);
             } finally {
                 await client.dispose();
             }

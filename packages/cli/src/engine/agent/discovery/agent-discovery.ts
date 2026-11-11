@@ -25,12 +25,6 @@ export abstract class UnavailableAgent extends AgentDiscovery {
     abstract readonly message: string;
 }
 
-export class MissingAdapter extends UnavailableAgent {
-    readonly code = "adapter_not_found";
-    readonly message = "ACP adapter not found";
-    readonly status = "missing_adapter";
-}
-
 export class MissingAgent extends UnavailableAgent {
     readonly code = "agent_not_found";
     readonly message = "Agent executable not found";
@@ -61,18 +55,6 @@ export class UnsupportedAgentVersion extends UnavailableAgent {
         this.agentVersion = agentVersion;
         this.minimumSupportedVersion = minimumSupportedVersion;
         this.message = `Agent version ${agentVersion} is below the minimum supported version ${minimumSupportedVersion}`;
-    }
-}
-
-export class IntegrationProbeFailed extends UnavailableAgent {
-    readonly code: string;
-    readonly message: string;
-    readonly status = "probe_failed";
-
-    constructor(specification: LocalAgentSpecification, code: string, message: string) {
-        super(specification);
-        this.code = code;
-        this.message = message;
     }
 }
 

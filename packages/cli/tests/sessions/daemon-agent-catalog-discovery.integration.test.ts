@@ -34,11 +34,10 @@ const websocketGuid = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 const fakeAgentPath = fileURLToPath(new URL("./fixtures/acp-peer.ts", import.meta.url));
 
 class FirstAgentSpecification extends ControlledAcpSpecification {
-    readonly adapterVersion = "1.0.0";
     readonly agentExecutable = "controlled-acp";
     readonly harness = "controlled-acp";
     readonly label = "Controlled ACP";
-    override readonly minimumSupportedAgentVersion = this.adapterVersion;
+    override readonly minimumSupportedAgentVersion = "1.0.0";
 
     constructor() {
         super("MORTY_TEST_CATALOG_AGENT_PATH", []);
@@ -46,11 +45,10 @@ class FirstAgentSpecification extends ControlledAcpSpecification {
 }
 
 class LaterInstalledAgentSpecification extends ControlledAcpSpecification {
-    readonly adapterVersion = "1.0.0";
     readonly agentExecutable = "controlled-acp-later";
     readonly harness = "controlled-acp-later";
     readonly label = "Controlled ACP Later";
-    override readonly minimumSupportedAgentVersion = this.adapterVersion;
+    override readonly minimumSupportedAgentVersion = "1.0.0";
 
     constructor() {
         super("MORTY_TEST_CATALOG_LATER_AGENT_PATH", []);

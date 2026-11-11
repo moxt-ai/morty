@@ -24,8 +24,8 @@ import { type ControlledAcpPeer, ControlledEndpointConnection } from "@morty-bui
 import { expect, test, vi } from "vitest";
 import type { AgentTermination } from "../../src/engine/acp/agent/agent-lifecycle.ts";
 import type { AgentConnectionFactory } from "../../src/engine/acp/connection/agent-connection.ts";
-import { InProcessAcpAgentSpecification } from "../../src/engine/agent/specification/agent-specification.ts";
 import { ControlledAcpAgentSpecification } from "../support/agents/controlled-acp.ts";
+import { ControlledReadinessSpecification } from "../support/agents/controlled-readiness-specification.ts";
 import { withControlledDaemon as withRealDaemon } from "../support/agents/real-daemon.ts";
 
 const fakeAgentPath = fileURLToPath(new URL("./fixtures/acp-peer.ts", import.meta.url));
@@ -69,7 +69,7 @@ class ControlledCloseEndpoint implements ControlledAcpPeer {
     };
 }
 
-class ControlledCloseAgentSpecification extends InProcessAcpAgentSpecification {
+class ControlledCloseAgentSpecification extends ControlledReadinessSpecification {
     readonly createConnection: AgentConnectionFactory = (options) =>
         new ControlledEndpointConnection(this.createEndpoint(), options.client);
     readonly agentExecutable = "node";
