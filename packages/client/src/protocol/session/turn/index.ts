@@ -72,9 +72,6 @@ const promptTurnRequestSchema = z
     })
     .readonly();
 const notRetainedTurnRequestSchema = z.object({ kind: z.literal("not_retained") }).readonly();
-const turnRequestSchema = z.discriminatedUnion("kind", [promptTurnRequestSchema, notRetainedTurnRequestSchema]);
-
-export type TurnRequest = z.infer<typeof turnRequestSchema>;
 
 const turnIdentitySchema = z.object({
     acceptedAt: timestampSchema,

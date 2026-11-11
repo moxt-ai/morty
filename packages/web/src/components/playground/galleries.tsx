@@ -53,7 +53,6 @@ import { Input } from "../ui/input.tsx";
 import { LinkButton } from "../ui/link-button.tsx";
 import { MortyAlert } from "../ui/morty-alert.tsx";
 import { MortyTooltipContent } from "../ui/morty-tooltip-content.tsx";
-import { NavigationCardLink } from "../ui/navigation-card-link.tsx";
 import { Select as OptionSelect } from "../ui/option-select.tsx";
 import {
     executionDetailsDialogWidthPx,
@@ -1189,20 +1188,6 @@ function ComposerNoticeGallery() {
     );
 }
 
-function NavigationCardGallery() {
-    return (
-        <Specimen title="Pending while the route loads">
-            <NavigationCardLink
-                className="inline-flex min-w-48 rounded-xl border border-border bg-card px-4 py-3 text-14 font-medium"
-                label="Component library"
-                to="/playground"
-            >
-                {(pending) => (pending ? "Opening library…" : "Component library")}
-            </NavigationCardLink>
-        </Specimen>
-    );
-}
-
 const playgroundExecutionContext = {
     agent: "Codex",
     harness: "codex",
@@ -1997,7 +1982,6 @@ const galleries = {
     "menu-select": MenuSelectGallery,
     message: MessageGallery,
     "native-session-directory-placeholder": NativeSessionDirectoryPlaceholderGallery,
-    "navigation-card": NavigationCardGallery,
     "option-select": OptionSelectGallery,
     popover: PopoverGallery,
     radius: RadiusGallery,

@@ -395,10 +395,6 @@ export const encodeSessionPrepareCommand = (message: SessionPrepareCommand): str
     encode(message, sessionPrepareCommandSchema);
 export const decodeSessionReadyEvent = (encoded: string): SessionReadyEvent => decode(encoded, sessionReadyEventSchema);
 export const encodeSessionReadyEvent = (message: SessionReadyEvent): string => encode(message, sessionReadyEventSchema);
-export const decodeSessionCommandsUpdatedEvent = (encoded: string): SessionCommandsUpdatedEvent =>
-    decode(encoded, sessionCommandsUpdatedEventSchema);
-export const encodeSessionCommandsUpdatedEvent = (message: SessionCommandsUpdatedEvent): string =>
-    encode(message, sessionCommandsUpdatedEventSchema);
 export const decodeSessionInfoUpdatedEvent = (encoded: string): SessionInfoUpdatedEvent =>
     decode(encoded, sessionInfoUpdatedEventSchema);
 export const encodeSessionInfoUpdatedEvent = (message: SessionInfoUpdatedEvent): string =>

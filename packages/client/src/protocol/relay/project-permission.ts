@@ -1,4 +1,4 @@
-export const PROJECT_PERMISSION_NAMES = Object.freeze([
+const PROJECT_PERMISSION_NAMES = Object.freeze([
     "computer:pair",
     "computer:read",
     "computer:revoke",

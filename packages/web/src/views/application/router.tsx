@@ -1,8 +1,8 @@
 import { isIdentifier } from "@morty-build/client/protocol";
 import { createRootRoute, createRoute, createRouter, Outlet, useRouter } from "@tanstack/react-router";
-import type { ComponentType, ReactNode } from "react";
 import { Button } from "../../components/ui/cloud-button.tsx";
 import { describePageFailure } from "../../view-models/format-error.ts";
+import type { MortyApplication } from "../../view-models/morty-application.ts";
 import { reportApplicationError } from "../../view-models/report-error.ts";
 import {
     SetupCardDescription,
@@ -13,10 +13,7 @@ import {
     setupPrimaryButtonClassName,
     setupPrimaryButtonSize,
 } from "../setup/setup-card-shell.tsx";
-
-export interface ApplicationShellProps {
-    readonly children: ReactNode;
-}
+import { MortyChat } from "./morty-chat.tsx";
 
 function RootRoute() {
     return <Outlet />;
@@ -77,24 +74,14 @@ function RouteFailure({ error, reset }: { readonly error: unknown; readonly rese
     );
 }
 
-export function createApplicationRouter(
-    authorize: (signal: AbortSignal) => Promise<void>,
-    Content: ComponentType<{ readonly view: "overview" | "chat" }>,
-    layouts: {
-        readonly Standard: ComponentType<ApplicationShellProps>;
-        readonly Application: ComponentType<ApplicationShellProps>;
-    },
-) {
+export function createSignedInRouter(application: MortyApplication) {
     const root = createRootRoute({
-        beforeLoad: async ({ abortController }) => await authorize(abortController.signal),
+        beforeLoad: async ({ abortController }) =>
+            await application.anonymousSession.getState().authorize(abortController.signal),
         component: RootRoute,
-        errorComponent: (props) => (
-            <layouts.Standard>
-                <RouteFailure {...props} />
-            </layouts.Standard>
-        ),
+        errorComponent: (props) => <RouteFailure {...props} />,
     });
-    function page(path: "/" | "/chat", view: "overview" | "chat") {
+    function page(path: "/" | "/chat") {
         const route = createRoute({
             getParentRoute: () => root,
             path,
@@ -105,18 +92,13 @@ export function createApplicationRouter(
                 };
             },
             component: function ApplicationRoute() {
-                const body = <Content view={view} />;
-                return view === "overview" ? (
-                    <layouts.Standard>{body}</layouts.Standard>
-                ) : (
-                    <layouts.Application>{body}</layouts.Application>
-                );
+                return <MortyChat application={application} />;
             },
         });
         return route;
     }
     return createRouter({
-        routeTree: root.addChildren([page("/", "overview"), page("/chat", "chat")]),
+        routeTree: root.addChildren([page("/"), page("/chat")]),
         defaultOnCatch: (error) => reportApplicationError(error, "application-route"),
         scrollRestoration: true,
     });

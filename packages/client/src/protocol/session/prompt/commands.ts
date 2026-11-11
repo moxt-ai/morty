@@ -112,7 +112,7 @@ export type PromptAttachment = z.infer<typeof promptAttachmentSchema>;
 
 export const decodePromptAttachment = (value: unknown): PromptAttachment =>
     decodeZodValue(value, promptAttachmentSchema);
-export const decodePromptAttachmentsValue = (value: unknown): readonly PromptAttachment[] =>
+const decodePromptAttachmentsValue = (value: unknown): readonly PromptAttachment[] =>
     decodeZodValue(value, z.array(promptAttachmentSchema).max(16).readonly());
 
 function readPromptPlacement(value: Readonly<Record<string, unknown>>): SessionPromptPlacement {

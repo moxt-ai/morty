@@ -6,7 +6,6 @@ const runtimeUpgradeVersionSchema = z
     .string()
     .max(128)
     .regex(/^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(?:-[0-9A-Za-z]+(?:[.-][0-9A-Za-z]+)*)?$/);
-export const decodeRuntimeUpgradeVersion = (value: unknown): string => runtimeUpgradeVersionSchema.parse(value);
 const runtimeUpgradeResultSchema = z
     .strictObject({
         kind: z.literal("runtime.upgrade.result"),

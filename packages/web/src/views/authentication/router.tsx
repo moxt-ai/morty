@@ -1,8 +1,8 @@
 import { createRootRoute, createRoute, createRouter, Outlet } from "@tanstack/react-router";
-import { reportApplicationError } from "../../index.ts";
 import type { ContinueStoreApi } from "../../view-models/authentication/continue-store.ts";
 import { useExternalStore } from "../../view-models/external-store.ts";
 import type { MortyApplication } from "../../view-models/morty-application.ts";
+import { reportApplicationError } from "../../view-models/report-error.ts";
 import { useMortyApplication } from "../application/application-context.tsx";
 import { BugReportButton } from "../diagnostics/bug-report-button.tsx";
 import { ContinuePageContent } from "./continue-page-content.tsx";

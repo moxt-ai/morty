@@ -13,13 +13,6 @@ const sessionAccessHolderSchema = z.discriminatedUnion("kind", [
 
 export type SessionAccessHolder = z.infer<typeof sessionAccessHolderSchema>;
 
-export const decodeSessionAccessHolder = (value: unknown): SessionAccessHolder =>
-    decodeZodValue(value, sessionAccessHolderSchema);
-
-export function isSessionAccessHolder(value: unknown): value is SessionAccessHolder {
-    return sessionAccessHolderSchema.safeParse(value).success;
-}
-
 /**
  * The access a Session credential carries: whose access, under which of the computer's Runtime pairing generations.
  * The credential is honored only while that holder's access holds and that generation is still the computer's active

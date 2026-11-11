@@ -15,10 +15,6 @@ export const NATIVE_SESSION_REQUEST_KIND = "native.session.request";
 export const NATIVE_SESSION_RESULT_KIND = "native.session.result";
 export const NATIVE_SESSION_CANCEL_KIND = "native.session.cancel";
 
-/** Bounding limits for materialized history payloads. */
-export const SESSION_HISTORY_CHARACTER_LIMIT = 256_000;
-export const SESSION_HISTORY_MESSAGE_LIMIT = 1_000;
-
 const envelope = {
     requestId: identifier,
 };
@@ -51,7 +47,6 @@ const activeTurnSnapshotSchema = z
         state: z.literal("running"),
     })
     .readonly();
-export type ActiveTurnSnapshot = z.infer<typeof activeTurnSnapshotSchema>;
 
 /**
  * Where one submitted command stands in the Computer's execution receipts. Only the

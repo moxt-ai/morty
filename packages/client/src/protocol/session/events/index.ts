@@ -572,7 +572,6 @@ const sessionWireEventSchema = z.union([
         .passthrough()
         .readonly(),
 ]);
-export type SessionWireEvent = z.infer<typeof sessionWireEventSchema>;
 const sessionWireEnvelopeSchema = z
     .object({
         kind: z.literal(SESSION_EVENT_KIND),
@@ -585,9 +584,6 @@ export type SessionWireEnvelope = z.infer<typeof sessionWireEnvelopeSchema>;
 function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
     return typeof value === "object" && value !== null && !Array.isArray(value);
 }
-
-const sessionEventBatchSchema = z.array(sessionEventSchema).min(1).max(SESSION_EVENT_BATCH_MAX_SIZE).readonly();
-export type SessionEventBatch = z.infer<typeof sessionEventBatchSchema>;
 const sessionLiveEventBatchSchema = z.array(sessionLiveEventSchema).min(1).max(SESSION_EVENT_BATCH_MAX_SIZE).readonly();
 export type SessionLiveEventBatch = z.infer<typeof sessionLiveEventBatchSchema>;
 const sessionEventEnvelopeSchema = z
@@ -697,24 +693,15 @@ export const decodeKnownSessionEventPayload = (value: unknown): SessionEventPayl
 };
 export const encodeSessionEvent = (value: SessionEvent): string => encode(value, sessionEventSchema);
 export const decodeSessionLiveEvent = (value: unknown): SessionLiveEvent => decode(value, sessionLiveEventSchema);
-export const isSessionLiveEvent = (value: unknown): value is SessionLiveEvent =>
-    sessionLiveEventSchema.safeParse(value).success;
-export const encodeSessionLiveEvent = (value: SessionLiveEvent): string => encode(value, sessionLiveEventSchema);
 export const decodeSessionWireEnvelope = (value: unknown): SessionWireEnvelope =>
     decode(value, sessionWireEnvelopeSchema);
 export const encodeSessionWireEnvelope = (value: SessionWireEnvelope): string =>
     encode(value, sessionWireEnvelopeSchema);
-export const decodeSessionEventBatch = (value: unknown): SessionEventBatch => decode(value, sessionEventBatchSchema);
-export const encodeSessionEventBatch = (value: SessionEventBatch): string => encode(value, sessionEventBatchSchema);
-export const decodeSessionLiveEventBatch = (value: unknown): SessionLiveEventBatch =>
-    decode(value, sessionLiveEventBatchSchema);
 export const decodeKnownSessionLiveEventBatch = (value: unknown): SessionLiveEventBatch =>
     decode(
         decodedEntries(inputValue(value), sessionLiveEventSchema, SESSION_EVENT_BATCH_MAX_SIZE),
         knownSessionLiveEventBatchSchema,
     );
-export const encodeSessionLiveEventBatch = (value: SessionLiveEventBatch): string =>
-    encode(value, sessionLiveEventBatchSchema);
 export const decodeSessionEventEnvelope = (value: unknown): SessionEventEnvelope =>
     decode(value, sessionEventEnvelopeSchema);
 export const encodeSessionEventEnvelope = (value: SessionEventEnvelope): string =>
@@ -724,11 +711,7 @@ export const decodeSessionEventLogPage = (value: unknown): SessionEventLogPage =
     decode(value, sessionEventLogPageSchema);
 export const decodeKnownSessionEventLogPage = (value: unknown): SessionEventLogPage =>
     decode(sanitizeConsumableSessionEventLogPage(value), sessionEventLogPageSchema);
-export const encodeSessionEventLogPage = (value: SessionEventLogPage): string =>
-    encode(value, sessionEventLogPageSchema);
 export const decodeNativeSessionEvents = (value: unknown): NativeSessionEvents =>
     decode(value, nativeSessionEventsSchema);
 export const decodeKnownNativeSessionEvents = (value: unknown): NativeSessionEvents =>
     decode(sanitizeConsumableNativeSessionEvents(value), nativeSessionEventsSchema);
-export const encodeNativeSessionEvents = (value: NativeSessionEvents): string =>
-    encode(value, nativeSessionEventsSchema);

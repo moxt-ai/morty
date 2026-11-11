@@ -10,16 +10,12 @@ export type {
 export {
     decodeComputerDiagnosticsRequest,
     decodeComputerDiagnosticsResult,
-    encodeComputerDiagnosticsRequest,
-    encodeComputerDiagnosticsResult,
 } from "./computer/diagnostics.ts";
 export type {
-    ComputerHeartbeatAckEvent,
     ComputerHeartbeatEvent,
     ComputerLivenessReadyEvent,
     ComputerPingCommand,
     ComputerPongEvent,
-    ComputerStatusEvent,
 } from "./computer/liveness.ts";
 export {
     COMPUTER_HEARTBEAT_ACK_KIND,
@@ -32,15 +28,9 @@ export {
     COMPUTER_STATUS_KIND,
     decodeComputerHeartbeatAckEvent,
     decodeComputerHeartbeatEvent,
-    decodeComputerLivenessReadyEvent,
-    decodeComputerPingCommand,
     decodeComputerPongEvent,
     decodeComputerStatusEvent,
-    encodeComputerHeartbeatAckEvent,
-    encodeComputerHeartbeatEvent,
     encodeComputerLivenessReadyEvent,
-    encodeComputerPingCommand,
-    encodeComputerPongEvent,
     encodeComputerStatusEvent,
 } from "./computer/liveness.ts";
 export {
@@ -48,25 +38,14 @@ export {
     mortyApiUrl,
 } from "./relay/morty-api.ts";
 export type { ProjectLocationHint } from "./relay/project-location.ts";
-export {
-    isProjectLocationHint,
-    PROJECT_LOCATION_HINTS,
-} from "./relay/project-location.ts";
+export { PROJECT_LOCATION_HINTS } from "./relay/project-location.ts";
 export type { ProjectPermissionName } from "./relay/project-permission.ts";
-export {
-    PROJECT_PERMISSION_NAMES,
-    RELAY_APP_PROJECT_PERMISSIONS,
-} from "./relay/project-permission.ts";
+export { RELAY_APP_PROJECT_PERMISSIONS } from "./relay/project-permission.ts";
+
 export type { RuntimeUpgradeResult } from "./runtime/upgrade.ts";
-export {
-    decodeRuntimeUpgradeResult,
-    decodeRuntimeUpgradeVersion,
-    encodeRuntimeUpgradeResult,
-} from "./runtime/upgrade.ts";
 
 export type {
     SessionAccessClaims,
-    SessionAccessCredential,
     SessionAccessGrant,
     SessionAccessHolder,
 } from "./session/access/index.ts";
@@ -74,27 +53,20 @@ export type {
 export {
     decodeSessionAccessCredential,
     decodeSessionAccessGrant,
-    decodeSessionAccessHolder,
-    isSessionAccessHolder,
 } from "./session/access/index.ts";
 
 export type {
     AgentCatalogDiscoverCommand,
     AgentCatalogDiscoveredEvent,
-    AgentCatalogDiscoveryFailedEvent,
-    CatalogedAgent,
 } from "./session/agent/catalog.ts";
 
 export {
     AGENT_CATALOG_DISCOVER_KIND,
     AGENT_CATALOG_DISCOVERED_KIND,
     AGENT_CATALOG_DISCOVERY_FAILED_KIND,
-    decodeAgentCatalogDiscoverCommand,
     decodeAgentCatalogDiscoveredEvent,
     decodeAgentCatalogDiscoveryFailedEvent,
     encodeAgentCatalogDiscoverCommand,
-    encodeAgentCatalogDiscoveredEvent,
-    encodeAgentCatalogDiscoveryFailedEvent,
 } from "./session/agent/catalog.ts";
 
 export { MAX_LOCAL_AGENT_DIRECTORY_ENTRIES } from "./session/agent/directory.ts";
@@ -104,7 +76,6 @@ export type {
     AgentSetting,
     AgentSettingsDiscoverCommand,
     AgentSettingsDiscoveredEvent,
-    AgentSettingsDiscoveryFailedEvent,
 } from "./session/agent/settings.ts";
 
 export {
@@ -118,12 +89,10 @@ export {
     decodeAgentSettingsDiscoveredEvent,
     decodeAgentSettingsDiscoveryFailedEvent,
     encodeAgentSettingsDiscoverCommand,
-    encodeAgentSettingsDiscoveredEvent,
     encodeAgentSettingsDiscoveryFailedEvent,
 } from "./session/agent/settings.ts";
 
 export type {
-    AgentExecutionConfiguration,
     SessionConfigOption,
     SessionConfigReadCommand,
     SessionConfigReadResult,
@@ -133,16 +102,9 @@ export type {
 } from "./session/configuration/index.ts";
 
 export {
-    AGENT_DEFAULT_EXECUTION_SETTING,
-    AGENT_PERMISSION_MODE_CONFIG_ID,
-    AGENT_PERMISSION_MODES,
-    DEFAULT_AGENT_EXECUTION_CONFIGURATION,
-    decodeAgentExecutionConfiguration,
-    decodeSessionConfigOptions,
     decodeSessionConfigReadCommand,
     decodeSessionConfigReadResult,
     decodeSessionConfigUpdatedEvent,
-    decodeSessionConfigurationSelections,
     decodeSessionConfigureCommand,
     encodeSessionConfigReadCommand,
     encodeSessionConfigReadResult,
@@ -183,40 +145,27 @@ export type {
     PromptTerminalLifecycle,
     QueuedPromptRequestEventLog,
     SessionEvent,
-    SessionEventBatch,
-    SessionEventEnvelope,
     SessionEventLogPage,
     SessionEventPayload,
     SessionLiveEvent,
     SessionLiveEventBatch,
     SessionWireEnvelope,
-    SessionWireEvent,
 } from "./session/events/index.ts";
 
 export {
     decodeAcpSessionUpdate,
-    decodeKnownNativeSessionEvents,
     decodeKnownSessionEventLogPage,
     decodeKnownSessionEventPayload,
     decodeKnownSessionLiveEventBatch,
     decodeNativeSessionEvents,
     decodeSessionEvent,
-    decodeSessionEventBatch,
     decodeSessionEventEnvelope,
     decodeSessionEventLogPage,
     decodeSessionLiveEvent,
-    decodeSessionLiveEventBatch,
-    decodeSessionWireEnvelope,
-    encodeNativeSessionEvents,
     encodeSessionEvent,
-    encodeSessionEventBatch,
     encodeSessionEventEnvelope,
-    encodeSessionEventLogPage,
-    encodeSessionLiveEvent,
-    encodeSessionLiveEventBatch,
     encodeSessionWireEnvelope,
     isPromptTerminal,
-    isSessionLiveEvent,
     promptCompletion,
     SESSION_EVENT_BATCH_MAX_SIZE,
     SESSION_EVENT_KIND,
@@ -225,12 +174,7 @@ export {
 export type {
     ContentAvailableEvent,
     ContentChunkFrame,
-    ContentCommitCommand,
-    ContentReadyEvent,
     ContentWriteCommand,
-    FileBeginEvent,
-    FileEndEvent,
-    FileFailedEvent,
     FileReadCommand,
 } from "./session/files/index.ts";
 
@@ -243,7 +187,6 @@ export {
     CONTENT_WRITE_MAX_BYTES,
     decodeContentAvailableEvent,
     decodeContentChunkFrame,
-    decodeContentCommitCommand,
     decodeContentReadyEvent,
     decodeContentWriteCommand,
     decodeFileBeginEvent,
@@ -256,8 +199,6 @@ export {
     encodeContentReadyEvent,
     encodeContentWriteCommand,
     encodeFileBeginEvent,
-    encodeFileEndEvent,
-    encodeFileFailedEvent,
     encodeFileReadCommand,
     FILE_BEGIN_KIND,
     FILE_END_KIND,
@@ -281,18 +222,11 @@ export type {
 
 export {
     decodeSessionElicitationRequestedEvent,
-    decodeSessionElicitationResolvedEvent,
     decodeSessionElicitationRespondCommand,
     decodeSessionInteractionAnsweredEvent,
     decodeSessionPermissionRequestedEvent,
-    decodeSessionPermissionResolvedEvent,
     decodeSessionPermissionRespondCommand,
-    encodeSessionElicitationRequestedEvent,
-    encodeSessionElicitationResolvedEvent,
     encodeSessionElicitationRespondCommand,
-    encodeSessionInteractionAnsweredEvent,
-    encodeSessionPermissionRequestedEvent,
-    encodeSessionPermissionResolvedEvent,
     encodeSessionPermissionRespondCommand,
     SESSION_ELICITATION_REQUESTED_KIND,
     SESSION_ELICITATION_RESOLVED_KIND,
@@ -330,12 +264,9 @@ export type {
 export {
     decodeSessionArchiveCommand,
     decodeSessionArchivedEvent,
-    decodeSessionCloseCommand,
     decodeSessionClosedEvent,
     decodeSessionCloseNoticeEvent,
-    decodeSessionCommandsUpdatedEvent,
     decodeSessionCreateCommand,
-    decodeSessionCreationReadCommand,
     decodeSessionInfoUpdatedEvent,
     decodeSessionListCommand,
     decodeSessionOperationFailedEvent,
@@ -348,26 +279,19 @@ export {
     decodeSessionStatusChangedEvent,
     decodeSessionsListedEvent,
     decodeSessionsQueriedEvent,
-    encodeSessionArchiveCommand,
     encodeSessionArchivedEvent,
     encodeSessionCloseCommand,
     encodeSessionClosedEvent,
     encodeSessionCloseNoticeEvent,
-    encodeSessionCommandsUpdatedEvent,
     encodeSessionCreateCommand,
-    encodeSessionCreationReadCommand,
     encodeSessionInfoUpdatedEvent,
     encodeSessionListCommand,
     encodeSessionOperationFailedEvent,
     encodeSessionPrepareCommand,
     encodeSessionPromptAcceptedEvent,
     encodeSessionQueryCommand,
-    encodeSessionReadyEvent,
     encodeSessionRestoreCommand,
-    encodeSessionRestoredEvent,
     encodeSessionStatusChangedEvent,
-    encodeSessionsListedEvent,
-    encodeSessionsQueriedEvent,
     SESSION_ARCHIVE_KIND,
     SESSION_ARCHIVED_KIND,
     SESSION_CLOSE_KIND,
@@ -392,7 +316,6 @@ export {
 } from "./session/lifecycle/index.ts";
 
 export type {
-    ActiveTurnSnapshot,
     CommandDelivery,
     LastTurnOutcome,
     NativeSessionCancel,
@@ -405,7 +328,6 @@ export type {
 
 export {
     decodeNativeSessionCancel,
-    decodeNativeSessionCommand,
     decodeNativeSessionRequest,
     decodeNativeSessionResult,
     encodeNativeSessionCancel,
@@ -415,16 +337,12 @@ export {
     NATIVE_SESSION_CANCEL_KIND,
     NATIVE_SESSION_REQUEST_KIND,
     NATIVE_SESSION_RESULT_KIND,
-    SESSION_HISTORY_CHARACTER_LIMIT,
-    SESSION_HISTORY_MESSAGE_LIMIT,
 } from "./session/native/index.ts";
 
 export type {
     SessionHistoryPageLoad,
-    SessionHistoryPageLoaded,
     SessionHistoryWirePageLoaded,
     SessionPreviewHistoryPageLoad,
-    SessionPreviewHistoryPageLoaded,
     SessionPreviewHistoryWirePageLoaded,
 } from "./session/observability/history.ts";
 
@@ -438,7 +356,6 @@ export {
     encodeSessionHistoryPageLoad,
     encodeSessionHistoryPageLoaded,
     encodeSessionPreviewHistoryPageLoad,
-    encodeSessionPreviewHistoryPageLoaded,
     SESSION_HISTORY_PAGE_LOAD_KIND,
     SESSION_HISTORY_PAGE_LOADED_KIND,
     SESSION_PREVIEW_HISTORY_PAGE_LOAD_KIND,
@@ -458,7 +375,6 @@ export type {
 
 export {
     decodePromptAttachment,
-    decodePromptAttachmentsValue,
     decodeSessionCancelBeforeStartCommand,
     decodeSessionCancelCommand,
     decodeSessionPromptCommand,
@@ -466,13 +382,10 @@ export {
     decodeSessionPromptSteeredEvent,
     decodeSessionTurnStoppedEvent,
     decodeSessionTurnWithdrawnEvent,
-    encodeSessionCancelBeforeStartCommand,
     encodeSessionCancelCommand,
     encodeSessionPromptCommand,
     encodeSessionPromptDispositionCommand,
-    encodeSessionPromptSteeredEvent,
     encodeSessionTurnStoppedEvent,
-    encodeSessionTurnWithdrawnEvent,
     MAX_PROMPT_ATTACHMENT_BYTES,
     SESSION_CANCEL_BEFORE_START_KIND,
     SESSION_CANCEL_KIND,
@@ -508,7 +421,6 @@ export {
 
 export type {
     Turn,
-    TurnRequest,
     TurnState,
 } from "./session/turn/index.ts";
 
@@ -522,7 +434,6 @@ export type {
 export {
     decodeWorkspaceEntriesEvent,
     decodeWorkspaceListCommand,
-    encodeWorkspaceEntriesEvent,
     encodeWorkspaceListCommand,
     WORKSPACE_ENTRIES_KIND,
     WORKSPACE_LIST_KIND,
@@ -557,7 +468,6 @@ export type {
 export {
     decodeDaemonToRelayMessage,
     decodeDaemonToServiceMessage,
-    decodeKnownDaemonToServiceMessage,
     decodeKnownServiceToDaemonMessage,
     decodeServiceToDaemonMessage,
     encodeDaemonToServiceMessage,

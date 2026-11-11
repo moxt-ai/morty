@@ -1,29 +1,15 @@
 import type { AnyRouter } from "@tanstack/react-router";
-import { lazy, type ReactNode, Suspense } from "react";
-import { createApplicationRouter } from "../../index.ts";
+import { lazy, Suspense } from "react";
 import { isComponentLibraryPath } from "../../navigation/component-library-path.ts";
 import { useExternalStore } from "../../view-models/external-store.ts";
 import type { MortyApplication } from "../../view-models/morty-application.ts";
 import { App } from "../application/app.tsx";
-import { MortyManagement } from "../applications/morty-management.tsx";
 
 const PlaygroundApplication = lazy(() =>
     import("../playground/playground-application.tsx").then((module) => ({
         default: module.PlaygroundApplication,
     })),
 );
-
-function Standard({ children }: { readonly children: ReactNode }) {
-    return <>{children}</>;
-}
-
-export function createSignedInRouter(application: MortyApplication) {
-    const authorize = (signal: AbortSignal) => application.anonymousSession.getState().authorize(signal);
-    return createApplicationRouter(authorize, ({ view }) => <MortyManagement application={application} view={view} />, {
-        Application: Standard,
-        Standard,
-    });
-}
 
 export function SessionApplication({
     application,

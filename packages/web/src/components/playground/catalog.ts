@@ -95,13 +95,6 @@ export const PLAYGROUND_ENTRIES = [
         title: "Alert",
     },
     {
-        group: "Surfaces",
-        id: "navigation-card",
-        source: "components/ui/navigation-card-link.tsx",
-        summary: "Card link that shows a pending state while navigation loads.",
-        title: "Navigation card",
-    },
-    {
         group: "Overlays",
         id: "dialog",
         source: "components/ui/dialog.tsx",

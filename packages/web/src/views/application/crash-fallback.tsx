@@ -1,4 +1,4 @@
-import { Button } from "../../index.ts";
+import { Button } from "../../components/ui/cloud-button.tsx";
 import type { BugReportDialogStore } from "../../view-models/bug-report-dialog-store.ts";
 import { BugReportButton, BugReportDialogHost } from "../diagnostics/bug-report-button.tsx";
 import {

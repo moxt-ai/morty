@@ -7,14 +7,7 @@ import { BotChatHome } from "../chat/bot-chat-home.tsx";
  * the active identity outside React; this view subscribes to that surface and
  * flows the workspace into the chat views through props.
  */
-export function MortyManagement({
-    application,
-    view,
-}: {
-    readonly application: MortyApplication;
-    readonly view: "overview" | "chat";
-}) {
-    void view;
+export function MortyChat({ application }: { readonly application: MortyApplication }) {
     const { workspace } = useExternalStore(application.sessionWorkspace);
     if (workspace === null) {
         return <section className="flex min-h-dvh" />;

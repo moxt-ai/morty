@@ -164,28 +164,16 @@ export type SessionInteractionAnsweredEvent = z.infer<typeof sessionInteractionA
 
 export const decodeSessionPermissionRequestedEvent = (encoded: string): SessionPermissionRequestedEvent =>
     decode(encoded, sessionPermissionRequestedEventSchema);
-export const encodeSessionPermissionRequestedEvent = (message: SessionPermissionRequestedEvent): string =>
-    encode(message, sessionPermissionRequestedEventSchema);
 export const decodeSessionPermissionRespondCommand = (encoded: string): SessionPermissionRespondCommand =>
     decode(encoded, sessionPermissionRespondCommandSchema);
 export const encodeSessionPermissionRespondCommand = (message: SessionPermissionRespondCommand): string =>
     encode(message, sessionPermissionRespondCommandSchema);
-export const decodeSessionPermissionResolvedEvent = (encoded: string): SessionPermissionResolvedEvent =>
-    decode(encoded, sessionPermissionResolvedEventSchema);
-export const encodeSessionPermissionResolvedEvent = (message: SessionPermissionResolvedEvent): string =>
-    encode(message, sessionPermissionResolvedEventSchema);
 export const decodeSessionElicitationRequestedEvent = (encoded: string): SessionElicitationRequestedEvent =>
     decode(encoded, sessionElicitationRequestedEventSchema);
-export const encodeSessionElicitationRequestedEvent = (message: SessionElicitationRequestedEvent): string =>
-    encode(message, sessionElicitationRequestedEventSchema);
 export const decodeSessionElicitationRespondCommand = (encoded: string): SessionElicitationRespondCommand =>
     decode(encoded, sessionElicitationRespondCommandSchema);
 export const encodeSessionElicitationRespondCommand = (message: SessionElicitationRespondCommand): string =>
     encode(message, sessionElicitationRespondCommandSchema);
-export const decodeSessionElicitationResolvedEvent = (encoded: string): SessionElicitationResolvedEvent =>
-    decode(encoded, sessionElicitationResolvedEventSchema);
-export const encodeSessionElicitationResolvedEvent = (message: SessionElicitationResolvedEvent): string =>
-    encode(message, sessionElicitationResolvedEventSchema);
 export const decodeSessionInteractionAnsweredEvent = (encoded: string): SessionInteractionAnsweredEvent =>
     decode(encoded, sessionInteractionAnsweredEventSchema);
 export const encodeSessionInteractionAnsweredEvent = (message: SessionInteractionAnsweredEvent): string =>
