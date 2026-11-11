@@ -7,9 +7,10 @@ import {
 } from "../../entity/authentication/project-authentication.ts";
 import type { ProjectAccessAuthorizer } from "../../entity/authentication/project-authorization.ts";
 import type { ComputerScope } from "../../entity/do/session.ts";
+import { projectRuntimePairingStatus, runtimeRevokedAt } from "../../entity/pairing/computer-pairing-state.ts";
 import type { AgentDescriptor, ClaimedPairing } from "../../entity/pairing/pairing.ts";
 import {
-    ChannelDescriptor,
+    ComputerDescriptor,
     CreatedRuntimePairing,
     hashPairingCredential,
     normalizePairingCode,
@@ -22,18 +23,17 @@ import {
 } from "../../entity/pairing/pairing.ts";
 import type { ComputerIdentityCredential } from "../../entity/pairing/pairing-identity.ts";
 import type { RuntimePairingRow } from "../../entity/pairing/pairing-records.ts";
-import { projectRuntimePairingStatus, runtimeRevokedAt } from "../../entity/pairing/runtime-pairing-state.ts";
+import type { ComputerRelayStore } from "../../infra/computer-relay-store.ts";
 import type { MachineAccountDirectory } from "../../infra/machine-account-directory.ts";
 import type { ProjectStorageContext, ProjectStorageDirectory } from "../../infra/project-storage-directory.ts";
-import type { ProjectStore } from "../../infra/project-store.ts";
+import { deriveRuntimeDaemonToken, deriveRuntimePairingSecrets } from "./computer-pairing-secrets.ts";
 import type { ComputerIdentityService } from "./pairing-identity-service.ts";
 import type { PairingOperations } from "./pairing-operations.ts";
-import { deriveRuntimeDaemonToken, deriveRuntimePairingSecrets } from "./runtime-pairing-secrets.ts";
 
 export interface PairingDirectoryInfrastructure {
     readonly gateways: { readonly machineAccounts: MachineAccountDirectory };
     readonly storages: {
-        readonly forProject: (project: ProjectStorageContext) => ProjectStore;
+        readonly forProject: (project: ProjectStorageContext) => ComputerRelayStore;
         readonly projectDirectory: ProjectStorageDirectory;
     };
     readonly services: {
@@ -122,7 +122,11 @@ export class PairingDirectoryService implements PairingOperations {
         return await this.readActivePairing(storage, computerId, signal);
     };
 
-    private readonly readActivePairing = async (storage: ProjectStore, computerId: string, signal: AbortSignal) => {
+    private readonly readActivePairing = async (
+        storage: ComputerRelayStore,
+        computerId: string,
+        signal: AbortSignal,
+    ) => {
         const row = await storage.readRuntime(validateIdentifier(computerId, "computer_id"), signal);
         if (row === null) {
             throw new PairingDirectoryError(
@@ -181,7 +185,7 @@ export class PairingDirectoryService implements PairingOperations {
         const secrets = await deriveRuntimePairingSecrets(pairingKey, owner.computerId, normalizedKey);
         const now = Date.now();
         const expiresAt = now + PAIRING_LIFETIME_MILLISECONDS;
-        let stored: Awaited<ReturnType<ProjectStore["requestRuntimePairing"]>>;
+        let stored: Awaited<ReturnType<ComputerRelayStore["requestRuntimePairing"]>>;
         try {
             stored = await storage.requestRuntimePairing(
                 {
@@ -316,7 +320,7 @@ export class PairingDirectoryService implements PairingOperations {
         const runtimes = await storage.listRuntimes(signal);
         return runtimes.map(
             (row) =>
-                new ChannelDescriptor(
+                new ComputerDescriptor(
                     parseAgents(row.agents_json),
                     row.machine_name,
                     row.workspace_name,
@@ -343,7 +347,7 @@ export class PairingDirectoryService implements PairingOperations {
         // Whichever presented credential the Relay holds as current authorizes; holding it is the proof.
         for (const presented of successor === null ? [token] : [token, successor]) {
             const tokenHash = await hashPairingCredential(validateToken(presented));
-            let storage: ProjectStore;
+            let storage: ComputerRelayStore;
             try {
                 storage = await this.identityStorage({ kind: "daemon", computerId, tokenHash }, signal);
             } catch (cause) {
@@ -356,6 +360,6 @@ export class PairingDirectoryService implements PairingOperations {
                 return;
             }
         }
-        throw new PairingDirectoryError("unauthorized", "A valid channel token is required");
+        throw new PairingDirectoryError("unauthorized", "A valid computer token is required");
     };
 }

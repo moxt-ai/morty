@@ -78,7 +78,7 @@ async function deadProcessId(): Promise<number> {
 
 test("Given a lock a crashed daemon left, When several daemons start at once, Then exactly one becomes the daemon", async () => {
     const directory = await stateDirectory();
-    await writeFile(join(directory, "manager.lock"), `${(await deadProcessId()).toString()}\n`);
+    await writeFile(join(directory, "daemon.lock"), `${(await deadProcessId()).toString()}\n`);
 
     const contenders = Array.from({ length: 6 }, () => contender(directory));
     await Promise.all(contenders.map(({ ready }) => ready));
@@ -89,12 +89,12 @@ test("Given a lock a crashed daemon left, When several daemons start at once, Th
 
     expect(outcomes.filter((outcome) => outcome === "won")).toHaveLength(1);
     const winner = contenders[outcomes.indexOf("won")]?.child.pid;
-    expect(await readFile(join(directory, "manager.lock"), "utf8")).toBe(`${String(winner)}\n`);
+    expect(await readFile(join(directory, "daemon.lock"), "utf8")).toBe(`${String(winner)}\n`);
 });
 
 test("Given an unowned PID file names another live process, When the current daemon starts, Then the PID file cannot claim ownership", async () => {
     const directory = await stateDirectory();
-    await writeFile(join(directory, "manager.lock"), `${process.pid.toString()}\n`);
+    await writeFile(join(directory, "daemon.lock"), `${process.pid.toString()}\n`);
 
     const release = await acquireDaemonLock(directory);
 

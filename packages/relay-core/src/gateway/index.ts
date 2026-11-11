@@ -1,1 +1,1 @@
-export type { ChannelGateway } from "./channel-gateway.ts";
+export type { ComputerRelayGateway } from "./computer-relay-gateway.ts";

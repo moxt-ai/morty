@@ -1,8 +1,8 @@
-import { runtimeConnectionDurableObjectMigrations } from "@morty-build/relay-core";
+import { relayOperationsDurableObjectMigrations } from "@morty-build/relay-core";
 import { applyDurableObjectMigrations } from "@morty-build/relay-core/durable-object-migrations";
-import { computerDurableObjectMigrations } from "../generated/project-do-migrations.ts";
+import { computerDurableObjectMigrations } from "../generated/computer-relay-do-migrations.ts";
 
 export function migrateComputerStorage(storage: DurableObjectStorage): void {
-    applyDurableObjectMigrations(storage, runtimeConnectionDurableObjectMigrations, "connections/");
+    applyDurableObjectMigrations(storage, relayOperationsDurableObjectMigrations, "connections/");
     applyDurableObjectMigrations(storage, computerDurableObjectMigrations);
 }

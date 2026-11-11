@@ -1,10 +1,10 @@
 import type { ProjectAccessAuthorizer } from "../entity/authentication/project-authorization.ts";
-import type { ChannelGateway } from "../gateway/channel-gateway.ts";
+import type { ComputerRelayGateway } from "../gateway/computer-relay-gateway.ts";
+import type { ComputerRelayStore, ComputerRelayStoreResolver } from "../infra/computer-relay-store.ts";
 import type { MachineAccountDirectory } from "../infra/machine-account-directory.ts";
 import type { ProjectStorageDirectory } from "../infra/project-storage-directory.ts";
-import type { ProjectStore, ProjectStoreResolver } from "../infra/project-store.ts";
-import { ChannelService } from "../service/channel/channel-service.ts";
-import type { LocalSessionOperations } from "../service/channel/local-session-operations.ts";
+import { ComputerConnectionService } from "../service/computer-relay/computer-connection-service.ts";
+import type { LocalSessionOperations } from "../service/computer-relay/local-session-operations.ts";
 import { PairingDirectoryService } from "../service/pairing/pairing-directory-service.ts";
 import { ComputerIdentityService } from "../service/pairing/pairing-identity-service.ts";
 import { PairingService } from "../service/pairing/pairing-service.ts";
@@ -12,16 +12,16 @@ import { PairingService } from "../service/pairing/pairing-service.ts";
 interface PairingInfrastructure {
     readonly authentication: { readonly projects: ProjectAccessAuthorizer };
     readonly machineAccounts: MachineAccountDirectory;
-    readonly stores: ProjectStoreResolver;
+    readonly stores: ComputerRelayStoreResolver;
     readonly projects: ProjectStorageDirectory;
     /** The Project stores this execution searches to find the Project a credential belongs to. */
-    readonly identityStores: readonly ProjectStore[];
+    readonly identityStores: readonly ComputerRelayStore[];
 }
 
 export interface RelayInfrastructure extends PairingInfrastructure {
     readonly authentication: { readonly projects: ProjectAccessAuthorizer };
     readonly gateways: {
-        readonly channelGateway: ChannelGateway;
+        readonly computerRelayGateway: ComputerRelayGateway;
         readonly runtimeOperations?: LocalSessionOperations;
         readonly nowEpochMilliseconds: () => number;
     };
@@ -57,7 +57,7 @@ function createHttpContext(infrastructure: RelayInfrastructure, pairings: Pairin
         services: Object.freeze({
             pairings,
             runtimePairings: new PairingService(cx),
-            channels: new ChannelService(cx),
+            computerConnections: new ComputerConnectionService(cx),
         }),
     });
 }

@@ -1403,7 +1403,7 @@ it.each(["text", "binary"])(
             await deliver(liveEvent(runtime.sessionTarget, "before revocation"));
             expect(await messages.next()).toContain("before revocation");
             await runInDurableObject(env.COMPUTER_RELAY.getByName(runtime.computerId), (_instance, state) => {
-                state.storage.sql.exec(`CREATE TRIGGER reject_runtime_disconnect BEFORE UPDATE OF disconnected_at ON runtime_connection
+                state.storage.sql.exec(`CREATE TRIGGER reject_runtime_disconnect BEFORE UPDATE OF disconnected_at ON computer_connection
                 BEGIN SELECT RAISE(ABORT, 'Controlled disconnect failure'); END`);
             });
             try {

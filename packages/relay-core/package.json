@@ -11,8 +11,8 @@
         "./database": "./src/infra/sql-database.ts",
         "./durable-object-migrations": "./src/infra/durable-object-migrations.ts",
         "./logging": "./src/infra/logger.ts",
-        "./project-store": "./src/storage/sqlite-project-store.ts",
-        "./schema/project-do": "./src/schema/project-do/index.ts"
+        "./computer-relay-store": "./src/storage/sqlite-computer-relay-store.ts",
+        "./schema/computer-relay-do": "./src/schema/computer-relay-do/index.ts"
     },
     "scripts": {
         "prebuild": "pnpm --dir ../.. db:codegen",
