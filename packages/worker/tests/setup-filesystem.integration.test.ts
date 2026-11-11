@@ -9,7 +9,7 @@ import * as v from "valibot";
 import { beforeAll, expect, test } from "vitest";
 import { processPlatformSupportFor } from "../../../packages/cli/src/engine/util/process/platform/index.ts";
 import { mortyReply } from "../../../tests/support/fake-daemon/scenarios.ts";
-import { ControlledSetupComputer } from "../../e2e/infra/setup-daemon.ts";
+import { ControlledSetupRuntime } from "../../e2e/infra/setup-daemon.ts";
 import { claimMortyState } from "../../local-state/src/ownership.ts";
 import worker from "../src/application.ts";
 import { prepareIdentityFixture } from "./support/identity-fixture.ts";
@@ -60,7 +60,7 @@ interface SetupModule {
             readonly cliEntry?: string;
             readonly agentEnvironment?: Readonly<Record<string, string | undefined>>;
             readonly signal: AbortSignal;
-            readonly computer?: ControlledSetupComputer;
+            readonly runtime?: ControlledSetupRuntime;
             readonly clock?: {
                 readonly now: () => Date;
                 readonly wait: (milliseconds: number, signal: AbortSignal) => Promise<void>;
@@ -214,9 +214,9 @@ test.each(["fresh", "unknown", "revoked"] as const)(
             expect(code, output).toBe(1);
             expect(output).toContain('"code":"MORTY_STATE_ROOT_INVALID"');
             expect(output).toContain(
-                "Rerun setup with MORTY_STATE_DIRECTORY set to the state root that the Computer log names",
+                "Rerun setup with MORTY_STATE_DIRECTORY set to the state root that the Runtime log names",
             );
-            expect(output).not.toContain("COMPUTER_PREFLIGHT_FAILED");
+            expect(output).not.toContain("RUNTIME_PREFLIGHT_FAILED");
             expect(output).not.toContain('"status":"identity_ready"');
             if (saved === null) {
                 await expect(readFile(join(state, "config.json"))).rejects.toMatchObject({ code: "ENOENT" });
@@ -281,7 +281,7 @@ test.each(["missing", "unlaunchable"] as const)(
             });
             const [code] = await once(child, "close");
             expect(code, output).toBe(1);
-            expect(output).toContain('"code":"COMPUTER_PREFLIGHT_FAILED"');
+            expect(output).toContain('"code":"RUNTIME_PREFLIGHT_FAILED"');
             expect(output).toContain("nextStep");
             expect(output).not.toContain('"status":"identity_ready"');
             await expect(readFile(join(state, "config.json"))).rejects.toMatchObject({ code: "ENOENT" });
@@ -521,7 +521,7 @@ for (const [failure, scenario] of starterFailures) {
             const fixture = await createIdentityFixture();
             try {
                 const identity = await fixture.createAnonymousUser();
-                const computer = await fixture.connectAgent(identity.computerId, identity.token);
+                const runtime = await fixture.connectAgent(identity.computerId, identity.token);
                 const request = async (path: string, body?: object) => {
                     const response = await fetch(`${fixture.origin}/morty/api/${path}`, {
                         method: body === undefined ? "GET" : "POST",
@@ -533,12 +533,12 @@ for (const [failure, scenario] of starterFailures) {
                     return await response.json();
                 };
                 await request(`chat/computers/${identity.computerId}/setup`, {
-                    computerId: computer.computerId,
+                    computerId: runtime.computerId,
                     harness: "codex",
                 });
-                await computer.disconnect();
+                await runtime.disconnect();
                 const connection = {
-                    computer_id: computer.computerId,
+                    computer_id: runtime.computerId,
                 };
                 await writeFile(join(state, "config.json"), savedSetupState(fixture.origin, identity), {
                     mode: 0o600,
@@ -586,7 +586,7 @@ let time = Date.parse('2026-09-15T12:00:00Z');
 process.exitCode = await runSetup(process.argv.slice(2), {
     state: process.env.MORTY_STATE_DIRECTORY, signal: cancellation.signal,
     cliEntry: ${JSON.stringify(localCli)},
-    emit(event) { console.log(JSON.stringify(event)); ${failure === "cancel" ? "if (event.status === 'computer_retrying') cancellation.abort();" : ""} },
+    emit(event) { console.log(JSON.stringify(event)); ${failure === "cancel" ? "if (event.status === 'runtime_retrying') cancellation.abort();" : ""} },
     clock: { now: () => new Date(time), wait: async (milliseconds, signal) => { signal.throwIfAborted(); time += milliseconds; } },
 });
 `,
@@ -624,9 +624,9 @@ process.exitCode = await runSetup(process.argv.slice(2), {
                     if (
                         (failure === "recover" || failure === "cancel-download") &&
                         recovery === undefined &&
-                        output.includes('"status":"computer_started"')
+                        output.includes('"status":"runtime_started"')
                     ) {
-                        recovery = computer.reconnect();
+                        recovery = runtime.reconnect();
                         void recovery.catch(() => child.kill());
                     }
                 });
@@ -659,7 +659,7 @@ process.exitCode = await runSetup(process.argv.slice(2), {
                     ).toBe(false);
                     return;
                 }
-                const retries = events.filter((event) => event["status"] === "computer_retrying");
+                const retries = events.filter((event) => event["status"] === "runtime_retrying");
                 expect(retries, output).toHaveLength(failure === "cancel" || failure === "recover" ? 1 : 2);
                 if (failure === "recover") {
                     expect(events.at(-1)).toMatchObject({ status: "ready" });
@@ -667,17 +667,17 @@ process.exitCode = await runSetup(process.argv.slice(2), {
                     return;
                 }
                 expect(events.at(-1)).toMatchObject({
-                    error: { code: failure === "cancel" ? "CANCELLED" : "COMPUTER_START_FAILED" },
+                    error: { code: failure === "cancel" ? "CANCELLED" : "RUNTIME_START_FAILED" },
                 });
-                const lastError = v.parse(v.object({ computer: v.optional(v.unknown()) }), events.at(-1)?.["error"]);
+                const lastError = v.parse(v.object({ runtime: v.optional(v.unknown()) }), events.at(-1)?.["error"]);
                 const diagnostic = v.parse(
                     v.object({ logPath: v.string(), termination: v.unknown(), nextStep: v.string() }),
-                    failure === "cancel" ? retries[0]?.["failure"] : lastError.computer,
+                    failure === "cancel" ? retries[0]?.["failure"] : lastError.runtime,
                 );
                 expect(diagnostic).toMatchObject({
                     termination:
                         failure === "signal" ? { kind: "signal", signal: "SIGTERM" } : { kind: "exit", exitCode: 42 },
-                    logPath: expect.stringMatching(/computer-.*\.log$/u),
+                    logPath: expect.stringMatching(/runtime-.*\.log$/u),
                     nextStep: expect.stringContaining("morty"),
                 });
                 expect(await readFile(diagnostic.logPath, "utf8")).toContain(failure === "signal" ? "SIGTERM" : "42");
@@ -761,7 +761,7 @@ for (const segments of [4, 8]) {
             );
             await mkdir(workspace, { recursive: true });
             const fixture = await createIdentityFixture();
-            const computer = new ControlledSetupComputer(
+            const runtime = new ControlledSetupRuntime(
                 { harness: "codex", agentName: "Codex", reply: mortyReply },
                 "Setup test Computer",
             );
@@ -784,7 +784,7 @@ for (const segments of [4, 8]) {
                         state,
                         agentEnvironment: {},
                         signal: AbortSignal.timeout(25_000),
-                        computer,
+                        runtime,
                         emit: (event) => events.push(event),
                         clock: {
                             now: () => new Date(time),
@@ -813,7 +813,7 @@ for (const segments of [4, 8]) {
                     );
                 }
             } finally {
-                await computer.disconnect();
+                await runtime.disconnect();
                 await fixture.close();
                 const qrPath = events.at(-1)?.["qrPath"];
                 if (typeof qrPath === "string") {
@@ -826,7 +826,7 @@ for (const segments of [4, 8]) {
 }
 
 async function setupMachine(
-    computer: ControlledSetupComputer,
+    runtime: ControlledSetupRuntime,
     paths: {
         readonly origin: string;
         readonly state: string;
@@ -868,7 +868,7 @@ async function setupMachine(
             state: paths.state,
             agentEnvironment: run.agentEnvironment ?? {},
             signal: AbortSignal.any([interrupt.signal, AbortSignal.timeout(55_000)]),
-            computer,
+            runtime,
             emit: (event) => {
                 events.push(event);
                 if (run.interruptAt !== undefined && event["status"] === run.interruptAt) {
@@ -902,9 +902,9 @@ async function setupMachine(
 }
 
 async function withUpgradeMachine(
-    upgrade: ConstructorParameters<typeof ControlledSetupComputer>[2],
+    upgrade: ConstructorParameters<typeof ControlledSetupRuntime>[2],
     scenario: (
-        computer: ControlledSetupComputer,
+        runtime: ControlledSetupRuntime,
         paths: {
             readonly origin: string;
             readonly state: string;
@@ -913,27 +913,27 @@ async function withUpgradeMachine(
         },
     ) => Promise<void>,
     /** The release the machine's daemon runs before setup. */
-    release: ConstructorParameters<typeof ControlledSetupComputer>[3] = "latest",
+    release: ConstructorParameters<typeof ControlledSetupRuntime>[3] = "latest",
 ): Promise<void> {
     const root = await realpath(await mkdtemp(join(tmpdir(), "morty-setup-upgrade-")));
     const workspace = join(root, "workspace");
     await mkdir(workspace, { recursive: true });
     const fixture = await createIdentityFixture();
-    const computer = new ControlledSetupComputer(
+    const runtime = new ControlledSetupRuntime(
         { harness: "settings-test", agentName: "Settings Agent", reply: mortyReply },
         "Setup test Computer",
         upgrade,
         release,
     );
     try {
-        await scenario(computer, {
+        await scenario(runtime, {
             origin: fixture.origin,
             state: join(root, "state"),
             workspace,
             dispatch: async (request) => await worker.fetch(request, fixture.environment(fixture.origin)),
         });
     } finally {
-        await computer.disconnect();
+        await runtime.disconnect();
         await fixture.close();
         await rm(root, { recursive: true, force: true });
     }
@@ -944,17 +944,17 @@ test("Given a paired machine whose online daemon runs an outdated release, When 
 }, async () => {
     await withUpgradeMachine(
         "unavailable",
-        async (computer, paths) => {
-            const first = await setupMachine(computer, paths);
+        async (runtime, paths) => {
+            const first = await setupMachine(runtime, paths);
             expect(first.code, JSON.stringify(first.events)).toBe(0);
-            expect(computer.daemonRelease()).toBe("outdated");
+            expect(runtime.daemonRelease()).toBe("outdated");
 
-            computer.setUpgrade("available");
-            const rerun = await setupMachine(computer, paths);
+            runtime.setUpgrade("available");
+            const rerun = await setupMachine(runtime, paths);
             expect(rerun.code, JSON.stringify(rerun.events)).toBe(0);
             expect(rerun.events).toContainEqual(expect.objectContaining({ status: "computer_already_online" }));
             expect(rerun.events.at(-1)).toMatchObject({ status: "ready", workspace: paths.workspace });
-            expect(computer.daemonRelease()).toBe("outdated");
+            expect(runtime.daemonRelease()).toBe("outdated");
         },
         "outdated",
     );
@@ -963,13 +963,13 @@ test("Given a paired machine whose online daemon runs an outdated release, When 
 test("Given setup was stopped after pairing its Computer, When the user runs setup again and again, Then each run continues on that Computer and setup finishes", {
     timeout: 120_000,
 }, async () => {
-    await withUpgradeMachine("unavailable", async (computer, paths) => {
+    await withUpgradeMachine("unavailable", async (runtime, paths) => {
         // A Project holds at most eight Computers; each stopped run must not leave another one behind.
         for (let attempt = 1; attempt <= 8; attempt += 1) {
-            const stopped = await setupMachine(computer, paths, undefined, { interruptAt: "computer_paired" });
+            const stopped = await setupMachine(runtime, paths, undefined, { interruptAt: "computer_paired" });
             expect(stopped.code, JSON.stringify(stopped.events)).not.toBe(0);
         }
-        const finished = await setupMachine(computer, paths);
+        const finished = await setupMachine(runtime, paths);
         expect(finished.code, JSON.stringify(finished.events)).toBe(0);
         expect(finished.events.at(-1)).toMatchObject({ status: "ready", workspace: paths.workspace });
     });
@@ -978,8 +978,8 @@ test("Given setup was stopped after pairing its Computer, When the user runs set
 test("Given a shared Machine whose local pairing was removed, When setup has no matching replacement approval, Then shared access stays valid until the user approves that Project", {
     timeout: 120_000,
 }, async () => {
-    await withUpgradeMachine("unavailable", async (computer, paths) => {
-        const first = await setupMachine(computer, paths);
+    await withUpgradeMachine("unavailable", async (runtime, paths) => {
+        const first = await setupMachine(runtime, paths);
         expect(first.code, JSON.stringify(first.events)).toBe(0);
         const config = await savedIdentity(paths.state);
         const saved = await readFile(join(paths.state, "config.json"), "utf8");
@@ -1001,10 +1001,10 @@ test("Given a shared Machine whose local pairing was removed, When setup has no 
                 headers: { authorization: `Bearer ${browser.token}` },
                 signal: AbortSignal.timeout(10000),
             });
-        await computer.forgetConnections();
+        await runtime.forgetConnections();
 
         for (const replaceProject of [undefined, "another-project"]) {
-            const blocked = await setupMachine(computer, paths, undefined, {
+            const blocked = await setupMachine(runtime, paths, undefined, {
                 ...(replaceProject === undefined ? {} : { replaceProject }),
             });
             expect(blocked.code).toBe(1);
@@ -1018,7 +1018,7 @@ test("Given a shared Machine whose local pairing was removed, When setup has no 
             expect(await readFile(join(paths.state, "config.json"), "utf8")).toBe(saved);
         }
 
-        const approved = await setupMachine(computer, paths, undefined, { replaceProject: config.computer_id });
+        const approved = await setupMachine(runtime, paths, undefined, { replaceProject: config.computer_id });
         expect(approved.code, JSON.stringify(approved.events)).toBe(0);
         expect(approved.events).toContainEqual(
             expect.objectContaining({ status: "replacement_access_revoked", previousComputerId: config.computer_id }),
@@ -1038,8 +1038,8 @@ test("Given a shared Machine whose local pairing was removed, When setup has no 
         expect(JSON.stringify(diagnostics)).not.toContain(browser.token);
         expect(JSON.stringify(diagnostics)).not.toContain(url);
 
-        await computer.forgetConnections();
-        const stale = await setupMachine(computer, paths, undefined, { replaceProject: config.computer_id });
+        await runtime.forgetConnections();
+        const stale = await setupMachine(runtime, paths, undefined, { replaceProject: config.computer_id });
         expect(stale.code).toBe(1);
         expect(stale.events.at(-1)).toMatchObject({
             error: { code: "PROJECT_REPLACEMENT_REQUIRED", replacement: { computerId: current.computer_id } },
@@ -1050,12 +1050,12 @@ test("Given a shared Machine whose local pairing was removed, When setup has no 
 test("Given an approved replacement request times out, When setup is retried without approval, Then it reports the uncertain access state and does not silently replace the Project", {
     timeout: 120_000,
 }, async () => {
-    await withUpgradeMachine("unavailable", async (computer, paths) => {
-        const first = await setupMachine(computer, paths);
+    await withUpgradeMachine("unavailable", async (runtime, paths) => {
+        const first = await setupMachine(runtime, paths);
         expect(first.code).toBe(0);
         const config = await savedIdentity(paths.state);
-        await computer.forgetConnections();
-        const uncertain = await setupMachine(computer, paths, undefined, {
+        await runtime.forgetConnections();
+        const uncertain = await setupMachine(runtime, paths, undefined, {
             replaceProject: config.computer_id,
             stallFromStage: "replacement",
         });
@@ -1063,14 +1063,14 @@ test("Given an approved replacement request times out, When setup is retried wit
         expect(uncertain.events.at(-1)).toMatchObject({
             error: { replacementAccess: { kind: "unknown", previousComputerId: config.computer_id } },
         });
-        const retry = await setupMachine(computer, paths);
+        const retry = await setupMachine(runtime, paths);
         expect(retry.events.at(-1)).toMatchObject({
             error: {
                 code: "PROJECT_REPLACEMENT_REQUIRED",
                 replacementAccess: { kind: "unknown", previousComputerId: config.computer_id },
             },
         });
-        const finished = await setupMachine(computer, paths, undefined, { replaceProject: config.computer_id });
+        const finished = await setupMachine(runtime, paths, undefined, { replaceProject: config.computer_id });
         expect(finished.code, JSON.stringify(finished.events)).toBe(0);
     });
 });
@@ -1078,8 +1078,8 @@ test("Given an approved replacement request times out, When setup is retried wit
 test("Given a saved uncertain replacement and a restored local pairing, When setup runs without approval, Then it does not hide the uncertain access state behind a successful reconnection", {
     timeout: 120_000,
 }, async () => {
-    await withUpgradeMachine("unavailable", async (computer, paths) => {
-        expect((await setupMachine(computer, paths)).code).toBe(0);
+    await withUpgradeMachine("unavailable", async (runtime, paths) => {
+        expect((await setupMachine(runtime, paths)).code).toBe(0);
         const configPath = join(paths.state, "config.json");
         const config = v.parse(
             v.looseObject({ identity: v.record(v.string(), v.unknown()) }),
@@ -1092,7 +1092,7 @@ test("Given a saved uncertain replacement and a restored local pairing, When set
             JSON.stringify({ ...config, identity: { ...config.identity, replacement: { kind: "unknown" } } }),
             { mode: 0o600 },
         );
-        const blocked = await setupMachine(computer, paths);
+        const blocked = await setupMachine(runtime, paths);
         expect(blocked.code).toBe(1);
         expect(blocked.events.at(-1)).toMatchObject({
             error: {
@@ -1102,7 +1102,7 @@ test("Given a saved uncertain replacement and a restored local pairing, When set
             },
         });
         expect(blocked.events).not.toContainEqual(expect.objectContaining({ status: "ready" }));
-        expect((await setupMachine(computer, paths, undefined, { replaceProject: computerId })).code).toBe(0);
+        expect((await setupMachine(runtime, paths, undefined, { replaceProject: computerId })).code).toBe(0);
     });
 });
 
@@ -1112,13 +1112,13 @@ test.each(["replacement_access_revoked", "project_replaced"])(
         timeout: 120_000,
     },
     async (interruptAt) => {
-        await withUpgradeMachine("unavailable", async (computer, paths) => {
-            const first = await setupMachine(computer, paths);
+        await withUpgradeMachine("unavailable", async (runtime, paths) => {
+            const first = await setupMachine(runtime, paths);
             expect(first.events.at(-1)).toMatchObject({ status: "ready", project: "created" });
             const config = await savedIdentity(paths.state);
-            await computer.forgetConnections();
+            await runtime.forgetConnections();
 
-            const stopped = await setupMachine(computer, paths, undefined, {
+            const stopped = await setupMachine(runtime, paths, undefined, {
                 replaceProject: config.computer_id,
                 interruptAt,
             });
@@ -1141,11 +1141,11 @@ test.each(["replacement_access_revoked", "project_replaced"])(
                 });
             }
 
-            const finished = await setupMachine(computer, paths, undefined, { replaceProject: config.computer_id });
+            const finished = await setupMachine(runtime, paths, undefined, { replaceProject: config.computer_id });
             expect(finished.code, JSON.stringify(finished.events)).toBe(0);
             expect(finished.events.at(-1)).toMatchObject({ status: "ready", project: "replaced" });
 
-            const again = await setupMachine(computer, paths);
+            const again = await setupMachine(runtime, paths);
             expect(again.events.at(-1)).toMatchObject({ status: "ready", project: "reused" });
             expect((await savedIdentity(paths.state)).replacement).toEqual({ kind: "unchanged" });
         });
@@ -1155,8 +1155,8 @@ test.each(["replacement_access_revoked", "project_replaced"])(
 test("Given a Machine bound by setup, When the user runs setup again, Then setup finishes on the Worker's bound Computer without a local binding copy", {
     timeout: 90_000,
 }, async () => {
-    await withUpgradeMachine("unavailable", async (computer, paths) => {
-        const first = await setupMachine(computer, paths);
+    await withUpgradeMachine("unavailable", async (runtime, paths) => {
+        const first = await setupMachine(runtime, paths);
         expect(first.code, JSON.stringify(first.events)).toBe(0);
         // The Worker's binding is the only record, so a reply lost after the Worker bound the Machine leaves the
         // local configuration exactly as a completed run does.
@@ -1167,7 +1167,7 @@ test("Given a Machine bound by setup, When the user runs setup again, Then setup
         expect(saved.identity).toMatchObject({ pairing: { kind: "none" } });
         expect(saved.identity).not.toHaveProperty("agent_ref");
 
-        const rerun = await setupMachine(computer, paths);
+        const rerun = await setupMachine(runtime, paths);
         expect(rerun.code, JSON.stringify(rerun.events)).toBe(0);
         expect(rerun.events).toContainEqual(expect.objectContaining({ status: "computer_reused" }));
         expect(rerun.events.at(-1)).toMatchObject({ status: "ready", workspace: paths.workspace });

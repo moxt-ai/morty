@@ -70,7 +70,7 @@ import {
     type WorkspaceEntriesEvent,
     type WorkspaceListCommand,
 } from "@morty-build/client/protocol";
-import { ComputerOperationFailedError, SessionComputerError } from "../../entity/do/session.ts";
+import { RuntimeOperationFailedError, SessionRuntimeError } from "../../entity/do/session.ts";
 import { computerControlRegistry } from "./computer-control-registry.ts";
 
 export interface ComputerReplyConnection {
@@ -151,7 +151,7 @@ export async function requestComputerContentWrite(
         return await new Promise<ContentAvailableEvent>((resolve, reject) => {
             const fail = (cause: unknown): void => reject(cause);
             const onClose = (): void =>
-                fail(new SessionComputerError("computer_offline", "The Computer connection closed"));
+                fail(new SessionRuntimeError("computer_offline", "The Computer connection closed"));
             const onAbort = (): void => fail(deadline.reason);
             const sendBody = async (): Promise<void> => {
                 const reader = body.getReader();
@@ -168,7 +168,7 @@ export async function requestComputerContentWrite(
                             const bytes = chunk.value.subarray(offset, offset + CONTENT_CHUNK_MAX_BYTES);
                             sentBytes += bytes.byteLength;
                             if (sentBytes > command.byteLength) {
-                                throw new SessionComputerError(
+                                throw new SessionRuntimeError(
                                     "invalid_request",
                                     "The content body exceeds its declared size",
                                 );
@@ -178,7 +178,7 @@ export async function requestComputerContentWrite(
                         }
                     }
                     if (sentBytes !== command.byteLength) {
-                        throw new SessionComputerError("invalid_request", "The content body has an unexpected size");
+                        throw new SessionRuntimeError("invalid_request", "The content body has an unexpected size");
                     }
                     socket.send(
                         encodeServiceToDaemonMessage({
@@ -206,7 +206,7 @@ export async function requestComputerContentWrite(
                     if (kind === FILE_FAILED_KIND) {
                         const failure = decodeFileFailedEvent(event.data);
                         if (failure.requestId === command.requestId) {
-                            fail(new SessionComputerError(failure.code, failure.message));
+                            fail(new SessionRuntimeError(failure.code, failure.message));
                         }
                         return;
                     }
@@ -226,7 +226,7 @@ export async function requestComputerContentWrite(
                             available.contentKey !== command.contentKey ||
                             available.byteLength !== command.byteLength
                         ) {
-                            throw new SessionComputerError(
+                            throw new SessionRuntimeError(
                                 "invalid_request",
                                 "The Computer returned invalid content metadata",
                             );
@@ -307,8 +307,7 @@ export async function requestComputerFile(
             }
             finish();
         };
-        const onClose = (): void =>
-            fail(new SessionComputerError("computer_offline", "The Computer connection closed"));
+        const onClose = (): void => fail(new SessionRuntimeError("computer_offline", "The Computer connection closed"));
         const onAbort = (): void => fail(deadline.reason);
         const onMessage = (event: Event): void => {
             if (!(event instanceof MessageEvent)) {
@@ -321,11 +320,11 @@ export async function requestComputerFile(
                         return;
                     }
                     if (!responseSettled || chunk.sequence !== nextSequence) {
-                        throw new SessionComputerError("invalid_request", "The Computer returned invalid file chunks");
+                        throw new SessionRuntimeError("invalid_request", "The Computer returned invalid file chunks");
                     }
                     receivedBytes += chunk.bytes.byteLength;
                     if (receivedBytes > command.maxBytes) {
-                        throw new SessionComputerError("invalid_request", "The Computer exceeded the file size limit");
+                        throw new SessionRuntimeError("invalid_request", "The Computer exceeded the file size limit");
                     }
                     nextSequence += 1;
                     stream?.enqueue(chunk.bytes);
@@ -341,7 +340,7 @@ export async function requestComputerFile(
                 if (kind === FILE_FAILED_KIND) {
                     const failure = decodeFileFailedEvent(event.data);
                     if (failure.requestId === command.requestId) {
-                        fail(new SessionComputerError(failure.code, failure.message));
+                        fail(new SessionRuntimeError(failure.code, failure.message));
                     }
                     return;
                 }
@@ -351,10 +350,7 @@ export async function requestComputerFile(
                         return;
                     }
                     if (responseSettled || begin.byteLength > command.maxBytes) {
-                        throw new SessionComputerError(
-                            "invalid_request",
-                            "The Computer returned invalid file metadata",
-                        );
+                        throw new SessionRuntimeError("invalid_request", "The Computer returned invalid file metadata");
                     }
                     const body = new ReadableStream<Uint8Array>({
                         start(controller) {
@@ -386,16 +382,16 @@ export async function requestComputerFile(
                         return;
                     }
                     if (!responseSettled || receivedBytes !== expectedBytes) {
-                        throw new SessionComputerError("invalid_request", "The Computer ended an unknown file stream");
+                        throw new SessionRuntimeError("invalid_request", "The Computer ended an unknown file stream");
                     }
                     stream?.close();
                     finish();
                 }
             } catch (cause) {
                 fail(
-                    cause instanceof SessionComputerError
+                    cause instanceof SessionRuntimeError
                         ? cause
-                        : new SessionComputerError("invalid_request", "The Computer returned an invalid file", {
+                        : new SessionRuntimeError("invalid_request", "The Computer returned an invalid file", {
                               cause,
                           }),
                 );
@@ -437,8 +433,7 @@ export async function requestComputerAgentSettings(
     try {
         deadline.throwIfAborted();
         return await new Promise<AgentSettingsDiscoveredEvent>((resolve, reject) => {
-            const onClose = () =>
-                reject(new SessionComputerError("computer_offline", "The Computer connection closed"));
+            const onClose = () => reject(new SessionRuntimeError("computer_offline", "The Computer connection closed"));
             const onAbort = () => reject(deadline.reason);
             const onMessage = (event: Event) => {
                 if (!(event instanceof MessageEvent)) {
@@ -451,14 +446,14 @@ export async function requestComputerAgentSettings(
                     const kind = decodeMessageKind(event.data);
                     if (kind === "computer.status") {
                         if (!decodeComputerStatusEvent(event.data).online) {
-                            reject(new SessionComputerError("computer_offline", "The Computer connection closed"));
+                            reject(new SessionRuntimeError("computer_offline", "The Computer connection closed"));
                         }
                         return;
                     }
                     if (kind === "agent.settings.discovery.failed") {
                         const failed = decodeAgentSettingsDiscoveryFailedEvent(event.data);
                         if (failed.requestId === command.requestId) {
-                            reject(new SessionComputerError(failed.code, failed.message));
+                            reject(new SessionRuntimeError(failed.code, failed.message));
                         }
                         return;
                     }
@@ -471,7 +466,7 @@ export async function requestComputerAgentSettings(
                     }
                 } catch (cause) {
                     reject(
-                        new SessionComputerError("invalid_request", "The Computer returned an invalid response", {
+                        new SessionRuntimeError("invalid_request", "The Computer returned an invalid response", {
                             cause,
                         }),
                     );
@@ -514,8 +509,7 @@ export async function requestComputerControl(
     try {
         deadline.throwIfAborted();
         return await new Promise<ComputerControlResult>((resolve, reject) => {
-            const onClose = () =>
-                reject(new SessionComputerError("computer_offline", "The Computer connection closed"));
+            const onClose = () => reject(new SessionRuntimeError("computer_offline", "The Computer connection closed"));
             const onAbort = () => {
                 if (command.kind === "native.session.request" && socket.readyState === WebSocket.OPEN) {
                     socket.send(
@@ -538,7 +532,7 @@ export async function requestComputerControl(
                     const kind = decodeMessageKind(event.data);
                     if (kind === "computer.status") {
                         if (!decodeComputerStatusEvent(event.data).online) {
-                            reject(new SessionComputerError("computer_offline", "The Computer connection closed"));
+                            reject(new SessionRuntimeError("computer_offline", "The Computer connection closed"));
                         }
                         return;
                     }
@@ -546,8 +540,8 @@ export async function requestComputerControl(
                         const failed = decodeSessionOperationFailedEvent(event.data);
                         if (failed.requestId === requestId) {
                             reject(
-                                new ComputerOperationFailedError(failed.code, failed.message, {
-                                    computerTimings: failed.computerTimings,
+                                new RuntimeOperationFailedError(failed.code, failed.message, {
+                                    runtimeTimings: failed.runtimeTimings,
                                 }),
                             );
                         }
@@ -562,7 +556,7 @@ export async function requestComputerControl(
                     }
                 } catch (cause) {
                     reject(
-                        new SessionComputerError("invalid_request", "The Computer returned an invalid response", {
+                        new SessionRuntimeError("invalid_request", "The Computer returned an invalid response", {
                             cause,
                         }),
                     );
@@ -607,8 +601,7 @@ export async function requestComputerWorkspace(
     try {
         deadline.throwIfAborted();
         return await new Promise<WorkspaceEntriesEvent>((resolve, reject) => {
-            const onClose = () =>
-                reject(new SessionComputerError("computer_offline", "The Computer connection closed"));
+            const onClose = () => reject(new SessionRuntimeError("computer_offline", "The Computer connection closed"));
             const onAbort = () => reject(deadline.reason);
             const onMessage = (event: Event) => {
                 if (!(event instanceof MessageEvent)) {
@@ -623,8 +616,8 @@ export async function requestComputerWorkspace(
                         const failed = decodeSessionOperationFailedEvent(event.data);
                         if (failed.requestId === command.requestId) {
                             reject(
-                                new SessionComputerError(failed.code, failed.message, {
-                                    computerTimings: failed.computerTimings,
+                                new SessionRuntimeError(failed.code, failed.message, {
+                                    runtimeTimings: failed.runtimeTimings,
                                 }),
                             );
                         }
@@ -639,7 +632,7 @@ export async function requestComputerWorkspace(
                     }
                 } catch (cause) {
                     reject(
-                        new SessionComputerError("invalid_request", "The Computer returned an invalid response", {
+                        new SessionRuntimeError("invalid_request", "The Computer returned an invalid response", {
                             cause,
                         }),
                     );

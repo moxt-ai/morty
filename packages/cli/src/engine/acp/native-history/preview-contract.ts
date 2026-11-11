@@ -55,13 +55,13 @@ export interface NativeSessionPreviewRequest {
     readonly cursor: string | null;
 }
 
-/** Shared computer resources; each adapter owns the query resources it acquires. */
+/** Shared runtime resources; each adapter owns the query resources it acquires. */
 export interface AdapterDependencies {
     readonly processes: AgentProcessPool;
     readonly contentExternalizer: AcpContentExternalizer;
 }
 
-/** Constructs one harness adapter for a computer. */
+/** Constructs one harness adapter for a runtime. */
 export type AdapterResolver = (agent: AcpAgentDefinition, dependencies: AdapterDependencies) => Adapter;
 
 /** Validated query scope; contains no execution-session recovery or process controls. */

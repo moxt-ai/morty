@@ -1,18 +1,18 @@
 import { expect, test } from "./infra/test.ts";
 
 test("Given a paired Bot, When a Mermaid reply finishes, Then I see a Morty-themed diagram that I can copy and enlarge", async ({
-    computer,
+    runtime,
 }, testInfo) => {
-    const { page } = computer;
+    const { page } = runtime;
     await page.clock.install({ time: new Date("2026-10-10T12:00:00Z") });
-    await computer.openPairedChat();
+    await runtime.openPairedChat();
     await page.getByRole("textbox", { name: "Message" }).fill("draw a deployment diagram");
     await page.getByRole("button", { name: "Send message" }).click();
     const response = page.getByRole("article", { name: "Agent response" }).filter({ hasText: "Browser" });
     await expect(response).toContainText("Browser --> Worker");
     await expect(response.getByRole("img", { name: "Mermaid chart", exact: true })).toHaveCount(0);
 
-    await computer.continueReply("draw a deployment diagram", {
+    await runtime.continueReply("draw a deployment diagram", {
         outcome: "complete",
         output: [],
     });
@@ -47,16 +47,16 @@ test("Given a paired Bot, When a Mermaid reply finishes, Then I see a Morty-them
 });
 
 test("Given a finished Mermaid diagram in a long reply, When I scroll the conversation with the wheel over it, Then the conversation scrolls and the diagram keeps its size", async ({
-    computer,
+    runtime,
 }) => {
-    const { page } = computer;
+    const { page } = runtime;
     await page.clock.install({ time: new Date("2026-10-10T12:00:00Z") });
     await page.setViewportSize({ width: 1280, height: 720 });
-    await computer.openPairedChat();
+    await runtime.openPairedChat();
     await page.getByRole("textbox", { name: "Message" }).fill("draw a sequence diagram");
     await page.getByRole("button", { name: "Send message" }).click();
     const response = page.getByRole("article", { name: "Agent response" }).filter({ hasText: "Request sequence." });
-    await computer.continueReply("draw a sequence diagram", {
+    await runtime.continueReply("draw a sequence diagram", {
         outcome: "complete",
         output: [
             {
@@ -87,16 +87,16 @@ test("Given a finished Mermaid diagram in a long reply, When I scroll the conver
 });
 
 test("Given a wide Mermaid diagram on a phone viewport, When I open it fullscreen, Then it opens legible and I can pan it", async ({
-    computer,
+    runtime,
 }, testInfo) => {
-    const { page } = computer;
+    const { page } = runtime;
     await page.clock.install({ time: new Date("2026-10-10T12:00:00Z") });
-    await computer.openPairedChat();
+    await runtime.openPairedChat();
     await page.getByRole("textbox", { name: "Message" }).fill("draw a wide deployment diagram");
     await page.getByRole("button", { name: "Send message" }).click();
     const response = page.getByRole("article", { name: "Agent response" }).filter({ hasText: "Morty chat UI" });
     await expect(response).toContainText("model backend");
-    await computer.continueReply("draw a wide deployment diagram", {
+    await runtime.continueReply("draw a wide deployment diagram", {
         outcome: "complete",
         output: [],
     });
@@ -130,11 +130,11 @@ test("Given a wide Mermaid diagram on a phone viewport, When I open it fullscree
 });
 
 test("Given a live reply with a closed Mermaid fence, When I read the response, Then the sequence diagram is visible before the turn ends", async ({
-    computer,
+    runtime,
 }, testInfo) => {
-    const { page } = computer;
+    const { page } = runtime;
     await page.clock.install({ time: new Date("2026-10-10T12:00:00Z") });
-    await computer.openPairedChat();
+    await runtime.openPairedChat();
     await page.getByRole("textbox", { name: "Message" }).fill("draw a sequence diagram");
     await page.getByRole("button", { name: "Send message" }).click();
     const response = page.getByRole("article", { name: "Agent response" }).filter({ hasText: "Request sequence." });
@@ -147,7 +147,7 @@ test("Given a live reply with a closed Mermaid fence, When I read the response, 
     await response.getByText("View diagram source", { exact: true }).click();
     await expect(response.getByText("Client->>Server: Send request", { exact: false }).last()).toBeVisible();
     await page.screenshot({ path: testInfo.outputPath("mermaid-sequence.png"), fullPage: true });
-    await computer.continueReply("draw a sequence diagram", { outcome: "complete", output: [] });
+    await runtime.continueReply("draw a sequence diagram", { outcome: "complete", output: [] });
     await expect(page.getByRole("button", { name: "Stop agent output", exact: true })).toBeHidden();
     await expect(diagram).toBeVisible();
 });

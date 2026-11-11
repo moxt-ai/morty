@@ -316,7 +316,7 @@ describe.sequential("Relay Session-only boundary", () => {
             expect(decodeServiceToDaemonMessage(await daemonMessages.next()).kind).toBe("computer.liveness.ready");
             expect(JSON.parse(await hostMessages.next())).toMatchObject({ kind: "computer.status", online: true });
             const rollback = {
-                kind: "computer.upgrade.result",
+                kind: "runtime.upgrade.result",
                 requestId: "local-npm-upgrade",
                 version: "0.0.227",
                 targetVersion: "0.0.228",
@@ -1436,8 +1436,8 @@ async function connectComputerDaemon(slug: string, options: { readonly anchorClo
 it.each(["text", "binary"])(
     "Given a connected Computer, When revocation commits but disconnect delivery fails and a %s message arrives, Then later events reach no viewer and the daemon is closed",
     async (format) => {
-        const computer = await connectComputerDaemon(`revoked-stream-${format}`);
-        const response = await computer.subscribe();
+        const runtime = await connectComputerDaemon(`revoked-stream-${format}`);
+        const response = await runtime.subscribe();
         expect(response.status).toBe(101);
         const viewer = response.webSocket;
         if (viewer === null) {
@@ -1450,7 +1450,7 @@ it.each(["text", "binary"])(
         });
         viewer.accept();
         const deliver = (message: string | Uint8Array) =>
-            runInDurableObject(env.COMPUTER_RELAY.getByName(computer.computerId), async (_instance, state) => {
+            runInDurableObject(env.COMPUTER_RELAY.getByName(runtime.computerId), async (_instance, state) => {
                 const pending: Promise<void>[] = [];
                 const database = new DurableObjectSqlDatabase(state.storage);
                 const context = createRelayDurableObjectContext(state, bindings(), {
@@ -1480,21 +1480,21 @@ it.each(["text", "binary"])(
                 await Promise.all(pending);
             });
         try {
-            await deliver(liveEvent(computer.sessionTarget, "before revocation"));
+            await deliver(liveEvent(runtime.sessionTarget, "before revocation"));
             expect(await messages.next()).toContain("before revocation");
-            await runInDurableObject(env.COMPUTER_RELAY.getByName(computer.computerId), (_instance, state) => {
+            await runInDurableObject(env.COMPUTER_RELAY.getByName(runtime.computerId), (_instance, state) => {
                 state.storage.sql.exec(`CREATE TRIGGER reject_computer_disconnect BEFORE UPDATE OF disconnected_at ON runtime_connection
                 BEGIN SELECT RAISE(ABORT, 'Controlled disconnect failure'); END`);
             });
             try {
-                await expect(computer.revoke()).rejects.toMatchObject({ code: "computer_disconnect_failed" });
+                await expect(runtime.revoke()).rejects.toMatchObject({ code: "computer_disconnect_failed" });
             } finally {
-                await runInDurableObject(env.COMPUTER_RELAY.getByName(computer.computerId), (_instance, state) => {
+                await runInDurableObject(env.COMPUTER_RELAY.getByName(runtime.computerId), (_instance, state) => {
                     state.storage.sql.exec("DROP TRIGGER reject_computer_disconnect");
                 });
             }
             // A revoked Computer's daemon is told so, and stops instead of retrying.
-            const reconnected = await computer.reconnect();
+            const reconnected = await runtime.reconnect();
             expect(reconnected.status).toBe(101);
             const refused = reconnected.webSocket;
             if (refused === null) {
@@ -1507,31 +1507,31 @@ it.each(["text", "binary"])(
             expect(await refusal).toMatchObject({ code: 1008, reason: "Computer revoked" });
             await deliver(
                 format === "text"
-                    ? liveEvent(computer.sessionTarget, "after revocation")
+                    ? liveEvent(runtime.sessionTarget, "after revocation")
                     : encodeContentChunkFrame({
                           bytes: new Uint8Array([1, 2]),
                           requestId: "revoked-file",
                           sequence: 0,
                       }),
             );
-            expect(await computer.daemonClosed).toMatchObject({ code: 1008, reason: "Computer revoked" });
+            expect(await runtime.daemonClosed).toMatchObject({ code: 1008, reason: "Computer revoked" });
             expect(received).toHaveLength(1);
-            expect((await computer.revoke()).status).toBe(204);
+            expect((await runtime.revoke()).status).toBe(204);
         } finally {
-            computer.daemon.close(1000, "Test complete");
+            runtime.daemon.close(1000, "Test complete");
             viewer.close(1000, "Test complete");
         }
     },
 );
 
 it("Given a Computer its owner revoked and then paired again, When the earlier daemon reconnects with its saved credential, Then the Relay tells it the Computer was revoked while the new daemon connects", async () => {
-    const computer = await connectComputerDaemon("paired-again");
+    const runtime = await connectComputerDaemon("paired-again");
     try {
-        expect((await computer.revoke()).status).toBe(204);
-        expect(await computer.daemonClosed).toMatchObject({ code: 1008, reason: "Computer revoked" });
-        const replacement = await computer.pairAgain("paired-again-replacement");
+        expect((await runtime.revoke()).status).toBe(204);
+        expect(await runtime.daemonClosed).toMatchObject({ code: 1008, reason: "Computer revoked" });
+        const replacement = await runtime.pairAgain("paired-again-replacement");
 
-        const earlier = await computer.reconnect();
+        const earlier = await runtime.reconnect();
 
         expect(earlier.status).toBe(101);
         const refused = earlier.webSocket;
@@ -1543,7 +1543,7 @@ it("Given a Computer its owner revoked and then paired again, When the earlier d
         );
         refused.accept();
         expect(await refusal).toMatchObject({ code: 1008, reason: "Computer revoked" });
-        const connected = await computer.connect(replacement);
+        const connected = await runtime.connect(replacement);
         const daemon = connected.webSocket;
         if (daemon === null) {
             throw new Error("Expected the paired Computer socket");
@@ -1553,16 +1553,16 @@ it("Given a Computer its owner revoked and then paired again, When the earlier d
         expect(decodeServiceToDaemonMessage(await messages.next()).kind).toBe("computer.liveness.ready");
         daemon.close(1000, "Test complete");
     } finally {
-        computer.daemon.close(1000, "Test complete");
+        runtime.daemon.close(1000, "Test complete");
     }
 });
 
 it("Given Chat reads the Session execution naming an unconfirmed command, When the Computer reports that command's delivery, Then the Relay returns the delivery", async () => {
-    const computer = await connectComputerDaemon("command-delivery");
+    const runtime = await connectComputerDaemon("command-delivery");
     try {
-        const response = computer.readSessionExecution("unconfirmed-command");
+        const response = runtime.readSessionExecution("unconfirmed-command");
         const first = await Promise.race([
-            computer.daemonMessages.next().then((message) => ({ kind: "command" as const, message })),
+            runtime.daemonMessages.next().then((message) => ({ kind: "command" as const, message })),
             response.then((answered) => ({ kind: "response" as const, response: answered })),
         ]);
         if (first.kind === "response") {
@@ -1575,12 +1575,12 @@ it("Given Chat reads the Session execution naming an unconfirmed command, When t
             throw new Error("Expected the Session execution read to reach the daemon");
         }
         expect(query.deliveryCommandId).toBe("unconfirmed-command");
-        computer.daemon.send(
+        runtime.daemon.send(
             encodeNativeSessionResult({
                 kind: "native.session.result",
                 action: "active-turn",
                 requestId: query.requestId,
-                target: computer.sessionTarget,
+                target: runtime.sessionTarget,
                 turn: null,
                 queued: [],
                 command: { state: "completed", stopReason: "end_turn" },
@@ -1593,16 +1593,16 @@ it("Given Chat reads the Session execution naming an unconfirmed command, When t
             command: { state: "completed", stopReason: "end_turn" },
         });
     } finally {
-        computer.daemon.close(1000, "Test complete");
+        runtime.daemon.close(1000, "Test complete");
     }
 });
 
 it("Given Chat reads the Session execution after missing a turn's outcome, When the Computer reports the last turn, Then the Relay returns the outcome", async () => {
-    const computer = await connectComputerDaemon("last-turn");
+    const runtime = await connectComputerDaemon("last-turn");
     try {
-        const response = computer.readSessionExecution();
+        const response = runtime.readSessionExecution();
         const first = await Promise.race([
-            computer.daemonMessages.next().then((message) => ({ kind: "command" as const, message })),
+            runtime.daemonMessages.next().then((message) => ({ kind: "command" as const, message })),
             response.then((answered) => ({ kind: "response" as const, response: answered })),
         ]);
         if (first.kind === "response") {
@@ -1615,12 +1615,12 @@ it("Given Chat reads the Session execution after missing a turn's outcome, When 
             throw new Error("Expected the Session execution read to reach the daemon");
         }
         expect(query).not.toHaveProperty("deliveryCommandId");
-        computer.daemon.send(
+        runtime.daemon.send(
             encodeNativeSessionResult({
                 kind: "native.session.result",
                 action: "active-turn",
                 requestId: query.requestId,
-                target: computer.sessionTarget,
+                target: runtime.sessionTarget,
                 turn: null,
                 queued: [],
                 queuedCancellation: "before-start",
@@ -1640,7 +1640,7 @@ it("Given Chat reads the Session execution after missing a turn's outcome, When 
             lastTurn: { commandId: "failed-command", state: "failed", code: "model_unavailable" },
         });
     } finally {
-        computer.daemon.close(1000, "Test complete");
+        runtime.daemon.close(1000, "Test complete");
     }
 });
 
@@ -1648,36 +1648,36 @@ describe.sequential("Relay Turn submission", () => {
     it.each(["session"] as const)(
         "Given %s access cancels a Turn, When the Computer reports cancellation or prior completion, Then the response reports the Turn's actual stop reason",
         async (access) => {
-            const computer = await connectComputerDaemon(`legacy-queue-cancel-${access.replace(" ", "-")}`);
+            const runtime = await connectComputerDaemon(`legacy-queue-cancel-${access.replace(" ", "-")}`);
             try {
                 for (const stopReason of ["cancelled", "end_turn"] as const) {
                     const turnId = `legacy-${stopReason}`;
                     const body = {};
                     const path = `/turns/${turnId}/cancel`;
-                    const response = computer.sessionControlRequest(path, body);
-                    const cancellation = decodeServiceToDaemonMessage(await computer.daemonMessages.next());
+                    const response = runtime.sessionControlRequest(path, body);
+                    const cancellation = decodeServiceToDaemonMessage(await runtime.daemonMessages.next());
                     expect(cancellation).toEqual({
                         commandId: turnId,
                         kind: "session.cancel",
                         requestId: expect.any(String),
-                        target: computer.sessionTarget,
+                        target: runtime.sessionTarget,
                     });
                     if (cancellation.kind !== "session.cancel") {
                         throw new Error("Expected a cancellation");
                     }
-                    computer.daemon.send(
+                    runtime.daemon.send(
                         encodeSessionTurnStoppedEvent({
                             commandId: turnId,
                             kind: "session.turn.stopped",
                             requestId: cancellation.requestId,
-                            target: computer.sessionTarget,
+                            target: runtime.sessionTarget,
                             stopReason,
                         }),
                     );
                     expect(await responseJson(await response, 200)).toEqual({ turnId, stopReason });
                 }
             } finally {
-                computer.daemon.close(1000, "Test complete");
+                runtime.daemon.close(1000, "Test complete");
             }
         },
     );
@@ -1685,26 +1685,26 @@ describe.sequential("Relay Turn submission", () => {
     it.each(["session"] as const)(
         "Given %s access withdraws a queued message, When the Computer refuses because it already started, Then the conditional endpoint rejects the edit",
         async (access) => {
-            const computer = await connectComputerDaemon(`conditional-queue-cancel-${access}`);
+            const runtime = await connectComputerDaemon(`conditional-queue-cancel-${access}`);
             try {
                 const body = {};
                 const path = "/turns/queued-command/cancel-before-start";
-                const response = computer.sessionControlRequest(path, body);
-                const withdrawal = decodeServiceToDaemonMessage(await computer.daemonMessages.next());
+                const response = runtime.sessionControlRequest(path, body);
+                const withdrawal = decodeServiceToDaemonMessage(await runtime.daemonMessages.next());
                 expect(withdrawal).toEqual({
                     commandId: "queued-command",
                     kind: "session.cancel-before-start",
                     requestId: expect.any(String),
-                    target: computer.sessionTarget,
+                    target: runtime.sessionTarget,
                 });
                 if (withdrawal.kind !== "session.cancel-before-start") {
                     throw new Error("Expected a withdrawal");
                 }
-                computer.daemon.send(
+                runtime.daemon.send(
                     encodeSessionOperationFailedEvent({
                         kind: "session.operation.failed",
                         requestId: withdrawal.requestId,
-                        target: computer.sessionTarget,
+                        target: runtime.sessionTarget,
                         code: "turn_already_started",
                         message: "The message already started and could not be withdrawn",
                     }),
@@ -1713,7 +1713,7 @@ describe.sequential("Relay Turn submission", () => {
                     error: { code: "turn_already_started" },
                 });
             } finally {
-                computer.daemon.close(1000, "Test complete");
+                runtime.daemon.close(1000, "Test complete");
             }
         },
     );
@@ -1776,46 +1776,46 @@ describe.sequential("Relay Turn submission", () => {
             expected: { accepted: true },
         },
     ] as const)("Session access $label", async (operation) => {
-        const computer = await connectComputerDaemon(`app-control-${operation.command.kind.replaceAll(".", "-")}`);
+        const runtime = await connectComputerDaemon(`app-control-${operation.command.kind.replaceAll(".", "-")}`);
         try {
-            const response = computer.appSessionRequest(operation.path, operation);
+            const response = runtime.appSessionRequest(operation.path, operation);
             const first = await Promise.race([
-                computer.daemonMessages.next().then((message) => ({ kind: "command", message })),
+                runtime.daemonMessages.next().then((message) => ({ kind: "command", message })),
                 response.then((result) => ({ kind: "response", message: String(result.status) })),
             ]);
             expect(first).toMatchObject({ kind: "command" });
             const command = decodeServiceToDaemonMessage(first.message);
-            expect(command).toMatchObject({ ...operation.command, target: computer.sessionTarget });
+            expect(command).toMatchObject({ ...operation.command, target: runtime.sessionTarget });
             if (!("requestId" in command)) {
                 throw new Error("Expected the command to name its own request");
             }
-            computer.daemon.send(
-                JSON.stringify({ ...operation.reply, requestId: command.requestId, target: computer.sessionTarget }),
+            runtime.daemon.send(
+                JSON.stringify({ ...operation.reply, requestId: command.requestId, target: runtime.sessionTarget }),
             );
             expect(await responseJson(await response, 200)).toMatchObject(operation.expected);
         } finally {
-            computer.daemon.close(1000, "Test complete");
+            runtime.daemon.close(1000, "Test complete");
         }
     });
 
     // @no-uc: Technical regression; a read-only App credential must load a Computer event page through its cursor.
     it("Session access restores a Computer event page with read permission", async () => {
-        const computer = await connectComputerDaemon("app-history");
+        const runtime = await connectComputerDaemon("app-history");
         try {
-            const readOnly = await computer.issueComputerCredential(computer.computerId);
-            const response = computer.appSessionRequest("/events-v2?limit=2&cursor=previous-event", {
+            const readOnly = await runtime.issueComputerCredential(runtime.computerId);
+            const response = runtime.appSessionRequest("/events-v2?limit=2&cursor=previous-event", {
                 method: "GET",
                 credential: readOnly,
             });
             const first = await Promise.race([
-                computer.daemonMessages.next().then((message) => ({ kind: "command", message })),
+                runtime.daemonMessages.next().then((message) => ({ kind: "command", message })),
                 response.then((result) => ({ kind: "response", message: String(result.status) })),
             ]);
             expect(first).toMatchObject({ kind: "command" });
             const command = decodeServiceToDaemonMessage(first.message);
             expect(command).toMatchObject({
                 kind: "session.live-history.v2.page.load",
-                target: computer.sessionTarget,
+                target: runtime.sessionTarget,
                 eventLimit: 2,
                 cursor: "previous-event",
             });
@@ -1831,46 +1831,46 @@ describe.sequential("Relay Turn submission", () => {
                 truncated: true,
                 version: 2 as const,
             };
-            computer.daemon.send(
+            runtime.daemon.send(
                 encodeSessionHistoryPageLoaded({
                     kind: "session.live-history.v2.page.loaded",
                     requestId: command.requestId,
-                    target: computer.sessionTarget,
+                    target: runtime.sessionTarget,
                     events: { events: page, queuedPromptRequests: [] },
                 }),
             );
             expect(await responseJson(await response, 200)).toEqual(page);
         } finally {
-            computer.daemon.close(1000, "Test complete");
+            runtime.daemon.close(1000, "Test complete");
         }
     });
 
     it("Given Computer read permission, When an App reads Session configuration, Then the matching Computer settings are returned without write permission", async () => {
-        const computer = await connectComputerDaemon("app-configuration-read");
+        const runtime = await connectComputerDaemon("app-configuration-read");
         try {
-            const readOnly = await computer.issueComputerCredential(computer.computerId);
-            const response = computer.appSessionRequest("/configuration", { method: "GET", credential: readOnly });
+            const readOnly = await runtime.issueComputerCredential(runtime.computerId);
+            const response = runtime.appSessionRequest("/configuration", { method: "GET", credential: readOnly });
             const first = await Promise.race([
-                computer.daemonMessages.next().then((message) => ({ kind: "command", message })),
+                runtime.daemonMessages.next().then((message) => ({ kind: "command", message })),
                 response.then((result) => ({ kind: "response", message: String(result.status) })),
             ]);
             expect(first).toMatchObject({ kind: "command" });
             const command = decodeServiceToDaemonMessage(first.message);
-            expect(command).toMatchObject({ kind: "session.config.read", target: computer.sessionTarget });
+            expect(command).toMatchObject({ kind: "session.config.read", target: runtime.sessionTarget });
             if (command.kind !== "session.config.read") {
                 throw new Error("Expected a configuration request");
             }
             const result: SessionConfigReadResult = {
                 kind: "session.config.read.result",
                 requestId: command.requestId,
-                target: computer.sessionTarget,
+                target: runtime.sessionTarget,
                 configurationRevision: "revision-1",
                 configOptions: [],
             };
-            computer.daemon.send(encodeSessionConfigReadResult(result));
+            runtime.daemon.send(encodeSessionConfigReadResult(result));
             expect(await responseJson(await response, 200)).toEqual(result);
         } finally {
-            computer.daemon.close(1000, "Test complete");
+            runtime.daemon.close(1000, "Test complete");
         }
     });
 
@@ -1896,18 +1896,18 @@ describe.sequential("Relay Turn submission", () => {
         { label: "empty event page", path: "/events-v2?limit=0", method: "GET" },
         { label: "empty event cursor", path: "/events-v2?cursor=", method: "GET" },
     ])("Session access reports $label as an invalid request", async (operation) => {
-        const computer = await connectComputerDaemon("app-invalid-request");
+        const runtime = await connectComputerDaemon("app-invalid-request");
         try {
-            expect(await responseJson(await computer.appSessionRequest(operation.path, operation), 400)).toMatchObject({
+            expect(await responseJson(await runtime.appSessionRequest(operation.path, operation), 400)).toMatchObject({
                 error: { code: "invalid_request" },
             });
         } finally {
-            computer.daemon.close(1000, "Test complete");
+            runtime.daemon.close(1000, "Test complete");
         }
     });
 
     it("Session access uploads raw attachment chunks before submitting a reference-only Turn", async () => {
-        const computer = await connectComputerDaemon("app-binary-attachment");
+        const runtime = await connectComputerDaemon("app-binary-attachment");
         try {
             const bytes = new Uint8Array(400 * 1024).map((_value, index) => index % 251);
             const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", bytes));
@@ -1918,28 +1918,28 @@ describe.sequential("Relay Turn submission", () => {
                 name: "screenshot.png",
                 uri: "attachment:///screenshot.png",
             };
-            const upload = computer.uploadContent(contentKey, bytes, metadata);
-            const write = decodeServiceToDaemonMessage(await computer.daemonMessages.next());
+            const upload = runtime.uploadContent(contentKey, bytes, metadata);
+            const write = decodeServiceToDaemonMessage(await runtime.daemonMessages.next());
             expect(write).toMatchObject({
                 byteLength: bytes.byteLength,
                 contentKey,
                 contentKind: "image",
                 kind: "content.write",
-                target: computer.sessionTarget,
+                target: runtime.sessionTarget,
             });
             if (write.kind !== "content.write") {
                 throw new Error("Expected a content write command");
             }
-            computer.daemon.send(
+            runtime.daemon.send(
                 encodeContentReadyEvent({
                     kind: "content.ready",
                     requestId: write.requestId,
-                    target: computer.sessionTarget,
+                    target: runtime.sessionTarget,
                 }),
             );
             const chunks: Uint8Array[] = [];
             for (;;) {
-                const frame = await computer.daemonMessages.nextFrame();
+                const frame = await runtime.daemonMessages.nextFrame();
                 if (typeof frame === "string") {
                     const command = decodeServiceToDaemonMessage(frame);
                     if (command.kind === "content.commit" && command.requestId === write.requestId) {
@@ -1963,13 +1963,13 @@ describe.sequential("Relay Turn submission", () => {
             }
             expect(uploadedBytes).toEqual(bytes);
             expect(chunks.length).toBeGreaterThan(1);
-            computer.daemon.send(
+            runtime.daemon.send(
                 encodeContentAvailableEvent({
                     byteLength: bytes.byteLength,
                     contentKey,
                     kind: "content.available",
                     requestId: write.requestId,
-                    target: computer.sessionTarget,
+                    target: runtime.sessionTarget,
                 }),
             );
             const attachment = await responseJson(await upload, 200);
@@ -1982,7 +1982,7 @@ describe.sequential("Relay Turn submission", () => {
             expect(attachment).toEqual({ byteLength: bytes.byteLength, contentKey, ...attachmentMetadata });
 
             const idempotencyKey = "binary-attachment-turn";
-            const response = computer.appSessionRequest("/turns", {
+            const response = runtime.appSessionRequest("/turns", {
                 method: "POST",
                 body: {
                     content: "Describe the pasted screenshot.",
@@ -1993,7 +1993,7 @@ describe.sequential("Relay Turn submission", () => {
                 },
             });
             const first = await Promise.race([
-                computer.daemonMessages.next().then((message) => ({ kind: "command", message })),
+                runtime.daemonMessages.next().then((message) => ({ kind: "command", message })),
                 response.then((result) => ({ kind: "response", message: String(result.status) })),
             ]);
             expect(first).toMatchObject({ kind: "command" });
@@ -2005,22 +2005,22 @@ describe.sequential("Relay Turn submission", () => {
                 kind: "session.prompt",
                 commandId: idempotencyKey,
             });
-            computer.startTurn(idempotencyKey, "1");
+            runtime.startTurn(idempotencyKey, "1");
             expect(await responseJson(await response, 200)).toMatchObject({ turnId: idempotencyKey });
         } finally {
-            computer.daemon.close(1000, "Test complete");
+            runtime.daemon.close(1000, "Test complete");
         }
     });
 
     it("Given a cancelled file response, When a late chunk arrives, Then the shared daemon remains available", async () => {
-        const computer = await connectComputerDaemon("cancelled-file-chunk");
+        const runtime = await connectComputerDaemon("cancelled-file-chunk");
         try {
-            const pending = computer.readFile("/workspace/image.png");
-            const read = decodeServiceToDaemonMessage(await computer.daemonMessages.next());
+            const pending = runtime.readFile("/workspace/image.png");
+            const read = decodeServiceToDaemonMessage(await runtime.daemonMessages.next());
             if (read.kind !== "file.read") {
                 throw new Error("Expected a file read command");
             }
-            computer.daemon.send(
+            runtime.daemon.send(
                 encodeFileBeginEvent({
                     byteLength: 2,
                     kind: "file.begin",
@@ -2028,13 +2028,13 @@ describe.sequential("Relay Turn submission", () => {
                     modifiedAt: "2026-09-18T00:00:00.000Z",
                     name: "image.png",
                     requestId: read.requestId,
-                    target: computer.sessionTarget,
+                    target: runtime.sessionTarget,
                 }),
             );
             const response = await pending;
             await response.body?.cancel();
 
-            computer.daemon.send(
+            runtime.daemon.send(
                 encodeContentChunkFrame({
                     bytes: new Uint8Array([1, 2]),
                     requestId: read.requestId,
@@ -2042,12 +2042,12 @@ describe.sequential("Relay Turn submission", () => {
                 }),
             );
 
-            const query = computer.queryActiveTurn(new AbortController().signal);
-            const command = decodeServiceToDaemonMessage(await computer.daemonMessages.next());
+            const query = runtime.queryActiveTurn(new AbortController().signal);
+            const command = decodeServiceToDaemonMessage(await runtime.daemonMessages.next());
             if (command.kind !== "native.session.request") {
                 throw new Error("Expected an unrelated native query to reach the daemon");
             }
-            computer.daemon.send(
+            runtime.daemon.send(
                 encodeNativeSessionResult({
                     action: "active-turn",
                     kind: "native.session.result",
@@ -2056,14 +2056,14 @@ describe.sequential("Relay Turn submission", () => {
                     executionPosition: { sessionGenerationId: "session-generation-1", throughPosition: "0" },
                     interactionState: null,
                     requestId: command.requestId,
-                    target: computer.sessionTarget,
+                    target: runtime.sessionTarget,
                     turn: null,
                 }),
             );
             expect(await responseJson(await query, 200)).toMatchObject({ action: "active-turn", turn: null });
-            expect(computer.daemon.readyState).toBe(WebSocket.OPEN);
+            expect(runtime.daemon.readyState).toBe(WebSocket.OPEN);
         } finally {
-            computer.daemon.close(1000, "Test complete");
+            runtime.daemon.close(1000, "Test complete");
         }
     });
 
@@ -2071,12 +2071,12 @@ describe.sequential("Relay Turn submission", () => {
     it.each([900, 30_000])(
         "accepts a Session credential issued %i milliseconds ahead of ComputerRelay",
         async (skew) => {
-            const computer = await connectComputerDaemon(`clock-skew-${skew}`);
+            const runtime = await connectComputerDaemon(`clock-skew-${skew}`);
             try {
                 vi.setSystemTime(Date.now() - skew);
-                const submitted = computer.submitComputerTurn("skewed-command");
+                const submitted = runtime.submitComputerTurn("skewed-command");
                 const first = await Promise.race([
-                    computer.daemonMessages.next().then((message) => ({ kind: "command" as const, message })),
+                    runtime.daemonMessages.next().then((message) => ({ kind: "command" as const, message })),
                     submitted.then((response) => ({ kind: "response" as const, response })),
                 ]);
                 if (first.kind === "response") {
@@ -2088,13 +2088,13 @@ describe.sequential("Relay Turn submission", () => {
                     kind: "session.prompt",
                     commandId: "skewed-command",
                 });
-                computer.startTurn("skewed-command", "1");
+                runtime.startTurn("skewed-command", "1");
                 expect(await responseJson(await submitted, 200)).toMatchObject({
                     idempotencyKey: "skewed-command",
                     state: { kind: "running" },
                 });
             } finally {
-                computer.daemon.close(1000, "Test complete");
+                runtime.daemon.close(1000, "Test complete");
             }
         },
     );
@@ -2103,27 +2103,27 @@ describe.sequential("Relay Turn submission", () => {
         { offset: -30_001, code: "project_credential_invalid" },
         { offset: 900_000, code: "credential_expired" },
     ])("refuses a credential at verifier offset $offset with $code", async ({ offset, code }) => {
-        const computer = await connectComputerDaemon(`clock-rejected-${Math.abs(offset)}`);
+        const runtime = await connectComputerDaemon(`clock-rejected-${Math.abs(offset)}`);
         try {
             vi.setSystemTime(Date.now() + offset);
-            expect(await responseJson(await computer.submitComputerTurn("invalid-time"), 401)).toMatchObject({
+            expect(await responseJson(await runtime.submitComputerTurn("invalid-time"), 401)).toMatchObject({
                 error: { code },
             });
         } finally {
-            computer.daemon.close(1000, "Test complete");
+            runtime.daemon.close(1000, "Test complete");
         }
     });
     // @no-uc: Technical regression; future-time tolerance must not admit correctly signed invalid lifetimes.
     it.each([0, -1, 900_001])("refuses a signed credential with lifetime %i", async (lifetime) => {
-        const computer = await connectComputerDaemon(`invalid-lifetime-${Math.abs(lifetime)}`);
+        const runtime = await connectComputerDaemon(`invalid-lifetime-${Math.abs(lifetime)}`);
         try {
-            const credential = await computer.resignCredential(relaySigner, lifetime);
+            const credential = await runtime.resignCredential(relaySigner, lifetime);
             vi.setSystemTime(Date.now() - 900);
             expect(
-                await responseJson(await computer.submitComputerTurn("invalid-lifetime", () => credential), 401),
+                await responseJson(await runtime.submitComputerTurn("invalid-lifetime", () => credential), 401),
             ).toMatchObject({ error: { code: "project_credential_invalid" } });
         } finally {
-            computer.daemon.close(1000, "Test complete");
+            runtime.daemon.close(1000, "Test complete");
         }
     });
     it("Given an authorized token for another Project, When it selects an existing Computer, Then that Computer refuses the Project mismatch", async () => {
@@ -2143,65 +2143,65 @@ describe.sequential("Relay Turn submission", () => {
         }
     });
     it("Given an executing native query, When its HTTP caller cancels, Then cancellation reaches the daemon", async () => {
-        const computer = await connectComputerDaemon("direct-cancellation");
+        const runtime = await connectComputerDaemon("direct-cancellation");
         const controller = new AbortController();
         try {
-            const pending = computer.queryActiveTurn(controller.signal).then(
+            const pending = runtime.queryActiveTurn(controller.signal).then(
                 (response) => response.status,
                 (cause: unknown) => cause,
             );
-            const command = decodeServiceToDaemonMessage(await computer.daemonMessages.next());
+            const command = decodeServiceToDaemonMessage(await runtime.daemonMessages.next());
             if (command.kind !== "native.session.request") {
                 throw new Error("Expected a native query");
             }
             controller.abort(new DOMException("Caller left", "AbortError"));
-            expect(decodeServiceToDaemonMessage(await computer.daemonMessages.next())).toMatchObject({
+            expect(decodeServiceToDaemonMessage(await runtime.daemonMessages.next())).toMatchObject({
                 kind: "native.session.cancel",
                 requestId: command.requestId,
             });
             expect(await pending).toBeInstanceOf(DOMException);
         } finally {
             controller.abort();
-            computer.daemon.close(1000, "Test complete");
+            runtime.daemon.close(1000, "Test complete");
         }
     });
     it("Given a Session credential, When direct Computer HTTP receives a forged, wrong-Session, or expired credential, Then it rejects the request before execution", async () => {
-        const computer = await connectComputerDaemon("direct-authorization");
+        const runtime = await connectComputerDaemon("direct-authorization");
         try {
             expect(
                 await responseJson(
-                    await computer.submitComputerTurn("forged", (credential) => `${credential.slice(0, -6)}AAAAAA`),
+                    await runtime.submitComputerTurn("forged", (credential) => `${credential.slice(0, -6)}AAAAAA`),
                     401,
                 ),
             ).toMatchObject({ error: { code: "project_credential_invalid" } });
             expect(
                 await responseJson(
-                    await computer.submitComputerTurn("wrong-session", (credential) => credential, "different-session"),
+                    await runtime.submitComputerTurn("wrong-session", (credential) => credential, "different-session"),
                     403,
                 ),
             ).toMatchObject({ error: { code: "project_permission_denied" } });
             vi.setSystemTime(new Date("2026-09-18T00:16:00.000Z"));
-            expect(await responseJson(await computer.submitComputerTurn("expired"), 401)).toMatchObject({
+            expect(await responseJson(await runtime.submitComputerTurn("expired"), 401)).toMatchObject({
                 error: { code: "credential_expired" },
             });
         } finally {
-            computer.daemon.close(1000, "Test complete");
+            runtime.daemon.close(1000, "Test complete");
         }
     });
     it("Given an unrelated credential digest, When a Session credential is signed with it, Then direct Computer HTTP rejects it before execution", async () => {
-        const computer = await connectComputerDaemon("stored-digest-forgery");
+        const runtime = await connectComputerDaemon("stored-digest-forgery");
         try {
-            const forged = await computer.resignCredential(storedDigestSigner);
+            const forged = await runtime.resignCredential(storedDigestSigner);
             expect(
-                await responseJson(await computer.submitComputerTurn("stored-digest", () => forged), 401),
+                await responseJson(await runtime.submitComputerTurn("stored-digest", () => forged), 401),
             ).toMatchObject({ error: { code: "project_credential_invalid" } });
         } finally {
-            computer.daemon.close(1000, "Test complete");
+            runtime.daemon.close(1000, "Test complete");
         }
     });
     it("Given an open Session view, When the Relay signing secret rotates, Then the connection check closes the old view and only new credentials reconnect", async () => {
-        const computer = await connectComputerDaemon("signing-key-rotation");
-        const response = await computer.subscribe();
+        const runtime = await connectComputerDaemon("signing-key-rotation");
+        const response = await runtime.subscribe();
         const view = response.webSocket;
         if (view === null) {
             throw new Error("Expected the live Session view");
@@ -2210,9 +2210,9 @@ describe.sequential("Relay Turn submission", () => {
         view.accept();
         try {
             const signingSecret = "rotated-test-only-session-signing-secret";
-            const reissued = await computer.resignCredential(async () => await relaySigningKey(signingSecret));
+            const reissued = await runtime.resignCredential(async () => await relaySigningKey(signingSecret));
             const statuses = await runInDurableObject(
-                env.COMPUTER_RELAY.getByName(computer.computerId),
+                env.COMPUTER_RELAY.getByName(runtime.computerId),
                 async (_instance, state) => {
                     // Reconstruct the production object with the same persisted sockets and a newly deployed binding.
                     const rotated = new RelayComputerRelay(state, {
@@ -2224,11 +2224,11 @@ describe.sequential("Relay Turn submission", () => {
                     const connect = async (credential: string) =>
                         await rotated.fetch(
                             new Request(
-                                `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computer.computerId}/harnesses/${computer.sessionTarget.harness}/sessions/${computer.sessionTarget.sessionId}/events-v2`,
+                                `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${runtime.computerId}/harnesses/${runtime.sessionTarget.harness}/sessions/${runtime.sessionTarget.sessionId}/events-v2`,
                                 { headers: { authorization: `Bearer ${credential}`, Upgrade: "websocket" } },
                             ),
                         );
-                    const rejected = await connect(computer.credential);
+                    const rejected = await connect(runtime.credential);
                     const accepted = await connect(reissued);
                     accepted.webSocket?.accept();
                     accepted.webSocket?.close(1000, "Test complete");
@@ -2239,15 +2239,15 @@ describe.sequential("Relay Turn submission", () => {
             expect(await closed).toMatchObject({ code: 1008, reason: "Session signing key rotated" });
         } finally {
             view.close(1000, "Test complete");
-            computer.daemon.close(1000, "Test complete");
+            runtime.daemon.close(1000, "Test complete");
         }
     });
     it("Given a Session credential, When HTTP reaches ComputerRelay directly, Then the command executes without a project relay hop and remains correlated", async () => {
-        const computer = await connectComputerDaemon("direct-computer");
+        const runtime = await connectComputerDaemon("direct-computer");
         try {
-            const submitted = computer.submitComputerTurn("direct-command");
+            const submitted = runtime.submitComputerTurn("direct-command");
             const first = await Promise.race([
-                computer.daemonMessages.next().then((message) => ({ kind: "command", message })),
+                runtime.daemonMessages.next().then((message) => ({ kind: "command", message })),
                 submitted.then((response) => ({ kind: "response", message: String(response.status) })),
             ]);
             expect(first.kind).toBe("command");
@@ -2255,10 +2255,10 @@ describe.sequential("Relay Turn submission", () => {
                 kind: "session.prompt",
                 commandId: "direct-command",
             });
-            computer.startTurn("direct-command", "1");
+            runtime.startTurn("direct-command", "1");
             expect(await responseJson(await submitted, 200)).toMatchObject({ state: { kind: "running" } });
         } finally {
-            computer.daemon.close(1000, "Test complete");
+            runtime.daemon.close(1000, "Test complete");
         }
     });
     it("Given a linked Computer, When Chat submits a first Turn longer than 10,000 characters or an invalid Turn, Then the long Turn reaches the Computer and the invalid Turn is rejected as a client error", async () => {
@@ -2670,39 +2670,39 @@ describe.sequential("Relay Turn submission", () => {
     });
 
     it("Given a daemon that heartbeats and then falls silent, When Chat submits Turns, Then they reach it while it heartbeats and are refused as computer_offline once the silence outlasts the heartbeat deadline", async () => {
-        const computer = await connectComputerDaemon("silent-daemon", { anchorClockToHeartbeat: true });
+        const runtime = await connectComputerDaemon("silent-daemon", { anchorClockToHeartbeat: true });
         // The clock now reads when Cloudflare answered the daemon's heartbeat.
         const heartbeatAt = Date.now();
         try {
             vi.setSystemTime(heartbeatAt + 20_000);
-            const delivered = computer.submitTurn("heartbeating-turn");
-            expect(decodeServiceToDaemonMessage(await computer.daemonMessages.next())).toMatchObject({
+            const delivered = runtime.submitTurn("heartbeating-turn");
+            expect(decodeServiceToDaemonMessage(await runtime.daemonMessages.next())).toMatchObject({
                 commandId: "heartbeating-turn",
                 kind: "session.prompt",
             });
-            computer.startTurn("heartbeating-turn", "1");
+            runtime.startTurn("heartbeating-turn", "1");
             expect(await responseJson(await delivered, 200)).toMatchObject({ turnId: "heartbeating-turn" });
 
             // A Turn sent before the deadline still reaches the connection, which never answers it.
             vi.setSystemTime(heartbeatAt + 30_000);
-            const stranded = computer.submitTurn("stranded-turn");
-            expect(decodeServiceToDaemonMessage(await computer.daemonMessages.next())).toMatchObject({
+            const stranded = runtime.submitTurn("stranded-turn");
+            expect(decodeServiceToDaemonMessage(await runtime.daemonMessages.next())).toMatchObject({
                 commandId: "stranded-turn",
                 kind: "session.prompt",
             });
 
             // Once the silence outlasts the deadline, the next Turn is refused at once and releases the stranded one.
             vi.setSystemTime(heartbeatAt + 36_000);
-            expect(await responseJson(await computer.submitTurn("after-silence-turn"), 503)).toMatchObject({
+            expect(await responseJson(await runtime.submitTurn("after-silence-turn"), 503)).toMatchObject({
                 error: { code: "computer_offline" },
             });
             expect(await responseJson(await stranded, 503)).toMatchObject({ error: { code: "computer_offline" } });
-            expect(await computer.daemonClosed).toMatchObject({ code: 4001, reason: "Computer heartbeat timed out" });
+            expect(await runtime.daemonClosed).toMatchObject({ code: 4001, reason: "Computer heartbeat timed out" });
         } finally {
             // Cloudflare's clock has not reached the times set above, and the run does not finish
             // tearing down while the test clock is still ahead of it.
             vi.setSystemTime(heartbeatAt);
-            computer.daemon.close();
+            runtime.daemon.close();
         }
     });
 
@@ -2712,77 +2712,77 @@ describe.sequential("Relay Turn submission", () => {
     ] as const)(
         "Given a daemon whose heartbeats stopped, When an app answers a pending $kind request, Then the answer is refused at once as computer_offline",
         async (body) => {
-            const computer = await connectComputerDaemon(`offline-${body.kind}-answer`, {
+            const runtime = await connectComputerDaemon(`offline-${body.kind}-answer`, {
                 anchorClockToHeartbeat: true,
             });
             // The clock now reads when Cloudflare answered the daemon's heartbeat.
             const heartbeatAt = Date.now();
             try {
                 vi.setSystemTime(heartbeatAt + 36_000);
-                const answer = await computer.appSessionRequest("/interactions/offline-interaction/responses", {
+                const answer = await runtime.appSessionRequest("/interactions/offline-interaction/responses", {
                     method: "POST",
                     body,
                 });
                 expect(await responseJson(answer, 503)).toMatchObject({ error: { code: "computer_offline" } });
-                expect(await computer.daemonClosed).toMatchObject({
+                expect(await runtime.daemonClosed).toMatchObject({
                     code: 4001,
                     reason: "Computer heartbeat timed out",
                 });
             } finally {
                 vi.setSystemTime(heartbeatAt);
-                computer.daemon.close();
+                runtime.daemon.close();
             }
         },
     );
 
     it("Given a daemon whose heartbeats stopped, When an app reads the Computer, Then it is reported offline and its connection is closed", async () => {
-        const computer = await connectComputerDaemon("silent-presence", { anchorClockToHeartbeat: true });
+        const runtime = await connectComputerDaemon("silent-presence", { anchorClockToHeartbeat: true });
         // The clock now reads when Cloudflare answered the daemon's heartbeat.
         const heartbeatAt = Date.now();
         try {
             vi.setSystemTime(heartbeatAt + 30_000);
-            expect(await computer.readOnline()).toBe(true);
+            expect(await runtime.readOnline()).toBe(true);
 
             vi.setSystemTime(heartbeatAt + 36_000);
-            expect(await computer.readOnline()).toBe(false);
-            expect(await computer.daemonClosed).toMatchObject({ code: 4001, reason: "Computer heartbeat timed out" });
+            expect(await runtime.readOnline()).toBe(false);
+            expect(await runtime.daemonClosed).toMatchObject({ code: 4001, reason: "Computer heartbeat timed out" });
         } finally {
             vi.setSystemTime(heartbeatAt);
-            computer.daemon.close();
+            runtime.daemon.close();
         }
     });
 
     it("Given a daemon using fixed-text heartbeats, When it sends a noncanonical heartbeat near its deadline, Then only host auto-responses renew its liveness", async () => {
-        const computer = await connectComputerDaemon("noncanonical-heartbeat", { anchorClockToHeartbeat: true });
+        const runtime = await connectComputerDaemon("noncanonical-heartbeat", { anchorClockToHeartbeat: true });
         const heartbeatAt = Date.now();
         try {
             vi.setSystemTime(heartbeatAt + 30_000);
-            computer.daemon.send(JSON.stringify({ extra: "ignored", kind: "computer.heartbeat" }));
-            expect(await computer.readOnline()).toBe(true);
+            runtime.daemon.send(JSON.stringify({ extra: "ignored", kind: "computer.heartbeat" }));
+            expect(await runtime.readOnline()).toBe(true);
 
             vi.setSystemTime(heartbeatAt + 36_000);
-            expect(await computer.readOnline()).toBe(false);
-            expect(await computer.daemonClosed).toMatchObject({ code: 4001, reason: "Computer heartbeat timed out" });
+            expect(await runtime.readOnline()).toBe(false);
+            expect(await runtime.daemonClosed).toMatchObject({ code: 4001, reason: "Computer heartbeat timed out" });
         } finally {
             vi.setSystemTime(heartbeatAt);
-            computer.daemon.close();
+            runtime.daemon.close();
         }
     });
 
     it("Given a daemon that never heartbeats after it connected, When its first heartbeat is overdue, Then it is reported offline and its connection is closed", async () => {
-        const computer = await connectComputerDaemon("unproven-daemon");
+        const runtime = await connectComputerDaemon("unproven-daemon");
         const connectedAt = Date.now();
         try {
             // The first heartbeat follows attachment, which has 30 seconds, then the usual silence limit applies.
             vi.setSystemTime(connectedAt + 65_000);
-            expect(await computer.readOnline()).toBe(true);
+            expect(await runtime.readOnline()).toBe(true);
 
             vi.setSystemTime(connectedAt + 65_001);
-            expect(await computer.readOnline()).toBe(false);
-            expect(await computer.daemonClosed).toMatchObject({ code: 4001, reason: "Computer heartbeat timed out" });
+            expect(await runtime.readOnline()).toBe(false);
+            expect(await runtime.daemonClosed).toMatchObject({ code: 4001, reason: "Computer heartbeat timed out" });
         } finally {
             vi.setSystemTime(connectedAt);
-            computer.daemon.close();
+            runtime.daemon.close();
         }
     });
 });
@@ -2813,7 +2813,7 @@ function forkResult(requestId: string, target: NativeSessionTarget) {
 }
 
 it("Given a Fork in flight, When it is requested again concurrently and after Relay eviction, Then each Computer request carries the operation identity and the Relay keeps no outcome of its own", async () => {
-    const computer = await connectComputerDaemon("fork-operation-identity");
+    const runtime = await connectComputerDaemon("fork-operation-identity");
     const input = {
         harness: "codex",
         sessionId: "native-source",
@@ -2821,9 +2821,9 @@ it("Given a Fork in flight, When it is requested again concurrently and after Re
     };
     const operationId = "retained-fork-operation";
     try {
-        const first = computer.forkNative(operationId, input);
+        const first = runtime.forkNative(operationId, input);
         // The controlled daemon owns fork allocation; the request never carries a destination.
-        const fork = record(JSON.parse(await computer.daemonMessages.next()));
+        const fork = record(JSON.parse(await runtime.daemonMessages.next()));
         expect(fork).toMatchObject({
             kind: "native.session.request",
             action: "fork",
@@ -2832,31 +2832,31 @@ it("Given a Fork in flight, When it is requested again concurrently and after Re
             directory: ".",
         });
         expect(fork).not.toHaveProperty("targetSessionId");
-        const concurrent = computer.forkNative(operationId, input);
+        const concurrent = runtime.forkNative(operationId, input);
         expect(
-            await responseJson(await computer.forkNative(operationId, { ...input, sessionId: "another-source" }), 409),
+            await responseJson(await runtime.forkNative(operationId, { ...input, sessionId: "another-source" }), 409),
         ).toMatchObject({ error: { code: "idempotency_conflict" } });
         const forkTarget = nativeTarget("harness-fork-destination");
-        computer.daemon.send(JSON.stringify(forkResult(text(fork, "requestId"), forkTarget)));
+        runtime.daemon.send(JSON.stringify(forkResult(text(fork, "requestId"), forkTarget)));
 
         const original = await responseJson(await first, 200);
 
         expect(original).toMatchObject({ action: "fork", target: forkTarget });
         expect(await responseJson(await concurrent, 200)).toEqual(original);
 
-        await evictDurableObject(env.COMPUTER_RELAY.getByName(computer.computerId), { webSockets: "hibernate" });
-        const replayed = computer.forkNative(operationId, input);
+        await evictDurableObject(env.COMPUTER_RELAY.getByName(runtime.computerId), { webSockets: "hibernate" });
+        const replayed = runtime.forkNative(operationId, input);
         // The Computer answers the retry from the receipt it keeps under the same operation identity.
-        expect(record(JSON.parse(await computer.daemonMessages.next()))).toEqual(fork);
-        computer.daemon.send(JSON.stringify(forkResult(text(fork, "requestId"), forkTarget)));
+        expect(record(JSON.parse(await runtime.daemonMessages.next()))).toEqual(fork);
+        runtime.daemon.send(JSON.stringify(forkResult(text(fork, "requestId"), forkTarget)));
         expect(await responseJson(await replayed, 200)).toEqual(original);
     } finally {
-        computer.daemon.close(1000, "Fork recovery scenario completed");
+        runtime.daemon.close(1000, "Fork recovery scenario completed");
     }
 });
 
 it("Given the Computer rejects a Fork, When the same operation is retried, Then the rejection is reported and the retry forks again", async () => {
-    const computer = await connectComputerDaemon("fork-rejected");
+    const runtime = await connectComputerDaemon("fork-rejected");
     const input = {
         harness: "codex",
         sessionId: "native-source",
@@ -2864,14 +2864,14 @@ it("Given the Computer rejects a Fork, When the same operation is retried, Then 
     };
     const operationId = "rejected-fork-operation";
     const forkCommand = async () => {
-        const fork = record(JSON.parse(await computer.daemonMessages.next()));
+        const fork = record(JSON.parse(await runtime.daemonMessages.next()));
         expect(fork).toMatchObject({ kind: "native.session.request", action: "fork", sessionId: "native-source" });
         return fork;
     };
     try {
-        const first = computer.forkNative(operationId, input);
+        const first = runtime.forkNative(operationId, input);
         const rejected = await forkCommand();
-        computer.daemon.send(
+        runtime.daemon.send(
             JSON.stringify({
                 kind: "session.operation.failed",
                 code: "native_session_unsupported",
@@ -2881,23 +2881,23 @@ it("Given the Computer rejects a Fork, When the same operation is retried, Then 
         );
         expect(await responseJson(await first, 503)).toMatchObject({ error: { code: "native_session_unsupported" } });
 
-        const retried = computer.forkNative(operationId, input);
+        const retried = runtime.forkNative(operationId, input);
         const fork = await forkCommand();
         expect(text(fork, "requestId")).toBe(text(rejected, "requestId"));
         expect(fork).not.toHaveProperty("targetSessionId");
         const forkTarget = nativeTarget("harness-fork-after-refusal");
-        computer.daemon.send(JSON.stringify(forkResult(text(fork, "requestId"), forkTarget)));
+        runtime.daemon.send(JSON.stringify(forkResult(text(fork, "requestId"), forkTarget)));
         const forked = await responseJson(await retried, 200);
         expect(forked).toMatchObject({ action: "fork", target: forkTarget });
     } finally {
-        computer.daemon.close(1000, "Fork rejection scenario completed");
+        runtime.daemon.close(1000, "Fork rejection scenario completed");
     }
 });
 
 it("Given an anonymous browser knows a Computer, When it declares a full-budget upload, Then it is rejected and an authorized browser can still upload", async () => {
-    const computer = await connectComputerDaemon("upload-admission");
-    const anonymous = (await computer.transport()).webSocket;
-    const browser = (await computer.transport()).webSocket;
+    const runtime = await connectComputerDaemon("upload-admission");
+    const anonymous = (await runtime.transport()).webSocket;
+    const browser = (await runtime.transport()).webSocket;
     if (anonymous === null || browser === null) {
         throw new Error("Expected browser transports");
     }
@@ -2908,20 +2908,20 @@ it("Given an anonymous browser knows a Computer, When it declares a full-budget 
     const path =
         MORTY_API_PREFIX +
         "/v1/computers/" +
-        computer.computerId +
+        runtime.computerId +
         "/harnesses/" +
-        computer.sessionTarget.harness +
+        runtime.sessionTarget.harness +
         "/sessions/" +
-        computer.sessionTarget.sessionId +
+        runtime.sessionTarget.sessionId +
         "/content/" +
         "a".repeat(64);
     // Alter the first character of the 43-character signature. Its last character carries two
     // padding bits that decoding ignores, so editing that one can leave the signature valid.
-    const signatureStart = computer.credential.length - 43;
+    const signatureStart = runtime.credential.length - 43;
     const forgedCredential =
-        computer.credential.slice(0, signatureStart) +
-        (computer.credential[signatureStart] === "A" ? "B" : "A") +
-        computer.credential.slice(signatureStart + 1);
+        runtime.credential.slice(0, signatureStart) +
+        (runtime.credential[signatureStart] === "A" ? "B" : "A") +
+        runtime.credential.slice(signatureStart + 1);
     const declaration = {
         kind: "http.request",
         requestId: "unauthorized",
@@ -2951,7 +2951,7 @@ it("Given an anonymous browser knows a Computer, When it declares a full-budget 
                 requestId: "authorized",
                 bodyByteLength: 1,
                 headers: [
-                    ["authorization", `Bearer ${computer.credential}`],
+                    ["authorization", `Bearer ${runtime.credential}`],
                     ["x-morty-byte-length", "1"],
                     ["x-morty-content-kind", "resource"],
                     ["content-type", "text/plain"],
@@ -2961,31 +2961,31 @@ it("Given an anonymous browser knows a Computer, When it declares a full-budget 
             }),
         );
         browser.send(encodeContentChunkFrame({ requestId: "authorized", sequence: 0, bytes: new Uint8Array([120]) }));
-        const command = decodeServiceToDaemonMessage(await computer.daemonMessages.next());
+        const command = decodeServiceToDaemonMessage(await runtime.daemonMessages.next());
         expect(command.kind).toBe("content.write");
         if (command.kind !== "content.write") {
             throw new Error("Expected authorized upload");
         }
-        computer.daemon.send(
+        runtime.daemon.send(
             encodeContentReadyEvent({
                 kind: "content.ready",
                 requestId: command.requestId,
-                target: computer.sessionTarget,
+                target: runtime.sessionTarget,
             }),
         );
-        const frame = await computer.daemonMessages.nextFrame();
+        const frame = await runtime.daemonMessages.nextFrame();
         const arrayBuffer = typeof frame === "object" && frame !== null ? Reflect.get(frame, "arrayBuffer") : undefined;
         const binary = typeof arrayBuffer === "function" ? await Reflect.apply(arrayBuffer, frame, []) : frame;
         expect(decodeContentChunkFrame(binary).bytes).toEqual(new Uint8Array([120]));
-        expect(decodeServiceToDaemonMessage(await computer.daemonMessages.next())).toMatchObject({
+        expect(decodeServiceToDaemonMessage(await runtime.daemonMessages.next())).toMatchObject({
             kind: "content.commit",
             requestId: command.requestId,
         });
-        computer.daemon.send(
+        runtime.daemon.send(
             encodeContentAvailableEvent({
                 kind: "content.available",
                 requestId: command.requestId,
-                target: computer.sessionTarget,
+                target: runtime.sessionTarget,
                 contentKey: "a".repeat(64),
                 byteLength: 1,
             }),
@@ -2994,7 +2994,7 @@ it("Given an anonymous browser knows a Computer, When it declares a full-budget 
     } finally {
         anonymous.close();
         browser.close();
-        computer.daemon.close();
+        runtime.daemon.close();
     }
 });
 
@@ -3021,13 +3021,13 @@ describe("Computer prompt acknowledgements", () => {
         });
 
     it("Given pending submissions, When the Computer answers another request, Then only the reply naming each submission answers it", async () => {
-        const computer = await connectComputerDaemon("named-queue-change");
+        const runtime = await connectComputerDaemon("named-queue-change");
         try {
-            const credential = await computer.issueComputerCredential(computer.computerId);
+            const credential = await runtime.issueComputerCredential(runtime.computerId);
             const queue = (idempotencyKey: string) =>
-                env.COMPUTER_RELAY.getByName(computer.computerId).fetch(
+                env.COMPUTER_RELAY.getByName(runtime.computerId).fetch(
                     new Request(
-                        `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computer.computerId}/harnesses/${computer.sessionTarget.harness}/sessions/${computer.sessionTarget.sessionId}/turns`,
+                        `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${runtime.computerId}/harnesses/${runtime.sessionTarget.harness}/sessions/${runtime.sessionTarget.sessionId}/turns`,
                         {
                             method: "POST",
                             headers: credentialHeaders(credential),
@@ -3041,34 +3041,34 @@ describe("Computer prompt acknowledgements", () => {
                 );
 
             const rejected = queue("rejected-command");
-            expect(decodeServiceToDaemonMessage(await computer.daemonMessages.next())).toMatchObject({
+            expect(decodeServiceToDaemonMessage(await runtime.daemonMessages.next())).toMatchObject({
                 commandId: "rejected-command",
             });
             // Another request's answer, or this command's own lifecycle, does not answer this submission; the
             // Computer's reply naming it does.
-            computer.daemon.send(
+            runtime.daemon.send(
                 encodeSessionPromptAcceptedEvent({
                     kind: "session.prompt.accepted",
                     requestId: "other-command",
-                    target: computer.sessionTarget,
+                    target: runtime.sessionTarget,
                     state: "queued",
                 }),
             );
-            computer.daemon.send(
-                lifecycleFrame(computer.sessionTarget, "rejected-failed", "1", {
+            runtime.daemon.send(
+                lifecycleFrame(runtime.sessionTarget, "rejected-failed", "1", {
                     code: "agent_unavailable",
                     commandId: "rejected-command",
                     kind: "prompt.failed-before-start",
                     message: "The Agent is unavailable",
                 }),
             );
-            computer.daemon.send(
+            runtime.daemon.send(
                 encodeSessionOperationFailedEvent({
                     code: "agent_unavailable",
                     kind: "session.operation.failed",
                     message: "The Agent is unavailable",
                     requestId: "rejected-command",
-                    target: computer.sessionTarget,
+                    target: runtime.sessionTarget,
                 }),
             );
             const failure = await rejected;
@@ -3076,14 +3076,14 @@ describe("Computer prompt acknowledgements", () => {
             expect(await failure.json()).toMatchObject({ error: { code: "agent_unavailable" } });
 
             const admitted = queue("admitted-command");
-            expect(decodeServiceToDaemonMessage(await computer.daemonMessages.next())).toMatchObject({
+            expect(decodeServiceToDaemonMessage(await runtime.daemonMessages.next())).toMatchObject({
                 commandId: "admitted-command",
             });
-            computer.daemon.send(
+            runtime.daemon.send(
                 encodeSessionPromptAcceptedEvent({
                     kind: "session.prompt.accepted",
                     requestId: "admitted-command",
-                    target: computer.sessionTarget,
+                    target: runtime.sessionTarget,
                     state: "queued",
                 }),
             );
@@ -3092,60 +3092,60 @@ describe("Computer prompt acknowledgements", () => {
                 turnId: "admitted-command",
             });
         } finally {
-            computer.daemon.close(1000, "Test complete");
+            runtime.daemon.close(1000, "Test complete");
         }
     }, 30_000);
 
     it("Given a completed prompt, When it is retried with the same command identifier, Then the Computer's acceptance answers the retry", async () => {
-        const computer = await connectComputerDaemon("retried-prompt");
+        const runtime = await connectComputerDaemon("retried-prompt");
         try {
-            const first = computer.submitComputerTurn("retried-command");
-            expect(decodeServiceToDaemonMessage(await computer.daemonMessages.next())).toMatchObject({
+            const first = runtime.submitComputerTurn("retried-command");
+            expect(decodeServiceToDaemonMessage(await runtime.daemonMessages.next())).toMatchObject({
                 commandId: "retried-command",
                 kind: "session.prompt",
             });
-            computer.startTurn("retried-command", "1");
+            runtime.startTurn("retried-command", "1");
             expect((await first).status).toBe(200);
-            computer.daemon.send(
-                lifecycleFrame(computer.sessionTarget, "retried-completed", "2", {
+            runtime.daemon.send(
+                lifecycleFrame(runtime.sessionTarget, "retried-completed", "2", {
                     commandId: "retried-command",
                     kind: "prompt.completed",
                     stopReason: "end_turn",
                 }),
             );
 
-            const retry = computer.submitComputerTurn("retried-command");
-            expect(decodeServiceToDaemonMessage(await computer.daemonMessages.next())).toMatchObject({
+            const retry = runtime.submitComputerTurn("retried-command");
+            expect(decodeServiceToDaemonMessage(await runtime.daemonMessages.next())).toMatchObject({
                 commandId: "retried-command",
                 kind: "session.prompt",
             });
-            computer.daemon.send(
+            runtime.daemon.send(
                 JSON.stringify({
                     kind: "session.prompt.accepted",
                     requestId: "retried-command",
-                    target: computer.sessionTarget,
+                    target: runtime.sessionTarget,
                     state: "settled",
                 }),
             );
             expect(await responseJson(await retry, 200)).toMatchObject({ turnId: "retried-command" });
         } finally {
-            computer.daemon.close(1000, "Test complete");
+            runtime.daemon.close(1000, "Test complete");
         }
     }, 30_000);
 
     it("Given a prompt that already settled, When it is retried with the same idempotency key, Then the Turn is reported indeterminate instead of running", async () => {
-        const computer = await connectComputerDaemon("settled-retry");
+        const runtime = await connectComputerDaemon("settled-retry");
         try {
-            const retry = computer.submitComputerTurn("settled-command");
-            expect(decodeServiceToDaemonMessage(await computer.daemonMessages.next())).toMatchObject({
+            const retry = runtime.submitComputerTurn("settled-command");
+            expect(decodeServiceToDaemonMessage(await runtime.daemonMessages.next())).toMatchObject({
                 commandId: "settled-command",
                 kind: "session.prompt",
             });
-            computer.daemon.send(
+            runtime.daemon.send(
                 JSON.stringify({
                     kind: "session.prompt.accepted",
                     requestId: "settled-command",
-                    target: computer.sessionTarget,
+                    target: runtime.sessionTarget,
                     state: "settled",
                 }),
             );
@@ -3157,39 +3157,39 @@ describe("Computer prompt acknowledgements", () => {
                 turnId: "settled-command",
             });
         } finally {
-            computer.daemon.close(1000, "Test complete");
+            runtime.daemon.close(1000, "Test complete");
         }
     }, 30_000);
     it("Given a submitted prompt whose Agent is still starting, When the Turn is cancelled before it starts, Then the submission is answered by that outcome instead of waiting for its deadline", async () => {
-        const computer = await connectComputerDaemon("cancelled-before-start");
+        const runtime = await connectComputerDaemon("cancelled-before-start");
         try {
-            const submission = computer.submitTurn("preparing-command");
-            expect(decodeServiceToDaemonMessage(await computer.daemonMessages.next())).toMatchObject({
+            const submission = runtime.submitTurn("preparing-command");
+            expect(decodeServiceToDaemonMessage(await runtime.daemonMessages.next())).toMatchObject({
                 commandId: "preparing-command",
                 kind: "session.prompt",
             });
-            const cancel = computer.sessionControlRequest("/turns/preparing-command/cancel", {});
-            const cancellation = decodeServiceToDaemonMessage(await computer.daemonMessages.next());
+            const cancel = runtime.sessionControlRequest("/turns/preparing-command/cancel", {});
+            const cancellation = decodeServiceToDaemonMessage(await runtime.daemonMessages.next());
             if (cancellation.kind !== "session.cancel") {
                 throw new Error("Expected the cancellation to reach the Computer");
             }
             expect(cancellation.commandId).toBe("preparing-command");
             // A command cancelled before it starts answers its submission as settled, and the cancellation with
             // how it stopped.
-            computer.daemon.send(
+            runtime.daemon.send(
                 encodeSessionPromptAcceptedEvent({
                     kind: "session.prompt.accepted",
                     requestId: "preparing-command",
-                    target: computer.sessionTarget,
+                    target: runtime.sessionTarget,
                     state: "settled",
                 }),
             );
-            computer.daemon.send(
+            runtime.daemon.send(
                 encodeSessionTurnStoppedEvent({
                     commandId: "preparing-command",
                     kind: "session.turn.stopped",
                     requestId: cancellation.requestId,
-                    target: computer.sessionTarget,
+                    target: runtime.sessionTarget,
                     stopReason: "cancelled",
                 }),
             );
@@ -3200,7 +3200,7 @@ describe("Computer prompt acknowledgements", () => {
                 turnId: "preparing-command",
             });
         } finally {
-            computer.daemon.close(1000, "Test complete");
+            runtime.daemon.close(1000, "Test complete");
         }
     }, 30_000);
 });

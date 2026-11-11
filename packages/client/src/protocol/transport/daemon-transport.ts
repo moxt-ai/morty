@@ -21,7 +21,7 @@ import {
     encodeComputerPingCommand,
     encodeComputerPongEvent,
 } from "../computer/liveness.ts";
-import { decodeComputerUpgradeResult, encodeComputerUpgradeResult } from "../computer/upgrade.ts";
+import { decodeRuntimeUpgradeResult, encodeRuntimeUpgradeResult } from "../runtime/upgrade.ts";
 import {
     AGENT_CATALOG_DISCOVER_KIND,
     AGENT_CATALOG_DISCOVERED_KIND,
@@ -577,10 +577,10 @@ const daemonToServiceSignatures = {
         encodeComputerHeartbeatEvent,
         decodeComputerHeartbeatEvent,
     ),
-    "computer.upgrade.result": defineMessageSignature(
-        "computer.upgrade.result",
-        encodeComputerUpgradeResult,
-        decodeComputerUpgradeResult,
+    "runtime.upgrade.result": defineMessageSignature(
+        "runtime.upgrade.result",
+        encodeRuntimeUpgradeResult,
+        decodeRuntimeUpgradeResult,
     ),
     "computer.diagnostics.result": defineMessageSignature(
         "computer.diagnostics.result",

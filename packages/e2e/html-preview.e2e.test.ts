@@ -2,10 +2,10 @@ import { interactiveHtml } from "../../tests/support/fake-daemon/html-preview.ts
 import { expect, test } from "./infra/test.ts";
 
 test("Given an agent links an HTML result, When the user opens it, Then they can interact, inspect source and return to the conversation", async ({
-    computer,
+    runtime,
 }, testInfo) => {
-    const { page } = computer;
-    await computer.openPairedChat();
+    const { page } = runtime;
+    await runtime.openPairedChat();
     await page.getByRole("textbox", { name: "Message" }).fill("show interactive result");
     await page.getByRole("button", { name: "Send message" }).click();
     await page.getByRole("button", { name: "Open delivery review" }).click();
@@ -59,10 +59,10 @@ test.describe("touch preview", () => {
         contextOptions: { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true },
     });
     test("Given a mobile user has reviewed an HTML result, When the local file changes and they reload, Then the new result opens at full width and their draft survives", async ({
-        computer,
+        runtime,
     }, testInfo) => {
-        const { page } = computer;
-        await computer.openPairedChat();
+        const { page } = runtime;
+        await runtime.openPairedChat();
         await page.getByRole("textbox", { name: "Message" }).fill("show interactive result");
         await page.getByRole("button", { name: "Send message" }).tap();
         await page.getByRole("button", { name: "Open delivery review" }).waitFor();
@@ -86,7 +86,7 @@ test.describe("touch preview", () => {
         });
         await page.setViewportSize({ width: 390, height: 844 });
 
-        await computer.writeFiles(
+        await runtime.writeFiles(
             new Map([
                 [
                     "/workspace/delivery-review.html",
@@ -109,10 +109,10 @@ test.describe("touch preview", () => {
 });
 
 test("Given an agent links a local picture, When the user opens and reloads it, Then the existing image preview still renders", async ({
-    computer,
+    runtime,
 }) => {
-    const { page } = computer;
-    await computer.openPairedChat();
+    const { page } = runtime;
+    await runtime.openPairedChat();
     await page.getByRole("textbox", { name: "Message" }).fill("show preview image");
     await page.getByRole("button", { name: "Send message" }).click();
     await page.getByRole("button", { name: "Open picture" }).click();
@@ -125,10 +125,10 @@ test("Given an agent links a local picture, When the user opens and reloads it, 
 });
 
 test("Given a keyboard user expands an interactive result, When they navigate and close it, Then focus stays in the visible preview and returns to the file link", async ({
-    computer,
+    runtime,
 }) => {
-    const { page } = computer;
-    await computer.openPairedChat();
+    const { page } = runtime;
+    await runtime.openPairedChat();
     await page.getByRole("textbox", { name: "Message" }).fill("show interactive result");
     await page.getByRole("button", { name: "Send message" }).click();
     const link = page.getByRole("button", { name: "Open delivery review" });
@@ -162,11 +162,11 @@ test("Given a keyboard user expands an interactive result, When they navigate an
 });
 
 test("Given a local HTML tool uses a form, When the user submits it and continues chatting, Then the tool works and preserves its state until they leave the session", async ({
-    computer,
+    runtime,
 }) => {
-    const { page } = computer;
-    await computer.openPairedChat();
-    await computer.writeFiles(
+    const { page } = runtime;
+    await runtime.openPairedChat();
+    await runtime.writeFiles(
         new Map([
             [
                 "/workspace/delivery-review.html",

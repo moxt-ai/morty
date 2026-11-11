@@ -4,11 +4,11 @@ import { expect, test } from "./infra/test.ts";
 // These scenarios exercise the browser's untrusted-document boundary. happy-dom
 // cannot establish origin, sandbox, CSP, or executable-document guarantees.
 test("Given untrusted HTML executes, When it attempts privileged browser access, Then the host and its credentials remain isolated", async ({
-    computer,
+    runtime,
 }) => {
-    const { page } = computer;
-    await computer.openPairedChat();
-    await computer.writeFiles(
+    const { page } = runtime;
+    await runtime.openPairedChat();
+    await runtime.writeFiles(
         new Map([
             [
                 "/workspace/delivery-review.html",
@@ -106,13 +106,13 @@ const navigationProbes: Readonly<Record<string, (url: string) => string>> = {
 
 for (const [method, markup] of Object.entries(navigationProbes)) {
     test(`Given untrusted HTML attempts ${method} navigation, When it tries to leave its document, Then no preview data reaches the destination and recovery remains available`, async ({
-        computer,
+        runtime,
     }, testInfo) => {
         const destination = await createNavigationDestination();
         try {
-            const { page } = computer;
-            await computer.openPairedChat();
-            await computer.writeFiles(
+            const { page } = runtime;
+            await runtime.openPairedChat();
+            await runtime.writeFiles(
                 new Map([
                     [
                         "/workspace/delivery-review.html",
@@ -160,11 +160,11 @@ for (const [method, markup] of Object.entries(navigationProbes)) {
 }
 
 test("Given HTML requests a disallowed resource or throws, When it runs, Then sanitized diagnostics retain source and reload controls", async ({
-    computer,
+    runtime,
 }, testInfo) => {
-    const { page } = computer;
-    await computer.openPairedChat();
-    await computer.writeFiles(
+    const { page } = runtime;
+    await runtime.openPairedChat();
+    await runtime.writeFiles(
         new Map([
             [
                 "/workspace/delivery-review.html",
@@ -199,7 +199,7 @@ document.getElementById("load").onclick = () => {
     await expect(preview.getByRole("region", { name: "File contents" })).toContainText("Resource probe");
     await expect(page.locator('iframe[title="HTML preview"]')).toHaveCount(0);
 
-    await computer.writeFiles(
+    await runtime.writeFiles(
         new Map([
             [
                 "/workspace/delivery-review.html",
@@ -218,10 +218,10 @@ document.getElementById("load").onclick = () => {
 });
 
 test("Given HTML tries to weaken its resource policy, When it requests host data or opens another window, Then the browser still blocks those capabilities", async ({
-    computer,
+    runtime,
 }) => {
-    const { page } = computer;
-    await computer.openPairedChat();
+    const { page } = runtime;
+    await runtime.openPairedChat();
     const hostApi = new URL("/morty/api", page.url()).href;
     await page.context().addCookies([
         {
@@ -231,7 +231,7 @@ test("Given HTML tries to weaken its resource policy, When it requests host data
             sameSite: "Strict",
         },
     ]);
-    await computer.writeFiles(
+    await runtime.writeFiles(
         new Map([
             [
                 "/workspace/delivery-review.html",

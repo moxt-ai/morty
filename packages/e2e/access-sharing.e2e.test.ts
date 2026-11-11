@@ -1,8 +1,8 @@
 import { dataTestId } from "../web/src/data-testid.ts";
 import { expect, test } from "./infra/test.ts";
-import type { createTestComputer } from "./infra/test-computer.ts";
+import type { createTestRuntime } from "./infra/test-runtime.ts";
 
-type E2EPage = Awaited<ReturnType<typeof createTestComputer>>["page"];
+type E2EPage = Awaited<ReturnType<typeof createTestRuntime>>["page"];
 
 async function clickContinueOnAnotherDevice(page: E2EPage) {
     await page.getByRole("button", { name: "Continue on another device", exact: true }).click();
@@ -22,11 +22,11 @@ for (const viewport of [
     { name: "mobile", width: 390, height: 844 },
 ]) {
     test(`Given a working agent on ${viewport.name}, When the user shares and ends the receiving browser's access, Then the scope is clear and the local task continues`, async ({
-        computer,
+        runtime,
     }, testInfo) => {
-        const { page } = computer;
+        const { page } = runtime;
         await page.setViewportSize(viewport);
-        await computer.openPairedChat();
+        await runtime.openPairedChat();
         await page.getByRole("textbox", { name: "Message" }).fill("hold after first delta");
         await page.getByRole("button", { name: "Send message" }).click();
         await expect(
@@ -114,7 +114,7 @@ for (const viewport of [
             await expect(receiver.getByText("Current access ended", { exact: true })).toBeHidden();
 
             await sharing.getByRole("button", { name: "Close dialog" }).click();
-            await computer.continueReply("hold after first delta", {
+            await runtime.continueReply("hold after first delta", {
                 outcome: "complete",
                 output: [{ kind: "text", text: "Task continued after access ended." }],
             });
@@ -130,11 +130,11 @@ for (const viewport of [
 }
 
 test("Given a recent session on mobile, When the user expands the session list, Then they can select the session and still use sharing actions", async ({
-    computer,
+    runtime,
 }, testInfo) => {
-    const { page } = computer;
+    const { page } = runtime;
     await page.setViewportSize({ width: 390, height: 844 });
-    await computer.openPairedChat();
+    await runtime.openPairedChat();
     await page.getByRole("textbox", { name: "Message" }).fill("Mobile session navigation");
     await page.getByRole("button", { name: "Send message" }).click();
     const response = page
@@ -166,14 +166,14 @@ test("Given a recent session on mobile, When the user expands the session list, 
 });
 
 test("Given one browser opened two setup links in two tabs, When the user ends current access in one tab, Then neither tab nor either link opens Morty any more", async ({
-    computer,
+    runtime,
 }) => {
-    const first = await computer.followInstructions("/setup.md", "setup-reconnect-session");
-    const firstTab = computer.page;
+    const first = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
+    const firstTab = runtime.page;
     await firstTab.goto(first.url);
     await expect(firstTab.getByRole("textbox", { name: "Message" })).toBeEnabled();
     // Running setup again hands off with a new link for the same user and Machine.
-    const second = await computer.followInstructions("/setup.md", "setup-reconnect-session");
+    const second = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
     expect(second.identity.userId).toBe(first.identity.userId);
     const secondTab = await firstTab.context().newPage();
     await secondTab.goto(second.url);
@@ -196,17 +196,17 @@ test("Given one browser opened two setup links in two tabs, When the user ends c
 });
 
 test("Given the end-access confirmation is open in one tab, When another tab opens a new link and the user confirms, Then the browser's current access ends in both tabs", async ({
-    computer,
+    runtime,
 }) => {
-    const first = await computer.followInstructions("/setup.md", "setup-reconnect-session");
-    const firstTab = computer.page;
+    const first = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
+    const firstTab = runtime.page;
     await firstTab.goto(first.url);
     await expect(firstTab.getByRole("textbox", { name: "Message" })).toBeEnabled();
     await clickEndCurrentAccess(firstTab, "desktop");
     const confirmation = firstTab.getByRole("dialog", { name: "End current access?" });
     await expect(confirmation).toBeVisible();
 
-    const second = await computer.followInstructions("/setup.md", "setup-reconnect-session");
+    const second = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
     const secondTab = await firstTab.context().newPage();
     await secondTab.goto(second.url);
     await expect(secondTab.getByRole("textbox", { name: "Message" })).toBeEnabled();
@@ -222,11 +222,11 @@ test("Given the end-access confirmation is open in one tab, When another tab ope
 });
 
 test("Given a browser without Morty access opens two setup links in two tabs at once, When the user ends current access, Then neither link opens Morty any more", async ({
-    computer,
+    runtime,
 }) => {
-    const first = await computer.followInstructions("/setup.md", "setup-reconnect-session");
-    const second = await computer.followInstructions("/setup.md", "setup-reconnect-session");
-    const firstTab = computer.page;
+    const first = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
+    const second = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
+    const firstTab = runtime.page;
     const secondTab = await firstTab.context().newPage();
 
     await Promise.all([firstTab.goto(first.url), secondTab.goto(second.url)]);

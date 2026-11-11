@@ -141,9 +141,9 @@ test.use({
 });
 
 test("Given a healthy conversation, when the stability timer and foreground signals arrive together, then it keeps its connection without an error", async ({
-    computer,
+    runtime,
 }) => {
-    const { page } = computer;
+    const { page } = runtime;
     let connections = 0;
     page.on("websocket", (socket) => {
         if (new URL(socket.url()).pathname.endsWith("/transport")) {
@@ -151,7 +151,7 @@ test("Given a healthy conversation, when the stability timer and foreground sign
         }
     });
     await page.clock.install({ time: new Date("2026-10-24T00:00:00Z") });
-    const connected = await computer.followInstructions("/setup.md", "setup-reconnect-session");
+    const connected = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
     await page.goto(connected.url);
     const composer = page.getByRole("textbox", { name: "Message" });
     await expect(composer).toBeEnabled();
@@ -184,10 +184,10 @@ test("Given a healthy conversation, when the stability timer and foreground sign
 });
 
 test("Given an interrupted browser connection, when a task completes before foreground recovery, then the interruption stays neutral and its result is restored", async ({
-    computer,
+    runtime,
     network,
 }, testInfo) => {
-    const { page } = computer;
+    const { page } = runtime;
     const sockets = new Set<WebSocket>();
     page.on("websocket", (socket) => {
         if (new URL(socket.url()).pathname.endsWith("/transport")) {
@@ -196,7 +196,7 @@ test("Given an interrupted browser connection, when a task completes before fore
         }
     });
     await page.clock.install({ time: new Date("2026-10-24T00:00:00Z") });
-    const connected = await computer.followInstructions("/setup.md", "setup-reconnect-session");
+    const connected = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
     await page.goto(connected.url);
     const composer = page.getByRole("textbox", { name: "Message" });
     await expect(composer).toBeEnabled();
@@ -216,7 +216,7 @@ test("Given an interrupted browser connection, when a task completes before fore
     // Foreground recovery gets its time to finish before the page warns or asks the user to retry.
     await expect(page.getByRole("button", { name: "Retry now", exact: true })).toBeHidden();
     await page.screenshot({ path: testInfo.outputPath("recoverable-interruption.png") });
-    await computer.continueReply("hold after first delta", {
+    await runtime.continueReply("hold after first delta", {
         outcome: "complete",
         output: [{ kind: "text", text: "Task finished while the browser was disconnected." }],
     });
@@ -243,17 +243,17 @@ test("Given an interrupted browser connection, when a task completes before fore
 
 for (const recovery of ["automatic", "online", "manual"] as const) {
     test(`Given an active imported conversation, when ${recovery} recovery follows a network outage, then chat resumes without reloading`, async ({
-        computer,
+        runtime,
         network,
     }) => {
-        const { page } = computer;
+        const { page } = runtime;
         const activeSockets = new Set<WebSocket>();
         page.on("websocket", (socket) => {
             activeSockets.add(socket);
             socket.on("close", () => activeSockets.delete(socket));
         });
         await page.clock.install({ time: new Date("2026-10-23T00:00:00Z") });
-        const connected = await computer.followInstructions("/setup.md", "setup-reconnect-session");
+        const connected = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
         await page.goto(connected.url);
         const composer = page.getByRole("textbox", { name: "Message" });
         await expect(composer).toBeEnabled();
@@ -303,13 +303,13 @@ for (const recovery of ["automatic", "online", "manual"] as const) {
 for (const route of ["session", "suspended"] as const) {
     const condition = route === "suspended" ? "a suspended browser" : `a silently stalled ${route} connection`;
     test(`Given ${condition}, when the browser resumes, then the conversation recovers with its draft and history`, async ({
-        computer,
+        runtime,
         network,
     }) => {
-        const { page } = computer;
+        const { page } = runtime;
         await page.clock.install({ time: new Date("2026-10-23T00:00:00Z") });
         await page.clock.pauseAt(new Date("2026-10-23T00:01:00Z"));
-        const connected = await computer.followInstructions("/setup.md", "setup-reconnect-session");
+        const connected = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
         await page.goto(connected.url);
         const composer = page.getByRole("textbox", { name: "Message" });
         await expect(composer).toBeEnabled();
@@ -354,13 +354,13 @@ for (const route of ["session", "suspended"] as const) {
 }
 
 test("Given a silently stalled session without a lifecycle event, when its liveness deadline expires, then chat becomes usable again", async ({
-    computer,
+    runtime,
     network,
 }) => {
-    const { page } = computer;
+    const { page } = runtime;
     await page.clock.install({ time: new Date("2026-10-23T00:00:00Z") });
     await page.clock.pauseAt(new Date("2026-10-23T00:01:00Z"));
-    const connected = await computer.followInstructions("/setup.md", "setup-reconnect-session");
+    const connected = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
     await page.goto(connected.url);
     const composer = page.getByRole("textbox", { name: "Message" });
     await expect(composer).toBeEnabled();
@@ -388,10 +388,10 @@ test("Given a silently stalled session without a lifecycle event, when its liven
 });
 
 test("Given a live Session stream with stalled requests, when foreground hints pass and its heartbeat goes unanswered, then the connection is replaced and the draft stays sendable", async ({
-    computer,
+    runtime,
     network,
 }) => {
-    const { page } = computer;
+    const { page } = runtime;
     let connections = 0;
     page.on("websocket", (socket) => {
         if (new URL(socket.url()).pathname.endsWith("/transport")) {
@@ -400,7 +400,7 @@ test("Given a live Session stream with stalled requests, when foreground hints p
     });
     await page.clock.install({ time: new Date("2026-10-23T00:00:00Z") });
     await page.clock.pauseAt(new Date("2026-10-23T00:01:00Z"));
-    const connected = await computer.followInstructions("/setup.md", "setup-reconnect-session");
+    const connected = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
     await page.goto(connected.url);
     const composer = page.getByRole("textbox", { name: "Message" });
     await expect(composer).toBeEnabled();
@@ -440,12 +440,12 @@ test("Given a live Session stream with stalled requests, when foreground hints p
 });
 
 test("Given a mobile browser with an unsent draft, when its network is disabled and restored, then offline feedback and send availability follow the network without losing edits", async ({
-    computer,
+    runtime,
 }) => {
-    const { page } = computer;
+    const { page } = runtime;
     await page.setViewportSize({ width: 390, height: 844 });
     await page.clock.install({ time: new Date("2026-10-24T00:00:00Z") });
-    await computer.openPairedChat();
+    await runtime.openPairedChat();
     const composer = page.getByRole("textbox", { name: "Message" });
     await composer.fill("Keep this draft");
     await expect(page.getByRole("button", { name: "Send message" })).toBeEnabled();
@@ -467,11 +467,11 @@ test("Given a mobile browser with an unsent draft, when its network is disabled 
 });
 
 test("Given an active turn on mobile, when the browser goes offline and the user presses Enter, then the follow-up stays editable and can be queued after recovery", async ({
-    computer,
+    runtime,
 }) => {
-    const { page } = computer;
+    const { page } = runtime;
     await page.clock.install({ time: new Date("2026-10-24T00:00:00Z") });
-    await computer.openPairedChat();
+    await runtime.openPairedChat();
     const composer = page.getByRole("textbox", { name: "Message" });
     await composer.fill("wait for steering");
     await page.getByRole("button", { name: "Send message" }).click();

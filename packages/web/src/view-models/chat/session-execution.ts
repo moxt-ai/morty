@@ -114,7 +114,7 @@ export type SessionExecutionFact =
     | { readonly kind: "closed" };
 
 /** What the Computer has shown this page about one of the Session's commands. */
-interface ComputerCommand {
+interface RuntimeCommand {
     /**
      * When this page learned the Computer holds the command: how many commands it had learned of before. Commands are
      * never forgotten, so this orders them in the order they were learned.
@@ -146,7 +146,7 @@ export interface SessionExecutionState {
     readonly listing: { readonly queued: ReadonlySet<string>; readonly basis: number } | null;
     /** The Agent's requests in arrival order, each with its latest resolution. */
     readonly interactions: readonly SessionInteraction[];
-    readonly commands: ReadonlyMap<string, ComputerCommand>;
+    readonly commands: ReadonlyMap<string, RuntimeCommand>;
 }
 
 type SessionExecutionEffect =
@@ -181,7 +181,7 @@ function learn(
     commandIds: readonly string[],
     fact: "holds" | "shows" | "ended",
 ): SessionExecutionState {
-    let commands: Map<string, ComputerCommand> | null = null;
+    let commands: Map<string, RuntimeCommand> | null = null;
     for (const commandId of commandIds) {
         const current = commands ?? state.commands;
         const known = current.get(commandId);
@@ -543,7 +543,7 @@ export function executionReadBasis(state: SessionExecutionState): number {
 }
 
 /** Whether the Computer has shown it holds the command: listed, running, ended, recorded or confirmed by a receipt. */
-export function computerHoldsCommand(state: SessionExecutionState, commandId: string): boolean {
+export function runtimeHoldsCommand(state: SessionExecutionState, commandId: string): boolean {
     return state.commands.has(commandId);
 }
 
@@ -552,7 +552,7 @@ export function computerHoldsCommand(state: SessionExecutionState, commandId: st
  * A message that runs as a turn is covered once the timeline shows it; history names each turn's command. A message
  * shown in the queue keeps its files there until it starts or a read that could see it no longer lists it.
  */
-export function computerCoversMessage(
+export function runtimeCoversMessage(
     state: SessionExecutionState,
     message: { readonly commandId: string; readonly placement: DeliveryPlacement },
 ): boolean {

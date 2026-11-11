@@ -1,17 +1,17 @@
 import { join } from "node:path";
 import { claimMortyState } from "@morty-build/local-state";
-import type { VerifiedComputerConnection } from "../../engine/computer/connection/computer-connection.ts";
+import type { VerifiedComputerConnection } from "../../engine/runtime/connection/computer-connection.ts";
 import {
-    ComputerInstallationStore,
-    ComputerInstallationStoreError,
-} from "../../engine/computer/connection/computer-installation-store.ts";
+    RuntimeInstallationStore,
+    RuntimeInstallationStoreError,
+} from "../../engine/runtime/connection/runtime-installation-store.ts";
 import {
     PairingClientError,
     pairComputerConnection,
     parsePairingCode,
     parseRelayOrigin,
     validateComputerId,
-} from "../../engine/computer/pairing.ts";
+} from "../../engine/runtime/pairing.ts";
 import { ensurePrivateDirectory } from "../../engine/storage/files/local-files.ts";
 import { validateLocalPath } from "../../engine/util/filesystem/private-path.ts";
 import { readStateDirectory } from "../../storage/state-directory.ts";
@@ -55,7 +55,7 @@ function parsePairCommand(arguments_: readonly string[], defaultWorkspace: strin
 export async function openMortyInstallation(
     signal: AbortSignal,
     environment: Readonly<NodeJS.ProcessEnv>,
-): Promise<ComputerInstallationStore> {
+): Promise<RuntimeInstallationStore> {
     const root = readStateDirectory(environment);
     try {
         await claimMortyState(root, signal);
@@ -63,13 +63,13 @@ export async function openMortyInstallation(
         await validateLocalPath(root, true, true, signal);
     } catch (cause) {
         signal.throwIfAborted();
-        throw new ComputerInstallationStoreError(
+        throw new RuntimeInstallationStoreError(
             "installation_unavailable",
             "The local installation cannot be initialized",
             { cause },
         );
     }
-    return await ComputerInstallationStore.open(join(root, "machine"), signal);
+    return await RuntimeInstallationStore.open(join(root, "machine"), signal);
 }
 
 export async function pairLocalMachine(

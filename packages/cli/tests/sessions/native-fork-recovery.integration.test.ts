@@ -2,7 +2,7 @@ import { createServer, request } from "node:http";
 import { listen, port } from "@morty-build/relay-test-support/websocket";
 import { afterEach, expect, test, vi } from "vitest";
 import { startTestRelay } from "../support/relay.ts";
-import { createFakeAgentHarnessComputer } from "../support/relay-agent-harness.ts";
+import { createFakeAgentHarnessRuntime } from "../support/relay-agent-harness.ts";
 import { createForkLossProxy } from "./fixtures/fork-loss-proxy.ts";
 
 afterEach(() => vi.useRealTimers());
@@ -19,7 +19,7 @@ test.each(["request", "result"] as const)(
         const connected = Promise.withResolvers<void>();
         const reconnected = Promise.withResolvers<void>();
         let wasDisconnected = false;
-        await using computer = await createFakeAgentHarnessComputer({
+        await using runtime = await createFakeAgentHarnessRuntime({
             credential: project.token,
             origin: relay.baseUrl,
             relayOrigin: proxy.origin,
@@ -27,7 +27,7 @@ test.each(["request", "result"] as const)(
             server: relay.app,
             signal,
             sessionIds: new Set(["native-fork-source"]),
-            computerOptions: {
+            runtimeOptions: {
                 onConnectionStatus: (status) => {
                     if (status === "reconnecting") {
                         wasDisconnected = true;
@@ -42,8 +42,8 @@ test.each(["request", "result"] as const)(
             },
         });
         await connected.promise;
-        await computer.api.nativeSessions(
-            computer.computerId,
+        await runtime.api.nativeSessions(
+            runtime.computerId,
             {
                 action: "list",
                 harness: "claude",
@@ -59,14 +59,14 @@ test.each(["request", "result"] as const)(
             directory: ".",
             sessionId: "native-fork-source",
         };
-        const fork = () => computer.api.forkNativeSession(computer.computerId, operationId, input, signal);
+        const fork = () => runtime.api.forkNativeSession(runtime.computerId, operationId, input, signal);
         await expect(fork()).rejects.toMatchObject({ code: "computer_offline" });
         const lost = await proxy.lost;
         await disconnected.promise;
         await vi.advanceTimersByTimeAsync(500);
         await reconnected.promise;
         if (loss === "result") {
-            await computer.removeNativeSession("native-fork-source");
+            await runtime.removeNativeSession("native-fork-source");
         }
         // The Computer answers a retry from the receipt it keeps under the operation, or forks once if the Fork never
         // reached it.
@@ -77,7 +77,7 @@ test.each(["request", "result"] as const)(
         }
         expect(first.ready).toMatchObject({ target: first.target, harness: "claude", restored: true });
         expect(await fork()).toEqual(first);
-        const sessions = await computer.api.managedSessions(signal);
+        const sessions = await runtime.api.managedSessions(signal);
         expect(sessions).toHaveLength(1);
         expect(sessions[0]?.target).toEqual(first.target);
     },
@@ -88,7 +88,7 @@ test("Given a Fork succeeds but its response is lost, When the same operation is
     await using relay = await startTestRelay();
     const signal = new AbortController().signal;
     const project = await relay.createOwner();
-    const computer = await relay.connectAgent(
+    const runtime = await relay.connectAgent(
         project.computerId,
         undefined,
         new Set(["recovery-native-source", "another-native-source"]),
@@ -162,7 +162,7 @@ test("Given a Fork succeeds but its response is lost, When the same operation is
         });
         expect(conflict.status).toBe(409);
         expect(await conflict.json()).toMatchObject({ error: { code: "idempotency_conflict" } });
-        const after = await computer.api.managedSessions(signal);
+        const after = await runtime.api.managedSessions(signal);
         expect(after).toHaveLength(1); // One tracked fork for the user's one intent; the native source was never imported.
     } finally {
         proxy.closeAllConnections();

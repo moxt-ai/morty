@@ -1,10 +1,10 @@
 import { expect, test } from "./infra/test.ts";
 
 test("Given a completed reply with process work, When it renders, Then the turn keeps the documented vertical gaps", async ({
-    computer,
+    runtime,
 }, testInfo) => {
-    const { page } = computer;
-    await computer.openPairedChat();
+    const { page } = runtime;
+    await runtime.openPairedChat();
 
     await page.getByRole("textbox", { name: "Message" }).fill("distinguish agent work");
     await page.getByRole("button", { name: "Send message" }).click();
@@ -64,10 +64,10 @@ test("Given a completed reply with process work, When it renders, Then the turn 
 });
 
 test("Given markdown in an agent answer, When it renders, Then headings, paragraphs, lists, quotes, code, and tables follow the documented typography", async ({
-    computer,
+    runtime,
 }, testInfo) => {
-    const { page } = computer;
-    await computer.openPairedChat();
+    const { page } = runtime;
+    await runtime.openPairedChat();
 
     const prompt = [
         "Spacing probe",

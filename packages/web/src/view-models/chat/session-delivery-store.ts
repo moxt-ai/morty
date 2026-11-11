@@ -9,7 +9,7 @@ import { createStore } from "zustand/vanilla";
 import type { ComposerAttachment } from "../../components/chat/composer-attachment.ts";
 import { CloudApiError } from "../../services/management/management-api.ts";
 import { formatError } from "../format-error.ts";
-import { computerCoversMessage, computerHoldsCommand, type SessionExecutionState } from "./session-execution.ts";
+import { runtimeCoversMessage, runtimeHoldsCommand, type SessionExecutionState } from "./session-execution.ts";
 
 type SubmitRequest = Parameters<MortyClient["turns"]["submit"]>[1];
 /** The service took the message: it runs now, or the Computer queued it behind the Session's earlier work. */
@@ -219,7 +219,7 @@ export const createSessionDeliveryStore = (options: {
     /** Persists the unsent message's text, or clears it with null. */
     readonly unsentMessageChanged: (content: string | null) => void;
     /** The Computer's account of the Session's execution, as the page holds it now. */
-    readonly computer: () => SessionExecutionState;
+    readonly runtime: () => SessionExecutionState;
 }) => {
     type Update = {
         readonly state: DeliveryState;
@@ -230,8 +230,8 @@ export const createSessionDeliveryStore = (options: {
      * dropping covered messages only releases their files, which nothing reads once the Computer's account shows them.
      */
     const uncovered = (accepted: readonly SubmittedMessage[]): readonly SubmittedMessage[] => {
-        const computer = options.computer();
-        return accepted.filter((message) => !computerCoversMessage(computer, message));
+        const runtime = options.runtime();
+        return accepted.filter((message) => !runtimeCoversMessage(runtime, message));
     };
     /** The service accepted the journal's message, which the page keeps until the Computer's account covers it. */
     const accept = (journal: Journal, placement: DeliveryPlacement, current: SessionDeliveryStore): Update => ({
@@ -250,7 +250,7 @@ export const createSessionDeliveryStore = (options: {
         set(accept(journal, placement, get()));
     };
     /** Whether the Computer has shown it holds the submission whose request failed, which delivered it after all. */
-    const delivered = (journal: Journal): boolean => computerHoldsCommand(options.computer(), journal.commandId);
+    const delivered = (journal: Journal): boolean => runtimeHoldsCommand(options.runtime(), journal.commandId);
     const send = async (
         journal: Journal,
         submit: SubmitTurn,

@@ -1,5 +1,5 @@
 import { createTestMortyRelayBindings } from "@morty-build/relay-test-support/cloudflare";
-import { type ControlledAgent, createControlledAgentComputer } from "../../../../tests/support/fake-daemon/computer.ts";
+import { type ControlledAgent, createControlledAgentRuntime } from "../../../../tests/support/fake-daemon/runtime.ts";
 import { mortyFiles, mortyReply } from "../../../../tests/support/fake-daemon/scenarios.ts";
 
 /** Starts the production Relay boundary with isolated local Cloudflare storage. */
@@ -8,14 +8,14 @@ export async function startTestRelay(
     createBindings: typeof createTestMortyRelayBindings = createTestMortyRelayBindings,
 ) {
     const cancellation = new AbortController();
-    const computers: AsyncDisposable[] = [];
+    const runtimes: AsyncDisposable[] = [];
     const bindings = await createBindings(options.allowedOrigins);
     try {
         const app = { request: bindings.request };
         const close = async (): Promise<void> => {
             cancellation.abort(new Error("Test Relay stopped"));
             try {
-                await Promise.all(computers.splice(0).map(async (computer) => await computer[Symbol.asyncDispose]()));
+                await Promise.all(runtimes.splice(0).map(async (runtime) => await runtime[Symbol.asyncDispose]()));
             } finally {
                 await bindings[Symbol.asyncDispose]();
             }
@@ -31,7 +31,7 @@ export async function startTestRelay(
                 agents: readonly ControlledAgent[] = [{ harness: "codex", label: "Codex" }],
                 sessionIds?: ReadonlySet<string>,
             ) => {
-                const computer = await createControlledAgentComputer({
+                const runtime = await createControlledAgentRuntime({
                     credential: token,
                     behavior: {
                         reply: agents[0]?.reply ?? mortyReply,
@@ -55,8 +55,8 @@ export async function startTestRelay(
                     server: app,
                     signal: cancellation.signal,
                 });
-                computers.push(computer);
-                return computer;
+                runtimes.push(runtime);
+                return runtime;
             },
             close,
             [Symbol.asyncDispose]: close,

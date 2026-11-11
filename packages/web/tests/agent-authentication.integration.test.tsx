@@ -29,7 +29,7 @@ for (const agent of [
             dataTestId.messageComposer,
             (element) => element instanceof HTMLTextAreaElement && !element.disabled,
         );
-        expect(notice.textContent).toContain("Controlled Agent Computer");
+        expect(notice.textContent).toContain("Controlled Agent Runtime");
         expect(queryByRole(composer.closest("form") ?? document.body, "alert")).toBeNull();
         const details = getByText(notice, "Technical details").closest("details");
         const steps = getByText(notice, "View steps").closest("details");

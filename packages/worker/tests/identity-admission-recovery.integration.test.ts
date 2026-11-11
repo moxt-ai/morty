@@ -7,7 +7,7 @@ import type { Duplex } from "node:stream";
 import * as v from "valibot";
 import { expect, test } from "vitest";
 import { mortyReply } from "../../../tests/support/fake-daemon/scenarios.ts";
-import { ControlledSetupComputer } from "../../e2e/infra/setup-daemon.ts";
+import { ControlledSetupRuntime } from "../../e2e/infra/setup-daemon.ts";
 import worker from "../src/application.ts";
 import { createIdentityFixture } from "./support/identity-fixture.ts";
 
@@ -18,7 +18,7 @@ interface SetupModule {
             readonly state: string;
             readonly agentEnvironment: Readonly<Record<string, string>>;
             readonly signal: AbortSignal;
-            readonly computer: ControlledSetupComputer;
+            readonly runtime: ControlledSetupRuntime;
             readonly clock: {
                 readonly now: () => Date;
                 readonly wait: (milliseconds: number, signal: AbortSignal) => Promise<void>;
@@ -56,11 +56,11 @@ test("Given setup and a lost creation response, When setup retries across tempor
     const state = join(directory, "state");
     const workspace = join(directory, "workspace");
     await mkdir(workspace);
-    const computer = new ControlledSetupComputer(
+    const runtime = new ControlledSetupRuntime(
         { harness: "codex", agentName: "Codex", reply: mortyReply },
         "Admission Computer",
     );
-    cleanup.defer(() => computer.disconnect());
+    cleanup.defer(() => runtime.disconnect());
     const budget = new CreationBudget();
     let available = true;
     let loseResponse = true;
@@ -178,7 +178,7 @@ test("Given setup and a lost creation response, When setup retries across tempor
             ],
             {
                 state,
-                computer,
+                runtime,
                 agentEnvironment: {},
                 signal: AbortSignal.timeout(40_000),
                 clock: {

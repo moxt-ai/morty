@@ -82,7 +82,7 @@ export function createSessionPageState(options: {
                 centralSessionStorage.write(unsentEntry, content);
             }
         },
-        computer: () => execution.getState().state,
+        runtime: () => execution.getState().state,
     });
     const tasks = createSessionTaskControlsStore({ clock: options.clock, sessionTarget, connection });
     const queue = createSessionMessageQueueStore({

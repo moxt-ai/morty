@@ -18,11 +18,11 @@ import { expect, test, vi } from "vitest";
 import { type WebSocket, WebSocketServer } from "ws";
 import { AcpAgentDefinition } from "../../src/engine/acp/agent/agent-definition.ts";
 import type { AcpEndpointTermination } from "../../src/engine/acp/agent/in-process-endpoint.ts";
-import { ComputerLocalContext } from "../../src/engine/computer/config.ts";
-import { runComputer } from "../../src/engine/computer/run.ts";
+import { RuntimeLocalContext } from "../../src/engine/runtime/config.ts";
+import { runRuntime } from "../../src/engine/runtime/run.ts";
 import { ControlledEndpointConnection } from "../support/agents/controlled-endpoint-connection.ts";
 import { memoryComputerCredentials } from "../support/computer-credentials.ts";
-import { createControlledComputerConfig } from "../support/controlled-computer-config.ts";
+import { createControlledRuntimeConfig } from "../support/controlled-runtime-config.ts";
 
 test("Given a completed foreground turn, When its Agent requests background permission, Then the session snapshot recovers that request and removes it after the user responds", async () => {
     vi.useFakeTimers({ toFake: ["Date"] });
@@ -115,7 +115,7 @@ test("Given a completed foreground turn, When its Agent requests background perm
     });
     await listen(relay);
     const relayUrl = new URL(`ws://127.0.0.1:${port(relay)}${MORTY_API_PREFIX}/channels/background/daemon`);
-    const config = createControlledComputerConfig(
+    const config = createControlledRuntimeConfig(
         {
             credentials: memoryComputerCredentials("r".repeat(43)),
             computerId: "background",
@@ -123,10 +123,10 @@ test("Given a completed foreground turn, When its Agent requests background perm
             relayUrl,
         },
         [agent],
-        new ComputerLocalContext(directory, process.env),
+        new RuntimeLocalContext(directory, process.env),
     );
     const cancellation = new AbortController();
-    const computer = runComputer(config, cancellation.signal);
+    const runtime = runRuntime(config, cancellation.signal);
     try {
         const socket = await connected.promise;
         socket.send(JSON.stringify({ kind: "computer.liveness.ready" }));
@@ -216,7 +216,7 @@ test("Given a completed foreground turn, When its Agent requests background perm
         });
     } finally {
         cancellation.abort();
-        await computer;
+        await runtime;
         for (const socket of server.clients) {
             socket.terminate();
         }

@@ -2,7 +2,7 @@ import { SELF } from "cloudflare:test";
 import { encodeContentChunkFrame } from "@morty-build/client/protocol";
 import {
     acceptWebSocketHttpTransport,
-    SessionComputerError,
+    SessionRuntimeError,
     standardWebSocketHost,
     WebSocketUploadBudget,
 } from "@morty-build/relay-core";
@@ -14,7 +14,7 @@ class FailingDaemonBoundary {
     readonly fetch = (_request: Request): Promise<Response> => {
         this.requests += 1;
         return Promise.reject(
-            new SessionComputerError("agent_execution_failed", "The local Agent exited before completing the request"),
+            new SessionRuntimeError("agent_execution_failed", "The local Agent exited before completing the request"),
         );
     };
 }

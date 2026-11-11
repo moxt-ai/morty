@@ -1,7 +1,7 @@
 import { prepareTestMortyRelayBindings } from "@morty-build/relay-test-support/cloudflare";
 import * as v from "valibot";
 import { afterEach, beforeAll, beforeEach, expect, test, vi } from "vitest";
-import { connectControlledAgentComputer, createMortyFakeDaemon } from "../../../tests/support/fake-daemon/computer.ts";
+import { connectControlledAgentRuntime, createMortyFakeDaemon } from "../../../tests/support/fake-daemon/runtime.ts";
 import { mortyReply } from "../../../tests/support/fake-daemon/scenarios.ts";
 import { memoryComputerCredentials } from "../../cli/tests/support/computer-credentials.ts";
 
@@ -49,7 +49,7 @@ test("Given one Morty Worker, When an owner pairs their Computer and opens a Ses
     });
     expect(redeemed.status).toBe(200);
     const claim = v.parse(v.object({ computerCredential: v.string() }), await redeemed.json());
-    await using _computer = await connectControlledAgentComputer({
+    await using _runtime = await connectControlledAgentRuntime({
         behavior,
         signal,
         connection: {

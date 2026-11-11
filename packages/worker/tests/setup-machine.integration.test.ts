@@ -7,7 +7,7 @@ import * as v from "valibot";
 import { expect, test } from "vitest";
 import { mortyReply } from "../../../tests/support/fake-daemon/scenarios.ts";
 import { runSetup } from "../../cli/src/setup/setup.ts";
-import { ControlledSetupComputer } from "../../e2e/infra/setup-daemon.ts";
+import { ControlledSetupRuntime } from "../../e2e/infra/setup-daemon.ts";
 import worker from "../src/application.ts";
 import { createIdentityFixture } from "./support/identity-fixture.ts";
 
@@ -28,11 +28,11 @@ test.each(["current", "another service origin", "retired configuration"] as cons
         const state = join(directory, "state");
         const workspace = join(directory, "workspace");
         await mkdir(workspace);
-        const computer = new ControlledSetupComputer(
+        const runtime = new ControlledSetupRuntime(
             { harness: "codex", agentName: "Codex", reply: mortyReply },
             "Laptop",
         );
-        cleanup.defer(() => computer.disconnect());
+        cleanup.defer(() => runtime.disconnect());
         let time = Date.parse("2026-10-30T00:00:00Z");
         const run = async (expectedCode = 0, origin = fixture.origin) => {
             const events: Readonly<Record<string, unknown>>[] = [];
@@ -50,7 +50,7 @@ test.each(["current", "another service origin", "retired configuration"] as cons
                 ],
                 {
                     state,
-                    computer,
+                    runtime,
                     agentEnvironment: {},
                     signal: AbortSignal.timeout(40_000),
                     clock: {
@@ -146,8 +146,8 @@ test("Given the answer to setup's Computer pairing is lost, When setup runs agai
     const state = join(directory, "state");
     const workspace = join(directory, "workspace");
     await mkdir(workspace);
-    const computer = new ControlledSetupComputer({ harness: "codex", agentName: "Codex", reply: mortyReply }, "Laptop");
-    cleanup.defer(() => computer.disconnect());
+    const runtime = new ControlledSetupRuntime({ harness: "codex", agentName: "Codex", reply: mortyReply }, "Laptop");
+    cleanup.defer(() => runtime.disconnect());
     let time = Date.parse("2026-10-30T00:00:00Z");
     const run = async () =>
         await runSetup(
@@ -164,7 +164,7 @@ test("Given the answer to setup's Computer pairing is lost, When setup runs agai
             ],
             {
                 state,
-                computer,
+                runtime,
                 agentEnvironment: {},
                 signal: AbortSignal.timeout(40_000),
                 clock: {
@@ -222,8 +222,8 @@ test("Given a Computer whose pairing Morty revoked, When setup runs again, Then 
     const state = join(directory, "state");
     const workspace = join(directory, "workspace");
     await mkdir(workspace);
-    const computer = new ControlledSetupComputer({ harness: "codex", agentName: "Codex", reply: mortyReply }, "Laptop");
-    cleanup.defer(() => computer.disconnect());
+    const runtime = new ControlledSetupRuntime({ harness: "codex", agentName: "Codex", reply: mortyReply }, "Laptop");
+    cleanup.defer(() => runtime.disconnect());
     let time = Date.parse("2026-11-09T00:00:00Z");
     const run = async () => {
         const events: Readonly<Record<string, unknown>>[] = [];
@@ -241,7 +241,7 @@ test("Given a Computer whose pairing Morty revoked, When setup runs again, Then 
             ],
             {
                 state,
-                computer,
+                runtime,
                 agentEnvironment: {},
                 signal: AbortSignal.timeout(40_000),
                 clock: {

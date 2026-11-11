@@ -47,7 +47,7 @@ test("Given a saved conversation, When reloading it while its Computer is offlin
     const app = await createTestApp({ connectAgent: true });
     const daemon = app.daemon;
     if (daemon === null) {
-        throw new Error("Expected a connected controlled Agent Computer");
+        throw new Error("Expected a connected controlled Agent Runtime");
     }
     const draft = await app.queryElementByTestId(
         dataTestId.messageComposer,
@@ -121,7 +121,7 @@ test("Given a saved conversation, When a new-session page opens while the Comput
     const app = await createTestApp({ connectAgent: true });
     const daemon = app.daemon;
     if (daemon === null) {
-        throw new Error("Expected a connected controlled Agent Computer");
+        throw new Error("Expected a connected controlled Agent Runtime");
     }
     await sendPrompt(app, await readyComposer(app), "Keep this conversation");
     await app.waitForView(() => expect(agentAnswered(app, "Codex turn 1: Keep this conversation")).toBe(true));
@@ -152,7 +152,7 @@ test("Given a background reply is running when the Computer goes offline, When t
     const app = await createTestApp({ connectAgent: true });
     const daemon = app.daemon;
     if (daemon === null) {
-        throw new Error("Expected a connected controlled Agent Computer");
+        throw new Error("Expected a connected controlled Agent Runtime");
     }
     await sendPrompt(app, await readyComposer(app), "Background conversation");
     await app.waitForView(() => {
@@ -275,7 +275,7 @@ test("Given an open conversation, When its computer goes offline, Then the notic
     const app = await createTestApp({ connectAgent: true, clock });
     const daemon = app.daemon;
     if (daemon === null) {
-        throw new Error("Expected a connected controlled Agent Computer");
+        throw new Error("Expected a connected controlled Agent Runtime");
     }
     await sendPrompt(app, await readyComposer(app), "Check the build");
     await app.waitForView(() => expect(agentAnswered(app, "Codex turn 1: Check the build")).toBe(true));
@@ -297,7 +297,7 @@ test("Given the New Session page while the computer is offline, When an attachme
     const app = await createTestApp({ connectAgent: true });
     const daemon = app.daemon;
     if (daemon === null) {
-        throw new Error("Expected a connected controlled Agent Computer");
+        throw new Error("Expected a connected controlled Agent Runtime");
     }
     await daemon.disconnect();
     const reopened = await app.reload();

@@ -86,7 +86,7 @@ test("Given a conversation this page created, When another client renames it, Th
     const app = await createTestApp({ connectAgent: true });
     const daemon = app.daemon;
     if (daemon === null) {
-        throw new Error("Expected a connected controlled Agent Computer");
+        throw new Error("Expected a connected controlled Agent Runtime");
     }
     await app.queryElementByTestId(
         dataTestId.botConnectionStatus,

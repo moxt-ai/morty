@@ -5,12 +5,12 @@ export type {
     ConnectionManager,
     EngineLoopConnection,
     MortyComputerConnection,
-    MortyComputerEngineParams,
     MortyComputerPairingOptions,
+    MortyRuntimeEngineParams,
     RunLoopParams,
     VerifiedComputerConnection,
-} from "../engine/computer/engine.ts";
+} from "../engine/runtime/engine.ts";
 export {
     ComputerRelayRevokedError,
-    MortyComputerEngine,
-} from "../engine/computer/engine.ts";
+    MortyRuntimeEngine,
+} from "../engine/runtime/engine.ts";

@@ -116,7 +116,7 @@ test("Given a Markdown horizontal rule, When the response is rendered, Then its 
     const app = await createTestApp({ connectAgent: true });
     const daemon = app.daemon;
     if (daemon === null) {
-        throw new Error("Expected a controlled Agent Computer");
+        throw new Error("Expected a controlled Agent Runtime");
     }
     const composer = await app.queryElementByTestId(dataTestId.messageComposer);
     if (!(composer instanceof HTMLTextAreaElement)) {
@@ -144,7 +144,7 @@ test("Given Markdown table and fenced code, When the response is rendered and th
     const app = await createTestApp({ connectAgent: true });
     const daemon = app.daemon;
     if (daemon === null) {
-        throw new Error("Expected a controlled Agent Computer");
+        throw new Error("Expected a controlled Agent Runtime");
     }
     const composer = await app.queryElementByTestId(dataTestId.messageComposer);
     if (!(composer instanceof HTMLTextAreaElement)) {
@@ -202,7 +202,7 @@ test("Given an open code block, When the agent appends code, Then the visible bl
     const app = await createTestApp({ connectAgent: true });
     const daemon = app.daemon;
     if (daemon === null) {
-        throw new Error("Expected a controlled Agent Computer");
+        throw new Error("Expected a controlled Agent Runtime");
     }
     const composer = await app.queryElementByTestId(dataTestId.messageComposer);
     if (!(composer instanceof HTMLTextAreaElement)) {
@@ -241,7 +241,7 @@ test("Given an open code block without a language, When the agent appends code, 
     const app = await createTestApp({ connectAgent: true });
     const daemon = app.daemon;
     if (daemon === null) {
-        throw new Error("Expected a controlled Agent Computer");
+        throw new Error("Expected a controlled Agent Runtime");
     }
     const composer = await app.queryElementByTestId(dataTestId.messageComposer);
     if (!(composer instanceof HTMLTextAreaElement)) {
@@ -326,7 +326,7 @@ test("Given reasoning is still streaming, When the user expands it and then star
     const app = await createTestApp({ connectAgent: true });
     const daemon = app.daemon;
     if (daemon === null) {
-        throw new Error("Expected a controlled Agent Computer");
+        throw new Error("Expected a controlled Agent Runtime");
     }
     const composer = await app.queryElementByTestId(dataTestId.messageComposer);
     if (!(composer instanceof HTMLTextAreaElement)) {
@@ -765,7 +765,7 @@ test("Given two process segments are separated by visible text, When the later s
     const app = await createTestApp({ connectAgent: true });
     const daemon = app.daemon;
     if (daemon === null) {
-        throw new Error("Expected a controlled Agent Computer");
+        throw new Error("Expected a controlled Agent Runtime");
     }
     const composer = await app.queryElementByTestId(dataTestId.messageComposer);
     if (!(composer instanceof HTMLTextAreaElement)) {

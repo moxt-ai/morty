@@ -6,11 +6,11 @@ for (const viewport of [
     { width: 390, height: 844 },
 ]) {
     test(`Given code-like prose at ${viewport.width}px, When I send it and reload, Then the conversation preserves angle brackets`, async ({
-        computer,
+        runtime,
     }, testInfo) => {
-        const { page } = computer;
+        const { page } = runtime;
         await page.setViewportSize(viewport);
-        await computer.openPairedChat();
+        await runtime.openPairedChat();
         const prompt = "Compare Vec<String> and Option<T>. Mention <placeholder> and <div>x</div> literally.";
         await page.getByRole("textbox", { name: "Message" }).fill(prompt);
         await page.getByRole("button", { name: "Send message" }).click();
@@ -27,12 +27,12 @@ for (const viewport of [
         await expect(messages).toContainText("Partial reply");
         const stop = page.getByRole("button", { name: "Stop agent output", exact: true });
         await expect(stop).toBeVisible();
-        await computer.continueReply("hold after first delta", {
+        await runtime.continueReply("hold after first delta", {
             outcome: "hold",
             output: [{ kind: "text", text: "\n\nUse Vec<Str" }],
         });
         await expect(messages).toContainText("Use Vec<Str");
-        await computer.continueReply("hold after first delta", {
+        await runtime.continueReply("hold after first delta", {
             outcome: "hold",
             output: [{ kind: "text", text: "ing> and <placeholder" }],
         });
@@ -41,7 +41,7 @@ for (const viewport of [
             animations: "disabled",
             path: testInfo.outputPath(`literal-streaming-${viewport.width}.png`),
         });
-        await computer.continueReply("hold after first delta", {
+        await runtime.continueReply("hold after first delta", {
             outcome: "complete",
             output: [{ kind: "text", text: "> literally." }],
         });

@@ -24,9 +24,9 @@ import { expect, test } from "vitest";
 import { type WebSocket, WebSocketServer } from "ws";
 import { CodexAgentConnection } from "../../src/engine/acp/adapter/codex/agent-connection.ts";
 import { AcpAgentDefinition } from "../../src/engine/acp/agent/agent-definition.ts";
-import { ComputerAgentDependencies } from "../../src/engine/agent/computer-agents.ts";
-import { ComputerLocalContext, createComputerConfig } from "../../src/engine/computer/config.ts";
-import { runComputer } from "../../src/engine/computer/run.ts";
+import { RuntimeAgentDependencies } from "../../src/engine/agent/runtime-agents.ts";
+import { createRuntimeConfig, RuntimeLocalContext } from "../../src/engine/runtime/config.ts";
+import { runRuntime } from "../../src/engine/runtime/run.ts";
 import { CodexFixture } from "../support/agents/codex.ts";
 import { memoryComputerCredentials } from "../support/computer-credentials.ts";
 import { FakeOpenAiProvider } from "../support/llm/openai.ts";
@@ -99,18 +99,18 @@ test("Given real Codex dispatches and waits for a subagent, When the turn runs t
         (options) => new CodexAgentConnection(options),
         codex.environment,
     );
-    const config = createComputerConfig(
+    const config = createRuntimeConfig(
         {
             credentials: memoryComputerCredentials("r".repeat(43)),
             computerId: "real-codex-collaboration",
             defaultWorkspace: workspace,
             relayUrl,
         },
-        new ComputerAgentDependencies([agent]),
-        new ComputerLocalContext(stateDirectory, process.env),
+        new RuntimeAgentDependencies([agent]),
+        new RuntimeLocalContext(stateDirectory, process.env),
     );
     const cancellation = new AbortController();
-    const computer = runComputer(config, cancellation.signal);
+    const runtime = runRuntime(config, cancellation.signal);
 
     try {
         const socket = await connected.promise;
@@ -196,7 +196,7 @@ test("Given real Codex dispatches and waits for a subagent, When the turn runs t
         );
     } finally {
         cancellation.abort();
-        await computer;
+        await runtime;
         for (const socket of websocketServer.clients) {
             socket.terminate();
         }

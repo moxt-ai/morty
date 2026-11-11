@@ -184,11 +184,11 @@ test.use({ browserName: "webkit" });
 
 for (const schedule of ["before-snapshot", "after-snapshot", "after-recovery"] as const) {
     test(`Given a streaming reply, when a real delta arrives ${schedule}, then recovery displays every delta exactly once`, async ({
-        computer,
+        runtime,
         network,
     }, testInfo) => {
         testInfo.setTimeout(90000);
-        const { page } = computer;
+        const { page } = runtime;
         const wire: unknown[] = [];
         const observed = new Set<string>();
         const waiters = new Map<string, () => void>();
@@ -253,7 +253,7 @@ for (const schedule of ["before-snapshot", "after-snapshot", "after-recovery"] a
         const waitForDelta = (text: string): Promise<void> =>
             observed.has(text) ? Promise.resolve() : new Promise((resolve) => waiters.set(text, resolve));
         await page.clock.install({ time: new Date("2026-10-24T00:00:00Z") });
-        const connected = await computer.followInstructions("/setup.md", "setup-reconnect-session");
+        const connected = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
         await page.goto(connected.url);
         const composer = page.getByRole("textbox", { name: "Message" });
         const responses = page.getByRole("article", { name: "Agent response" });
@@ -272,7 +272,7 @@ for (const schedule of ["before-snapshot", "after-snapshot", "after-recovery"] a
         const resumed = page.clock.runFor(5000);
         if (gate !== null) {
             await gate.reached;
-            await computer.continueReply("wait for steering", {
+            await runtime.continueReply("wait for steering", {
                 outcome: "hold",
                 output: [{ kind: "text", text: "|B|" }],
             });
@@ -287,14 +287,14 @@ for (const schedule of ["before-snapshot", "after-snapshot", "after-recovery"] a
             // Recovery is initially quiet, so a hidden notice does not establish that
             // the new connection has consumed its history snapshot.
             await recoveredHistory.promise;
-            await computer.continueReply("wait for steering", {
+            await runtime.continueReply("wait for steering", {
                 outcome: "hold",
                 output: [{ kind: "text", text: "|B|" }],
             });
         }
         await waitForDelta("|B|");
         phase = "continued";
-        await computer.continueReply("wait for steering", {
+        await runtime.continueReply("wait for steering", {
             outcome: "complete",
             output: [{ kind: "text", text: "|C_END|" }],
         });
@@ -318,12 +318,12 @@ for (const schedule of ["before-snapshot", "after-snapshot", "after-recovery"] a
 }
 
 test("Given a partial reply, when it finishes while the browser is disconnected, then recovery displays the same complete reply as a reload", async ({
-    computer,
+    runtime,
     network,
 }) => {
-    const { page } = computer;
+    const { page } = runtime;
     await page.clock.install({ time: new Date("2026-10-24T00:00:00Z") });
-    const connected = await computer.followInstructions("/setup.md", "setup-reconnect-session");
+    const connected = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
     await page.goto(connected.url);
     const composer = page.getByRole("textbox", { name: "Message" });
     const responses = page.getByRole("article", { name: "Agent response" });
@@ -335,7 +335,7 @@ test("Given a partial reply, when it finishes while the browser is disconnected,
     await composer.fill("Preserve this draft.");
     // Recovery runs quietly first: the page offers no manual retry while it reconnects on its own.
     network.interrupt();
-    await computer.continueReply("wait for steering", {
+    await runtime.continueReply("wait for steering", {
         outcome: "complete",
         output: [{ kind: "text", text: "|OFFLINE_END|" }],
     });
@@ -351,12 +351,12 @@ test("Given a partial reply, when it finishes while the browser is disconnected,
 });
 
 test("Given the user has loaded older messages, when the connection recovers, then the loaded history, reading position and draft remain available", async ({
-    computer,
+    runtime,
     network,
 }) => {
-    const { page } = computer;
+    const { page } = runtime;
     await page.clock.install({ time: new Date("2026-10-24T00:00:00Z") });
-    const connected = await computer.followInstructions("/setup.md", "setup-reconnect-session");
+    const connected = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
     await page.goto(connected.url);
     const composer = page.getByRole("textbox", { name: "Message" });
     await expect(composer).toBeEnabled();

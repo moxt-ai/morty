@@ -2,7 +2,7 @@ import { computerCredentialSuccessor } from "@morty-build/client/protocol";
 import type {
     ComputerCredentialRotation,
     ComputerCredentials,
-} from "../../src/engine/computer/connection/computer-credentials.ts";
+} from "../../src/engine/runtime/connection/computer-credentials.ts";
 
 /** Keeps a Computer credential and its rotations in memory, for an embedding host that outlives no restart. */
 export function memoryComputerCredentials(initial: string): ComputerCredentials {

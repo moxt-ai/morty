@@ -4,8 +4,8 @@ import { join } from "node:path";
 import { mortyApiPath } from "@morty-build/client/protocol";
 import * as v from "valibot";
 import { createOwnerApi } from "../../../../tests/support/owner-api.ts";
-import { ComputerLocalContext } from "../../src/engine/computer/config.ts";
-import { type RunComputerOptions, runComputer } from "../../src/engine/computer/run.ts";
+import { RuntimeLocalContext } from "../../src/engine/runtime/config.ts";
+import { type RunRuntimeOptions, runRuntime } from "../../src/engine/runtime/run.ts";
 import {
     defaultFakeAgentHarness,
     type FakeAgentHarnessDefinition,
@@ -13,7 +13,7 @@ import {
     fakeAgentHarnessCapabilities,
 } from "./agent-harness.ts";
 import { memoryComputerCredentials } from "./computer-credentials.ts";
-import { createControlledComputerConfig as createComputerConfig } from "./controlled-computer-config.ts";
+import { createControlledRuntimeConfig as createRuntimeConfig } from "./controlled-runtime-config.ts";
 
 type TestServerApp = { readonly request: (request: Request) => Response | Promise<Response> };
 
@@ -33,13 +33,13 @@ function fakeAgentHarnessCatalog(definitions: readonly FakeAgentHarnessDefinitio
 }
 
 /** Runs the production daemon with only its external Agent harness controlled. */
-export async function createFakeAgentHarnessComputer(options: {
+export async function createFakeAgentHarnessRuntime(options: {
     readonly credential: string;
     readonly harnesses?: readonly FakeAgentHarnessDefinition[];
     readonly sessionIds?: ReadonlySet<string>;
     readonly origin: string;
     readonly relayOrigin?: string;
-    readonly computerOptions?: RunComputerOptions;
+    readonly runtimeOptions?: RunRuntimeOptions;
     readonly computerId: string;
     readonly server: TestServerApp;
     readonly signal: AbortSignal;
@@ -49,7 +49,7 @@ export async function createFakeAgentHarnessComputer(options: {
     const directory = await mkdtemp(join(tmpdir(), "morty-agent-harness-"));
     const workspace = join(directory, "workspace");
     const harnessState = join(directory, "harness");
-    let computer: Promise<void> | undefined;
+    let runtime: Promise<void> | undefined;
     try {
         await Promise.all([mkdir(workspace), mkdir(harnessState)]);
         await Promise.all(
@@ -106,8 +106,8 @@ export async function createFakeAgentHarnessComputer(options: {
         );
         const relayUrl = new URL(mortyApiPath("/v1/computers/connect"), options.relayOrigin ?? options.origin);
         relayUrl.protocol = relayUrl.protocol === "https:" ? "wss:" : "ws:";
-        const localContext = new ComputerLocalContext(directory, process.env);
-        const config = createComputerConfig(
+        const localContext = new RuntimeLocalContext(directory, process.env);
+        const config = createRuntimeConfig(
             {
                 credentials: memoryComputerCredentials(claim.computerCredential),
                 computerId: pairing.computerId,
@@ -118,21 +118,21 @@ export async function createFakeAgentHarnessComputer(options: {
             localContext,
         );
         const online = Promise.withResolvers<void>();
-        computer = runComputer(config, signal, undefined, {
-            ...options.computerOptions,
+        runtime = runRuntime(config, signal, undefined, {
+            ...options.runtimeOptions,
             onConnectionStatus: (status) => {
-                options.computerOptions?.onConnectionStatus?.(status);
+                options.runtimeOptions?.onConnectionStatus?.(status);
                 if (status === "online") {
                     online.resolve();
                 }
             },
         });
-        void computer.catch((error: unknown) => {
+        void runtime.catch((error: unknown) => {
             if (!signal.aborted) {
                 console.error("Controlled Agent harness daemon failed", error);
             }
         });
-        const failure = computer.then<never>(() => {
+        const failure = runtime.then<never>(() => {
             throw new Error("The production daemon stopped unexpectedly");
         });
         void failure.catch(() => undefined);
@@ -184,13 +184,13 @@ export async function createFakeAgentHarnessComputer(options: {
                 disposed = true;
                 owner.close();
                 cancellation.abort(new Error("Controlled Agent harness Computer stopped"));
-                await computer?.catch(() => undefined);
+                await runtime?.catch(() => undefined);
                 await rm(directory, { recursive: true, force: true });
             },
         };
     } catch (cause) {
         cancellation.abort(cause);
-        await computer?.catch(() => undefined);
+        await runtime?.catch(() => undefined);
         await rm(directory, { recursive: true, force: true });
         throw cause;
     }

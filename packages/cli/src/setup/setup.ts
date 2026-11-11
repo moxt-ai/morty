@@ -14,7 +14,7 @@ import QRCode from "qrcode";
 import { validateLocalPath } from "../engine/util/filesystem/private-path.ts";
 import { spawnProcess, stopProcessTree } from "../engine/util/process/executable.ts";
 
-export interface SetupComputer {
+export interface SetupRuntime {
     /** Runs a Morty command; `input`, when given, is written to its standard input, which is then closed. */
     readonly run: (
         directory: string,
@@ -48,7 +48,7 @@ interface SetupEnvironment {
 
 export type SetupHost = SetupEnvironment &
     (
-        | { readonly computer: SetupComputer }
+        | { readonly runtime: SetupRuntime }
         | { /** The invoking CLI release, never another release resolved through npm. */ readonly cliEntry: string }
     );
 
@@ -352,19 +352,19 @@ function errorCode(cause: unknown): unknown {
     return cause !== null && typeof cause === "object" && "code" in cause ? cause.code : undefined;
 }
 
-type ComputerTermination =
+type RuntimeTermination =
     | { readonly kind: "exit"; readonly exitCode: number }
     | { readonly kind: "signal"; readonly signal: string }
     | { readonly kind: "spawn"; readonly code: string };
 
-class ComputerStartError extends Error {
-    readonly code = "COMPUTER_START_FAILED";
-    readonly termination: ComputerTermination;
+class RuntimeStartError extends Error {
+    readonly code = "RUNTIME_START_FAILED";
+    readonly termination: RuntimeTermination;
     readonly logPath: string;
     readonly nextStep =
-        "Inspect the Computer log, then run morty start and rerun setup. Check morty --version when diagnosing startup; setup does not stop an existing daemon.";
+        "Inspect the Runtime log, then run morty start and rerun setup. Check morty --version when diagnosing startup; setup does not stop an existing daemon.";
 
-    constructor(termination: ComputerTermination, logPath: string, cause?: unknown) {
+    constructor(termination: RuntimeTermination, logPath: string, cause?: unknown) {
         let reason: string;
         switch (termination.kind) {
             case "exit":
@@ -381,8 +381,8 @@ class ComputerStartError extends Error {
                 throw exhaustive;
             }
         }
-        super(`The local Computer command ${reason}. See ${logPath}.`, { cause });
-        this.name = "ComputerStartError";
+        super(`The local Runtime command ${reason}. See ${logPath}.`, { cause });
+        this.name = "RuntimeStartError";
         this.termination = termination;
         this.logPath = logPath;
     }
@@ -390,20 +390,20 @@ class ComputerStartError extends Error {
     readonly diagnostic = () => ({ termination: this.termination, logPath: this.logPath, nextStep: this.nextStep });
 }
 
-class ComputerPreflightError extends Error {
-    readonly code = "COMPUTER_PREFLIGHT_FAILED";
+class RuntimePreflightError extends Error {
+    readonly code = "RUNTIME_PREFLIGHT_FAILED";
     readonly nextStep =
         "Use Node.js 22.19+ or 24.20+, run morty --version in the same terminal, and repair the installed Morty release before rerunning setup.";
 
     constructor(message: string, cause?: unknown) {
         super(message, { cause });
-        this.name = "ComputerPreflightError";
+        this.name = "RuntimePreflightError";
     }
 
     readonly diagnostic = () => ({
         nodeVersion: process.versions.node,
         nodeExecutable: process.execPath,
-        ...(this.cause instanceof ComputerStartError
+        ...(this.cause instanceof RuntimeStartError
             ? { logPath: this.cause.logPath, termination: this.cause.termination }
             : {}),
         nextStep: this.nextStep,
@@ -418,7 +418,7 @@ class MortyStateRootError extends Error {
     readonly code = "MORTY_STATE_ROOT_INVALID";
     readonly logPath: string;
     readonly nextStep =
-        "This shell's MORTY_STATE_DIRECTORY names Morty installation data that an earlier Morty Computer passed to this agent, not a state root. Rerun setup with MORTY_STATE_DIRECTORY set to the state root that the Computer log names.";
+        "This shell's MORTY_STATE_DIRECTORY names Morty installation data that an earlier Morty Runtime passed to this agent, not a state root. Rerun setup with MORTY_STATE_DIRECTORY set to the state root that the Runtime log names.";
 
     constructor(logPath: string) {
         super(`Morty refused this shell's state root. See ${logPath}.`);
@@ -1144,10 +1144,10 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         input?: string,
     ) {
         operation.throwIfAborted();
-        if ("computer" in host) {
-            return await host.computer.run(directory, args, cwd, operation, input);
+        if ("runtime" in host) {
+            return await host.runtime.run(directory, args, cwd, operation, input);
         }
-        const logPath = join(directory, `computer-${crypto.randomUUID()}.log`);
+        const logPath = join(directory, `runtime-${crypto.randomUUID()}.log`);
         const log = await open(
             logPath,
             constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
@@ -1158,7 +1158,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             await safeLocalPath(logPath, false, true);
             const localCli = host.cliEntry;
             if (!isAbsolute(localCli)) {
-                fail("COMPUTER_NOT_INSTALLED");
+                fail("RUNTIME_NOT_INSTALLED");
             }
             child = spawnProcess(process.execPath, [await realpath(localCli), ...args], {
                 cwd,
@@ -1173,20 +1173,20 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             }
             await once(child, "spawn", { signal: AbortSignal.any([operation, AbortSignal.timeout(10000)]) });
             if (child.pid === undefined || !Number.isSafeInteger(child.pid) || child.pid < 2) {
-                fail("COMPUTER_START_FAILED");
+                fail("RUNTIME_START_FAILED");
             }
             const [code, exitSignal] = await once(child, "exit", { signal: operation });
             if (typeof exitSignal === "string") {
-                throw new ComputerStartError({ kind: "signal", signal: exitSignal }, logPath);
+                throw new RuntimeStartError({ kind: "signal", signal: exitSignal }, logPath);
             }
             if (typeof code !== "number") {
-                fail("INVALID_COMPUTER_EXIT");
+                fail("INVALID_RUNTIME_EXIT");
             }
             if (code === MORTY_EXIT_STATE_ROOT_INVALID) {
                 throw new MortyStateRootError(logPath);
             }
             if (code !== 0) {
-                throw new ComputerStartError({ kind: "exit", exitCode: code }, logPath);
+                throw new RuntimeStartError({ kind: "exit", exitCode: code }, logPath);
             }
             return { pid: child.pid, logPath };
         } catch (cause) {
@@ -1200,14 +1200,14 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 }
             }
             operation.throwIfAborted();
-            if (errorCode(cause) === "COMPUTER_NOT_INSTALLED" || cause instanceof MortyStateRootError) {
+            if (errorCode(cause) === "RUNTIME_NOT_INSTALLED" || cause instanceof MortyStateRootError) {
                 throw cause;
             }
             const code = errorCode(cause);
             const failure =
-                cause instanceof ComputerStartError
+                cause instanceof RuntimeStartError
                     ? cause
-                    : new ComputerStartError(
+                    : new RuntimeStartError(
                           { kind: "spawn", code: typeof code === "string" ? code : "UNKNOWN" },
                           logPath,
                           cause,
@@ -1309,7 +1309,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 approved: confirmedComputerId === computerId,
                 platform: process.platform,
                 nodeVersion: process.versions.node,
-                computerStateSource: process.env["MORTY_STATE_DIRECTORY"]?.trim() ? "environment" : "default",
+                runtimeStateSource: process.env["MORTY_STATE_DIRECTORY"]?.trim() ? "environment" : "default",
             });
             if (confirmedComputerId !== computerId) {
                 throw new ProjectReplacementRequiredError(computerId, reason);
@@ -1395,7 +1395,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         return fail("COMPUTER_PAIRING_UNAVAILABLE");
     }
 
-    function computerCommand(
+    function runtimeCommand(
         computer: ComputerSelection,
         cwd: string,
     ): { readonly args: readonly string[]; readonly input?: string } {
@@ -1419,7 +1419,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         };
     }
 
-    async function startComputer(
+    async function startRuntime(
         context: Context,
         computer: ComputerSelection,
         cwd: string,
@@ -1440,13 +1440,13 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 return;
             }
             try {
-                const command = computerCommand(computer, cwd);
+                const command = runtimeCommand(computer, cwd);
                 const started = await runMorty(context.directory, command.args, cwd, signal, command.input);
-                emit({ status: "computer_started", ...started });
+                emit({ status: "runtime_started", ...started });
                 return;
             } catch (cause) {
                 signal.throwIfAborted();
-                if (!(cause instanceof ComputerStartError)) {
+                if (!(cause instanceof RuntimeStartError)) {
                     throw cause;
                 }
                 // A launcher may fail after the daemon has connected successfully.
@@ -1457,7 +1457,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                     throw cause;
                 }
                 emit({
-                    status: "computer_retrying",
+                    status: "runtime_retrying",
                     attempt: attempt + 1,
                     maximumAttempts,
                     failure: cause.diagnostic(),
@@ -1465,7 +1465,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 await clock.wait(1000, signal);
             }
         }
-        fail("COMPUTER_START_FAILED");
+        fail("RUNTIME_START_FAILED");
     }
 
     function hasOnlineComputerAgent(computer: Record<string, unknown>, computerId: string, harness: string): boolean {
@@ -1790,11 +1790,11 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         });
     }
 
-    async function preflightComputer(directory: string, cwd: string) {
+    async function preflightRuntime(directory: string, cwd: string) {
         progress("preflight", "Verifying the Morty CLI before creating an identity.");
         const [major = 0, minor = 0] = process.versions.node.split(".").map(Number);
         if (!((major === 22 && minor >= 19) || (major === 24 && minor >= 20))) {
-            throw new ComputerPreflightError(
+            throw new RuntimePreflightError(
                 `Node.js 22.19+ or 24.20+ is required; found ${process.versions.node} at ${process.execPath}.`,
             );
         }
@@ -1808,12 +1808,12 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             if (cause instanceof MortyStateRootError) {
                 throw cause;
             }
-            throw new ComputerPreflightError(
-                "The local Computer failed its startup check. No remote identity or pairing was created by this run.",
+            throw new RuntimePreflightError(
+                "The local Runtime failed its startup check. No remote identity or pairing was created by this run.",
                 cause,
             );
         }
-        emit({ status: "computer_verified", nodeVersion: process.versions.node, nodeExecutable: process.execPath });
+        emit({ status: "runtime_verified", nodeVersion: process.versions.node, nodeExecutable: process.execPath });
     }
 
     async function setup(options: SetupOptions) {
@@ -1825,7 +1825,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         // Refuses a state that belongs to another service before anything runs, and explains a previous replacement
         // even when this run fails its local startup checks.
         restoreReplacementAccess(await loadIdentity(directory, options.base));
-        await preflightComputer(directory, cwd);
+        await preflightRuntime(directory, cwd);
         const saved = await loadIdentity(directory, options.base);
         restoreReplacementAccess(saved);
         const identity = await prepareIdentity(location, saved);
@@ -1836,7 +1836,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         emit({ status: "identity_ready", userId: machine.identity.userId, computerId: machine.identity.computerId });
         const prepared = await prepareComputer(machine, cwd, verified.computerPairing, options.replaceProject);
         machine = prepared.context;
-        await startComputer(machine, prepared.computer, cwd, options.harness);
+        await startRuntime(machine, prepared.computer, cwd, options.harness);
         await waitForComputer(machine, prepared.computer, options.harness, cwd);
         machine = await bindAgent(machine, prepared.computer, options.harness);
         await finishSetup(machine, prepared.computer, options, cwd, identity.project);
@@ -1870,9 +1870,9 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                           : "SETUP_FAILED",
                 cause: serializeErrorCause(cause),
                 ...(cause instanceof MortyStateRootError
-                    ? { computer: cause.diagnostic(replacementAccess) }
-                    : cause instanceof ComputerStartError || cause instanceof ComputerPreflightError
-                      ? { computer: cause.diagnostic() }
+                    ? { runtime: cause.diagnostic(replacementAccess) }
+                    : cause instanceof RuntimeStartError || cause instanceof RuntimePreflightError
+                      ? { runtime: cause.diagnostic() }
                       : {}),
                 ...(cause instanceof AgentBindingError ? { binding: cause.diagnostic() } : {}),
                 ...(cause instanceof HarnessUnavailableError ? { harness: cause.diagnostic() } : {}),

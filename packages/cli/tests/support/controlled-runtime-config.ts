@@ -1,0 +1,30 @@
+import type { CatalogAgent } from "../../src/engine/agent/catalog.ts";
+import { RuntimeAgentDependencies } from "../../src/engine/agent/runtime-agents.ts";
+import {
+    type ComputerConnectionConfig,
+    createRuntimeConfig,
+    type RuntimeConfig,
+    RuntimeLocalContext,
+    type RuntimeReconnectTarget,
+} from "../../src/engine/runtime/config.ts";
+import { readStateDirectory } from "../../src/storage/state-directory.ts";
+import { acpAdapters } from "./acp-adapters.ts";
+
+/** Injects only the controlled Agent dependency; computer services and transports remain production code. */
+export function createControlledRuntimeConfig(
+    connection: ComputerConnectionConfig,
+    agents: readonly CatalogAgent[] = [],
+    context?: RuntimeLocalContext,
+    reconnectTarget?: RuntimeReconnectTarget | null,
+    resolveAgent?: RuntimeConfig["resolveAgent"],
+    rediscoverAgents?: RuntimeConfig["rediscoverAgents"],
+): RuntimeConfig {
+    return createRuntimeConfig(
+        connection,
+        new RuntimeAgentDependencies(agents, acpAdapters),
+        context ?? new RuntimeLocalContext(readStateDirectory(), process.env),
+        reconnectTarget,
+        resolveAgent,
+        rediscoverAgents,
+    );
+}

@@ -9,10 +9,10 @@ test.use({
     contextOptions: { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true, deviceScaleFactor: 2 },
 });
 test("Given mobile draft images, When the user opens the gallery and goes Back, Then the viewer closes without leaving the chat", async ({
-    computer,
+    runtime,
 }, testInfo) => {
-    const { page } = computer;
-    await computer.openPairedChat();
+    const { page } = runtime;
+    await runtime.openPairedChat();
     await page.getByRole("textbox", { name: "Message" }).fill("Mobile draft");
     await page.getByLabel("Choose attachments").setInputFiles([
         { name: "tall.png", mimeType: "image/png", buffer: tallImage },

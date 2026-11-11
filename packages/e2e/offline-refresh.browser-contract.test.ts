@@ -13,11 +13,11 @@ for (const layout of ["desktop", "mobile"] as const) {
         });
 
         test("Given a named session and an unsent draft, when the computer is offline across reloads, then its title survives and history recovers exactly once", async ({
-            computer,
+            runtime,
         }, testInfo) => {
-            const { page } = computer;
+            const { page } = runtime;
             await page.clock.install({ time: new Date("2026-10-26T00:00:00Z") });
-            const connected = await computer.followInstructions("/setup.md", "setup-reconnect-session");
+            const connected = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
             await page.goto(connected.url);
             const composer = page.getByRole("textbox", { name: "Message" });
             await expect(composer).toBeEnabled();
@@ -32,7 +32,7 @@ for (const layout of ["desktop", "mobile"] as const) {
             await page.getByRole("textbox", { name: "Conversation title" }).fill("Offline refresh acceptance");
             await page.getByRole("button", { name: "Save title" }).click();
             await expect(page.getByRole("heading", { name: "Offline refresh acceptance", exact: true })).toBeVisible();
-            await computer.pauseComputer();
+            await runtime.pauseRuntime();
             for (let reload = 0; reload < 2; reload += 1) {
                 await page.reload();
                 await expect(
@@ -45,7 +45,7 @@ for (const layout of ["desktop", "mobile"] as const) {
                 await expect(page.getByRole("alert")).toHaveCount(0);
             }
             await page.screenshot({ path: testInfo.outputPath("offline-refresh.png") });
-            await computer.resumeComputer();
+            await runtime.resumeRuntime();
             await expect(composer).toBeEnabled();
             await expect(composer).toHaveValue("Preserve this unsent follow-up");
             await expect(

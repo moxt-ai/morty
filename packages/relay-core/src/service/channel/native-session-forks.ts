@@ -3,7 +3,7 @@ import { sameNativeSession } from "@morty-build/client/native-session";
 import { decodeNativeSessionRequest, type NativeSessionResult } from "@morty-build/client/protocol";
 import type { ComputerScope } from "../../entity/do/session.ts";
 import { PairingDirectoryError } from "../../entity/pairing/pairing.ts";
-import type { SessionComputerOperations } from "../../gateway/session-computer-operations.ts";
+import type { SessionRuntimeOperations } from "../../gateway/session-runtime-operations.ts";
 
 async function waitForFork<T>(completion: Promise<T>, signal: AbortSignal): Promise<T> {
     signal.throwIfAborted();
@@ -38,7 +38,7 @@ export class NativeSessionForks {
         scope: ComputerScope,
         operationId: string,
         input: ForkMortyNativeSessionRequest,
-        request: SessionComputerOperations["requestComputerScopeControl"],
+        request: SessionRuntimeOperations["requestComputerScopeControl"],
         signal: AbortSignal,
     ): Promise<NativeSessionResult> => {
         signal.throwIfAborted();

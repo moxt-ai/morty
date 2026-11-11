@@ -5,12 +5,12 @@ for (const touch of [false, true]) {
         test.use({ contextOptions: { hasTouch: touch, viewport: { width: touch ? 390 : 1280, height: 844 } } });
 
         test("Given a streamed answer, When it finishes and I copy it, Then its Markdown is preserved and copying remains available after reload", async ({
-            computer,
+            runtime,
         }, testInfo) => {
-            const { page } = computer;
+            const { page } = runtime;
             await page.clock.install({ time: new Date("2026-10-27T12:00:00Z") });
             await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
-            await computer.openPairedChat();
+            await runtime.openPairedChat();
             await page.getByRole("textbox", { name: "Message" }).fill("hold with rich content");
             await page.getByRole("button", { name: "Send message" }).click();
             const response = page
@@ -20,7 +20,7 @@ for (const touch of [false, true]) {
             await expect(response.getByRole("button", { name: "Copy response", exact: true })).toHaveCount(0);
             const markdown =
                 "\n\n## Result\n\n- **Ready**: [details](https://example.com)\n\n```ts\nconst value = 42;\n```";
-            await computer.continueReply("hold with rich content", {
+            await runtime.continueReply("hold with rich content", {
                 outcome: "complete",
                 output: [{ kind: "text", text: markdown }],
             });

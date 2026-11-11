@@ -36,7 +36,7 @@ import { systemTimer } from "../../src/engine/util/timer.ts";
 import { acpAdapters } from "../support/acp-adapters.ts";
 import { createWritableAcpStream } from "../support/agents/acp-stream.ts";
 import { ControlledAcpConnection } from "../support/agents/controlled-acp-connection.ts";
-import { SessionComputerFixture as SessionManager } from "../support/session-computer.ts";
+import { SessionRuntimeFixture as SessionManager } from "../support/session-runtime.ts";
 import { UnretainedExternalContentStore } from "../support/unretained-external-content-store.ts";
 import { RecordingObserver } from "./acp-feature-fixture.ts";
 
@@ -720,7 +720,7 @@ describe("ACP conversation sessions", () => {
         );
         const signal = new AbortController().signal;
         const firstStore = new SqliteSessionStore(new AcpSessionTable(openAcpSessionDatabase(databasePath)));
-        const firstComputer = new SessionManager({
+        const firstRuntime = new SessionManager({
             observer: new NullSessionObserver(),
             store: firstStore,
             adapters: acpAdapters,
@@ -738,14 +738,14 @@ describe("ACP conversation sessions", () => {
             timer: systemTimer,
             maxProcesses: null,
         });
-        const sessionTarget = await firstComputer.createNativeSession({
+        const sessionTarget = await firstRuntime.createNativeSession({
             agent,
             cwd: process.cwd(),
             signal,
         });
 
         try {
-            await firstComputer.runPrompt({
+            await firstRuntime.runPrompt({
                 agent,
                 commandId: "claude-first-turn",
                 cwd: process.cwd(),
@@ -756,12 +756,12 @@ describe("ACP conversation sessions", () => {
                 signal,
             });
         } finally {
-            await firstComputer.close();
+            await firstRuntime.close();
             firstStore.close();
         }
 
         const restartedStore = new SqliteSessionStore(new AcpSessionTable(openAcpSessionDatabase(databasePath)));
-        const restartedComputer = new SessionManager({
+        const restartedRuntime = new SessionManager({
             observer: new NullSessionObserver(),
             store: restartedStore,
             adapters: acpAdapters,
@@ -780,11 +780,11 @@ describe("ACP conversation sessions", () => {
             maxProcesses: null,
         });
         try {
-            expect(restartedComputer.findSessions([sessionTarget])).toEqual([
+            expect(restartedRuntime.findSessions([sessionTarget])).toEqual([
                 expect.objectContaining({ harness: "claude", prompted: true, target: sessionTarget }),
             ]);
         } finally {
-            await restartedComputer.close();
+            await restartedRuntime.close();
             restartedStore.close();
             await rm(temporaryDirectory, { force: true, recursive: true });
         }

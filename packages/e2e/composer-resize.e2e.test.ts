@@ -4,10 +4,10 @@ const composerMaxHeightPx = 256;
 
 test.describe("message composer resizing", () => {
     test("Given a long multiline draft, When the composer grows, Then the whole composer caps at 256px and fades only clipped edges", async ({
-        computer,
+        runtime,
     }) => {
-        const { page } = computer;
-        await computer.openPairedChat();
+        const { page } = runtime;
+        await runtime.openPairedChat();
         const composer = page.getByRole("textbox", { name: "Message" });
         const scrollArea = composer.locator("xpath=ancestor::*[@data-slot='scroll-area']");
         const composerSurface = scrollArea.locator("xpath=ancestor::div[contains(@class, 'max-h-64')]");
@@ -81,10 +81,10 @@ test.describe("message composer resizing", () => {
     });
 
     test("Given a long draft with an attachment, When the composer is at its cap, Then the text viewport ends above the toolbar", async ({
-        computer,
+        runtime,
     }) => {
-        const { page } = computer;
-        await computer.openPairedChat();
+        const { page } = runtime;
+        await runtime.openPairedChat();
         const composer = page.getByRole("textbox", { name: "Message" });
         await composer.fill("Attachment draft");
         await page.getByLabel("Choose attachments").setInputFiles({

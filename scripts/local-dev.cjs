@@ -632,7 +632,7 @@ async function setup(options) {
         fail("the stack's Chat Worker is not running; run prepare first");
     }
     const mortyStateDirectory = path.join(stack.stateDir, "morty");
-    const computerStateDirectory = mortyStateDirectory;
+    const runtimeStateDirectory = mortyStateDirectory;
     const workspace = path.resolve(options.workspace ?? path.join(stack.stateDir, "workspace"));
     for (const directory of [mortyStateDirectory, workspace]) {
         fs.mkdirSync(directory, { recursive: true, mode: 0o700 });
@@ -643,8 +643,8 @@ async function setup(options) {
     const setupLog = path.join(stack.stateDir, "setup.log");
     fs.writeFileSync(setupLog, "", { mode: 0o600 });
     log(`running setup for harness "${harness}" against workspace ${workspace}`);
-    const computerPid = await startProcess(
-        "setup computer",
+    const runtimePid = await startProcess(
+        "setup runtime",
         [localCli, "setup", "--base-url", origin, "--cwd", workspace, "--harness", harness, "--session-id", sessionId],
         setupLog,
         process.execPath,
@@ -665,7 +665,7 @@ async function setup(options) {
             .map(readSetupRecord);
         const failure = records.findLast((record) => record !== null && record.error !== undefined);
         if (failure !== undefined && failure !== null) {
-            await stopProcess(computerPid);
+            await stopProcess(runtimePid);
             fail(`setup failed: ${JSON.stringify(failure.error)}`);
         }
         const reused = records.findLast((record) => record !== null && record.status === "computer_reused");
@@ -681,23 +681,23 @@ async function setup(options) {
             ready = completed;
             break;
         }
-        if (Date.now() > deadline || !isAlive(computerPid)) {
+        if (Date.now() > deadline || !isAlive(runtimePid)) {
             break;
         }
         await new Promise((resolve) => setTimeout(resolve, 500));
     }
     if (ready === null) {
-        await stopProcess(computerPid);
+        await stopProcess(runtimePid);
         fail(
-            `the setup computer did not report ready within ${SETUP_READY_TIMEOUT_MILLISECONDS / 1000}s; see ${setupLog}`,
+            `the setup runtime did not report ready within ${SETUP_READY_TIMEOUT_MILLISECONDS / 1000}s; see ${setupLog}`,
         );
     }
     if (computerId === null) {
-        fail("the setup computer did not report its Computer ID");
+        fail("the setup runtime did not report its Computer ID");
     }
     const handoffUrl = typeof ready.url === "string" ? ready.url : "";
     if (handoffUrl.length === 0) {
-        fail("the setup computer did not return a handoff URL");
+        fail("the setup runtime did not return a handoff URL");
     }
 
     const record = {
@@ -706,14 +706,14 @@ async function setup(options) {
         handoffUrl,
         mortyStateDirectory,
         harness,
-        computerStateDirectory,
-        computerPid,
+        runtimeStateDirectory,
+        runtimePid,
         sessionId,
         setupLog,
         workspace,
     };
-    const previous = Array.isArray(stack.computers) ? stack.computers : [];
-    writeStack({ ...stack, computers: [...previous, record] });
+    const previous = Array.isArray(stack.runtimes) ? stack.runtimes : [];
+    writeStack({ ...stack, runtimes: [...previous, record] });
     process.stdout.write(`${JSON.stringify(record)}\n`);
     log("setup is ready; open handoffUrl in the browser to continue as this user");
 }
@@ -774,8 +774,8 @@ async function status(options) {
         fail("pass --state-dir for a stack created by prepare");
     }
     const chatAlive = isAlive(stack.chatPid);
-    const computers = Array.isArray(stack.computers)
-        ? stack.computers.map((computer) => ({ ...computer, alive: isAlive(computer.computerPid) }))
+    const runtimes = Array.isArray(stack.runtimes)
+        ? stack.runtimes.map((runtime) => ({ ...runtime, alive: isAlive(runtime.runtimePid) }))
         : [];
     let chatHttp = false;
     try {
@@ -783,7 +783,7 @@ async function status(options) {
     } catch {
         chatHttp = false;
     }
-    process.stdout.write(`${JSON.stringify({ ...stack, chatAlive, chatHttp, computers }, null, 2)}\n`);
+    process.stdout.write(`${JSON.stringify({ ...stack, chatAlive, chatHttp, runtimes }, null, 2)}\n`);
 }
 
 function readLines(file, count) {
@@ -799,13 +799,13 @@ async function logs(options) {
         fail("pass --state-dir for a stack created by prepare");
     }
     const worker = options.worker ?? "chat";
-    const computerLogs = (Array.isArray(stack.computers) ? stack.computers : []).map((computer) => computer.setupLog);
-    const uniqueComputerLogs = [...new Set(computerLogs.filter((file) => typeof file === "string"))];
+    const runtimeLogs = (Array.isArray(stack.runtimes) ? stack.runtimes : []).map((runtime) => runtime.setupLog);
+    const uniqueRuntimeLogs = [...new Set(runtimeLogs.filter((file) => typeof file === "string"))];
     const files =
         worker === "all"
-            ? [stack.chatLog, ...uniqueComputerLogs].filter((file) => file !== undefined)
-            : worker === "computer"
-              ? uniqueComputerLogs
+            ? [stack.chatLog, ...uniqueRuntimeLogs].filter((file) => file !== undefined)
+            : worker === "runtime"
+              ? uniqueRuntimeLogs
               : [stack.chatLog];
     const filter = options.filter === undefined ? null : new RegExp(options.filter, "u");
     const count = Number.isInteger(options.lines) ? options.lines : 200;
@@ -854,30 +854,30 @@ async function logs(options) {
 }
 
 async function stopRecorded(stack) {
-    const computerStateDirectory = path.join(stack.stateDir, "morty");
-    for (const computer of Array.isArray(stack.computers) ? stack.computers : []) {
-        if (typeof computer.computerId === "string") {
-            log(`stopping the current pairing for ${computer.computerId}`);
+    const runtimeStateDirectory = path.join(stack.stateDir, "morty");
+    for (const runtime of Array.isArray(stack.runtimes) ? stack.runtimes : []) {
+        if (typeof runtime.computerId === "string") {
+            log(`stopping the current pairing for ${runtime.computerId}`);
             try {
-                if (computer.computerStateDirectory !== computerStateDirectory) {
-                    throw new Error("The recorded Computer does not belong to this local stack");
+                if (runtime.runtimeStateDirectory !== runtimeStateDirectory) {
+                    throw new Error("The recorded Runtime does not belong to this local stack");
                 }
                 await run(
                     process.execPath,
                     [path.join(MORTY_ROOT, "packages/cli/src/cli/entrypoint.ts"), "pair", "stop"],
-                    { env: { MORTY_STATE_DIRECTORY: computerStateDirectory } },
+                    { env: { MORTY_STATE_DIRECTORY: runtimeStateDirectory } },
                 );
             } catch (cause) {
                 log(`could not stop paired connection: ${cause instanceof Error ? cause.message : String(cause)}`);
             }
         }
-        await stopProcess(computer.computerPid);
+        await stopProcess(runtime.runtimePid);
     }
-    if (fs.existsSync(computerStateDirectory)) {
-        log(`stopping the Morty manager at ${computerStateDirectory}`);
+    if (fs.existsSync(runtimeStateDirectory)) {
+        log(`stopping the Morty manager at ${runtimeStateDirectory}`);
         try {
             await run(process.execPath, [path.join(MORTY_ROOT, "packages/cli/src/cli/entrypoint.ts"), "quit"], {
-                env: { MORTY_STATE_DIRECTORY: computerStateDirectory },
+                env: { MORTY_STATE_DIRECTORY: runtimeStateDirectory },
             });
         } catch (cause) {
             log(`could not stop the Morty manager: ${cause instanceof Error ? cause.message : String(cause)}`);
@@ -919,7 +919,7 @@ function usage(stream = process.stdout) {
             "  node scripts/local-dev.cjs setup  --state-dir DIR --harness ID --session-id ID [--workspace DIR]",
             "  node scripts/local-dev.cjs status --state-dir DIR",
             "  node scripts/local-dev.cjs reload <web|chat> --state-dir DIR",
-            "  node scripts/local-dev.cjs logs   --state-dir DIR [--worker chat|computer|all] [--lines N] [--filter REGEX] [--follow]",
+            "  node scripts/local-dev.cjs logs   --state-dir DIR [--worker chat|runtime|all] [--lines N] [--filter REGEX] [--follow]",
             "  node scripts/local-dev.cjs remove --state-dir DIR [--keep-state]",
             "",
             "reload rebuilds web/Chat without restarting Relay or computers.",

@@ -12,7 +12,7 @@ import type { DurableObjectContext } from "../../di/create-durable-object-depend
 import type { ComputerScope as Scope } from "../../entity/do/session.ts";
 import { ComputerScope } from "../../entity/do/session.ts";
 import { PairingDirectoryError } from "../../entity/pairing/pairing.ts";
-import type { SessionComputerOperations } from "../../gateway/session-computer-operations.ts";
+import type { SessionRuntimeOperations } from "../../gateway/session-runtime-operations.ts";
 import {
     requestComputerAgentSettings,
     requestComputerContentWrite,
@@ -22,7 +22,7 @@ import {
 } from "../pairing/computer-control-request.ts";
 import type { NativeSessionForks } from "./native-session-forks.ts";
 
-export interface LocalSessionOperations extends SessionComputerOperations {
+export interface LocalSessionOperations extends SessionRuntimeOperations {
     readonly forkNativeSession: (
         scope: Scope,
         operationId: string,
@@ -95,7 +95,7 @@ export function createLocalSessionOperations(cx: DurableObjectContext, computerI
             }
         });
     };
-    const requestComputerScopeControl: SessionComputerOperations["requestComputerScopeControl"] = async (
+    const requestComputerScopeControl: SessionRuntimeOperations["requestComputerScopeControl"] = async (
         scope,
         command,
         signal,

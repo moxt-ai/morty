@@ -38,13 +38,13 @@ import { listen, port, sendBinary, sendText } from "@morty-build/relay-test-supp
 import { describe, expect, it } from "vitest";
 import { z } from "zod";
 import { AcpAgentDefinition } from "../../src/engine/acp/agent/agent-definition.ts";
-import { ComputerLocalContext } from "../../src/engine/computer/config.ts";
-import { SESSION_EVENT_BATCH_WINDOW_MILLISECONDS } from "../../src/engine/computer/relay/session-event-publisher.ts";
-import { runComputer } from "../../src/engine/computer/run.ts";
+import { RuntimeLocalContext } from "../../src/engine/runtime/config.ts";
+import { SESSION_EVENT_BATCH_WINDOW_MILLISECONDS } from "../../src/engine/runtime/relay/session-event-publisher.ts";
+import { runRuntime } from "../../src/engine/runtime/run.ts";
 import type { ScheduledTask, Timer } from "../../src/engine/util/timer.ts";
 import { ControlledAcpConnection } from "../support/agents/controlled-acp-connection.ts";
 import { memoryComputerCredentials } from "../support/computer-credentials.ts";
-import { createControlledComputerConfig as createComputerConfig } from "../support/controlled-computer-config.ts";
+import { createControlledRuntimeConfig as createRuntimeConfig } from "../support/controlled-runtime-config.ts";
 
 const websocketGuid = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 const fakeAgentPath = fileURLToPath(new URL("./fixtures/acp-peer.ts", import.meta.url));
@@ -214,7 +214,7 @@ class ClientFrames {
 async function startControlledDaemon(options: { readonly stateDirectory?: string } = {}): Promise<{
     readonly agent: AcpAgentDefinition;
     readonly close: () => Promise<void>;
-    readonly config: ReturnType<typeof createComputerConfig>;
+    readonly config: ReturnType<typeof createRuntimeConfig>;
     readonly frames: ClientFrames;
     readonly liveBatchSizes: number[];
     readonly socket: Duplex;
@@ -271,7 +271,7 @@ async function startControlledDaemon(options: { readonly stateDirectory?: string
             ),
         { MORTY_FAKE_ACP_STATE_DIRECTORY: nativeStateDirectory },
     );
-    const config = createComputerConfig(
+    const config = createRuntimeConfig(
         {
             credentials: memoryComputerCredentials("r".repeat(43)),
             computerId: "channel_alpha",
@@ -279,11 +279,11 @@ async function startControlledDaemon(options: { readonly stateDirectory?: string
             relayUrl,
         },
         [agent],
-        new ComputerLocalContext(stateDirectory, process.env),
+        new RuntimeLocalContext(stateDirectory, process.env),
     );
     const cancellation = new AbortController();
     const timer = new ControllableTimer();
-    const computer = runComputer(config, cancellation.signal, timer);
+    const runtime = runRuntime(config, cancellation.signal, timer);
     const socket = await socketReady.promise;
     const frames = new ClientFrames(socket);
     sendText(
@@ -318,7 +318,7 @@ async function startControlledDaemon(options: { readonly stateDirectory?: string
         timer,
         close: async () => {
             cancellation.abort();
-            await computer;
+            await runtime;
             for (const relaySocket of relaySockets) {
                 relaySocket.destroy();
             }

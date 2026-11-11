@@ -1,12 +1,12 @@
 import { createTestMortyRelayBindings } from "@morty-build/relay-test-support/cloudflare";
 import { createTestOwner } from "../../../../packages/relay-test-support/src/identity-fixture.ts";
 import type { FakeAgentHarnessDefinition } from "./agent-harness.ts";
-import { createFakeAgentHarnessComputer } from "./relay-agent-harness.ts";
+import { createFakeAgentHarnessRuntime } from "./relay-agent-harness.ts";
 
 /** Starts the production Relay boundary with isolated local Cloudflare storage. */
 export async function startTestRelay(options: { readonly allowedOrigins?: ReadonlySet<string> } = {}) {
     const cancellation = new AbortController();
-    const computers: AsyncDisposable[] = [];
+    const runtimes: AsyncDisposable[] = [];
     const bindings = await createTestMortyRelayBindings(options.allowedOrigins);
     try {
         const app = { request: bindings.request };
@@ -20,7 +20,7 @@ export async function startTestRelay(options: { readonly allowedOrigins?: Readon
         const close = async (): Promise<void> => {
             cancellation.abort(new Error("Test Relay stopped"));
             try {
-                await Promise.all(computers.splice(0).map(async (computer) => await computer[Symbol.asyncDispose]()));
+                await Promise.all(runtimes.splice(0).map(async (runtime) => await runtime[Symbol.asyncDispose]()));
             } finally {
                 await bindings[Symbol.asyncDispose]();
             }
@@ -38,7 +38,7 @@ export async function startTestRelay(options: { readonly allowedOrigins?: Readon
                 if (credential === undefined) {
                     throw new Error("Create the computer owner first");
                 }
-                const computer = await createFakeAgentHarnessComputer({
+                const runtime = await createFakeAgentHarnessRuntime({
                     credential,
                     ...(harnesses === undefined ? {} : { harnesses }),
                     ...(sessionIds === undefined ? {} : { sessionIds }),
@@ -47,8 +47,8 @@ export async function startTestRelay(options: { readonly allowedOrigins?: Readon
                     server: app,
                     signal: cancellation.signal,
                 });
-                computers.push(computer);
-                return computer;
+                runtimes.push(runtime);
+                return runtime;
             },
             close,
             [Symbol.asyncDispose]: close,

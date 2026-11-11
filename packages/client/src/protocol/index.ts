@@ -43,12 +43,6 @@ export {
     encodeComputerPongEvent,
     encodeComputerStatusEvent,
 } from "./computer/liveness.ts";
-export type { ComputerUpgradeResult } from "./computer/upgrade.ts";
-export {
-    decodeComputerUpgradeResult,
-    decodeComputerUpgradeVersion,
-    encodeComputerUpgradeResult,
-} from "./computer/upgrade.ts";
 export {
     MORTY_API_PREFIX,
     MORTY_API_VERSION,
@@ -67,6 +61,12 @@ export {
     PROJECT_PERMISSION_NAMES,
     RELAY_APP_PROJECT_PERMISSIONS,
 } from "./relay/project-permission.ts";
+export type { RuntimeUpgradeResult } from "./runtime/upgrade.ts";
+export {
+    decodeRuntimeUpgradeResult,
+    decodeRuntimeUpgradeVersion,
+    encodeRuntimeUpgradeResult,
+} from "./runtime/upgrade.ts";
 
 export type {
     SessionAccessClaims,

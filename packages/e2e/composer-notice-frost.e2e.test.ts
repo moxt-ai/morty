@@ -2,10 +2,10 @@ import { writeFileSync } from "node:fs";
 import { expect, test } from "./infra/test.ts";
 
 test("Given a session pinned to its latest reply, When an unreadable attachment raises the composer notice, Then the reply tail stays fully above the notice", async ({
-    computer,
+    runtime,
 }, testInfo) => {
-    const { page } = computer;
-    await computer.openPairedChat();
+    const { page } = runtime;
+    await runtime.openPairedChat();
     const composer = page.getByRole("textbox", { name: "Message" });
     // Fill the log past its viewport so the latest reply pins to its bottom edge,
     // where the notice floats; short conversations leave empty container space.
@@ -47,10 +47,10 @@ test.describe("Given an interactive card ending the log", () => {
     test.use({ contextOptions: { viewport: { width: 1280, height: 320 } } });
 
     test("When an unreadable attachment raises the composer notice, Then the card keeps its actions fully above the notice", async ({
-        computer,
+        runtime,
     }, testInfo) => {
-        const { page } = computer;
-        const connected = await computer.followInstructions("/setup.md", "setup-reconnect-session");
+        const { page } = runtime;
+        const connected = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
         await page.goto(connected.url);
         const tip = page.getByRole("region", { name: "Continue your work here" });
         await expect(tip).toBeVisible();

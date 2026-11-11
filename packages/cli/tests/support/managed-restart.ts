@@ -195,7 +195,7 @@ async function interruptedJourney(
                 event.payload.kind === "prompt.failed" &&
                 event.payload.commandId === commandId
             ) {
-                expect(event.payload.code).toBe("computer_restarted");
+                expect(event.payload.code).toBe("runtime_restarted");
                 break;
             }
         }

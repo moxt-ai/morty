@@ -1,16 +1,16 @@
 import { expect, test } from "./infra/test.ts";
 
-test.use({ computerAgent: { harness: "interaction-test", name: "Interaction Agent" } });
+test.use({ runtimeAgent: { harness: "interaction-test", name: "Interaction Agent" } });
 
 test.describe("composer stays pinned to the pane bottom", () => {
     // A short window leaves no room for the header, the answer card, and the
     // composer together, so the pane has to clip instead of scrolling.
     test("Given a short window with a pending answer, When I tab across the answer card, Then the composer stays inside the pane", async ({
-        computer,
+        runtime,
     }, testInfo) => {
-        const { page } = computer;
+        const { page } = runtime;
         await page.setViewportSize({ width: 865, height: 300 });
-        await computer.openPairedChat();
+        await runtime.openPairedChat();
         await page.getByRole("textbox", { name: "Message" }).fill("request text answers");
         await page.getByRole("button", { name: "Send message" }).click();
 

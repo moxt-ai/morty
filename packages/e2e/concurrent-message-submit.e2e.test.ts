@@ -1,11 +1,11 @@
 import { expect, test } from "./infra/test.ts";
 
 test("Given two devices share an idle conversation, When both send a draft, Then both messages run without losing text or attachments", async ({
-    computer,
+    runtime,
 }, testInfo) => {
-    const { page } = computer;
+    const { page } = runtime;
     await page.setViewportSize({ width: 1440, height: 900 });
-    await computer.openPairedChat();
+    await runtime.openPairedChat();
     await page.getByRole("textbox", { name: "Message" }).fill("Open a shared conversation");
     await page.getByRole("button", { name: "Send message" }).click();
     await expect(page.getByRole("article", { name: "Agent response" })).toContainText("Open a shared conversation");

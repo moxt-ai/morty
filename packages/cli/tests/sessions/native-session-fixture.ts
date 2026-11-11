@@ -5,8 +5,8 @@ import type { AcpSessionUpdate, NativeSessionCommand, SessionLiveEvent } from "@
 import { AcpAgentDefinition } from "../../src/engine/acp/agent/agent-definition.ts";
 import { AcpContentExternalizer } from "../../src/engine/acp/content/content-externalizer.ts";
 import type { AdapterResolver } from "../../src/engine/acp/native-history/preview-contract.ts";
-import { ComputerAgentDependencies } from "../../src/engine/agent/computer-agents.ts";
-import { ComputerLocalContext, createComputerConfig } from "../../src/engine/computer/config.ts";
+import { RuntimeAgentDependencies } from "../../src/engine/agent/runtime-agents.ts";
+import { createRuntimeConfig, RuntimeLocalContext } from "../../src/engine/runtime/config.ts";
 import { NullSessionObserver } from "../../src/engine/session/api/session-api.ts";
 import { NativeSessionService } from "../../src/engine/session/native/native-session-browser.ts";
 import { SessionCreations } from "../../src/engine/session/record/session-creations.ts";
@@ -18,7 +18,7 @@ import { systemTimer } from "../../src/engine/util/timer.ts";
 import { acpAdapters } from "../support/acp-adapters.ts";
 import { ControlledAcpConnection } from "../support/agents/controlled-acp-connection.ts";
 import { memoryComputerCredentials } from "../support/computer-credentials.ts";
-import { SessionComputerFixture as SessionManager } from "../support/session-computer.ts";
+import { SessionRuntimeFixture as SessionManager } from "../support/session-runtime.ts";
 import { UnretainedExternalContentStore } from "../support/unretained-external-content-store.ts";
 
 const acpUrl = new URL("./fixtures/acp-peer.ts", import.meta.url).toString();
@@ -130,15 +130,15 @@ export async function fixture(
         timer: systemTimer,
         maxProcesses: null,
     });
-    const config = createComputerConfig(
+    const config = createRuntimeConfig(
         {
             credentials: memoryComputerCredentials("r".repeat(43)),
             defaultWorkspace: workspace,
             computerId: "test-channel",
             relayUrl: new URL("ws://localhost/"),
         },
-        new ComputerAgentDependencies([agent]),
-        new ComputerLocalContext(workspace, process.env),
+        new RuntimeAgentDependencies([agent]),
+        new RuntimeLocalContext(workspace, process.env),
     );
     const directories = new WorkspaceDirectoryService(workspace);
     const database = openAcpSessionDatabase(join(temporary, "operations.sqlite"));

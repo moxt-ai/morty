@@ -11,7 +11,7 @@ import { openAcpSessionDatabase } from "../../src/engine/storage/sqlite/local-da
 import { systemTimer } from "../../src/engine/util/timer.ts";
 import { acpAdapters } from "../support/acp-adapters.ts";
 import { ControlledAcpConnection } from "../support/agents/controlled-acp-connection.ts";
-import { SessionComputerFixture as SessionManager } from "../support/session-computer.ts";
+import { SessionRuntimeFixture as SessionManager } from "../support/session-runtime.ts";
 import { UnretainedExternalContentStore } from "../support/unretained-external-content-store.ts";
 import { fakeAgentPath } from "./acp-feature-fixture.ts";
 

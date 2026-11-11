@@ -2,11 +2,11 @@ import { expect, test } from "./infra/test.ts";
 
 for (const width of [1440, 390]) {
     test(`Given a conversation with code at ${width}px, When I open and reload it, Then text fonts load and code uses equal-width glyphs`, async ({
-        computer,
+        runtime,
     }, testInfo) => {
-        const { page } = computer;
+        const { page } = runtime;
         await page.setViewportSize({ width, height: 900 });
-        await computer.openPairedChat();
+        await runtime.openPairedChat();
         await page
             .getByRole("textbox", { name: "Message" })
             .fill("Compare `iiii` and `WWWW`.\n\n```ts\nconst value = 1;\n```");

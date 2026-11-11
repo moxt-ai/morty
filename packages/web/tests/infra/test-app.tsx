@@ -6,7 +6,7 @@ import userEvent, { type UserEvent } from "@testing-library/user-event";
 import { flushSync } from "react-dom";
 import * as v from "valibot";
 import { afterAll, afterEach } from "vitest";
-import type { ControlledAgent } from "../../../../tests/support/fake-daemon/computer.ts";
+import type { ControlledAgent } from "../../../../tests/support/fake-daemon/runtime.ts";
 import type { PageAnalytics } from "../../src/services/analytics/google-analytics.ts";
 import type { SetupHandoff } from "../../src/services/device/setup-handoff.ts";
 import { encodeIdentityScope, identityScopeSchema } from "../../src/services/identity/identity-scope-url.ts";

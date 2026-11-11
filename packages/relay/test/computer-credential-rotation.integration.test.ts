@@ -110,47 +110,47 @@ afterAll(async () => {
 });
 
 it("Given a copy of a connected daemon's credential, When the copy connects and the daemon reconnects with the credential it saved, Then the Relay revokes the Computer and tells both daemons their Computer was revoked", async () => {
-    const computer = await pairedComputer("copied-computer-credential");
-    const saved = computerCredentialSuccessor(computer.credential);
-    const daemon = accept(await computer.connect(computer.credential, saved));
+    const runtime = await pairedComputer("copied-computer-credential");
+    const saved = computerCredentialSuccessor(runtime.credential);
+    const daemon = accept(await runtime.connect(runtime.credential, saved));
 
     // The copy was read from the daemon's disk, so it holds the credential the Relay accepts now.
     const copySuccessor = computerCredentialSuccessor(saved);
-    const copy = accept(await computer.connect(saved, copySuccessor));
+    const copy = accept(await runtime.connect(saved, copySuccessor));
     expect((await daemon.closed).reason).toBe("Daemon connection replaced");
 
-    const reconnect = accept(await computer.connect(saved, computerCredentialSuccessor(saved)));
+    const reconnect = accept(await runtime.connect(saved, computerCredentialSuccessor(saved)));
 
     expect(await reconnect.closed).toMatchObject({ code: 1008, reason: "Computer revoked" });
     expect(await copy.closed).toMatchObject({ code: 1008, reason: "Computer revoked" });
-    const copyAgain = accept(await computer.connect(copySuccessor, computerCredentialSuccessor(copySuccessor)));
+    const copyAgain = accept(await runtime.connect(copySuccessor, computerCredentialSuccessor(copySuccessor)));
     expect(await copyAgain.closed).toMatchObject({ code: 1008, reason: "Computer revoked" });
 });
 
 it("Given a copy that rotated the credential twice, When the daemon reconnects with the credential it saved, Then the Relay still recognizes the copy and revokes the Computer", async () => {
-    const computer = await pairedComputer("twice-rotated-copy");
-    const saved = computerCredentialSuccessor(computer.credential);
-    const daemon = accept(await computer.connect(computer.credential, saved));
+    const runtime = await pairedComputer("twice-rotated-copy");
+    const saved = computerCredentialSuccessor(runtime.credential);
+    const daemon = accept(await runtime.connect(runtime.credential, saved));
 
     const first = computerCredentialSuccessor(saved);
     const second = computerCredentialSuccessor(first);
-    accept(await computer.connect(saved, first)).socket.close(1000, "Rotate again");
-    const copy = accept(await computer.connect(first, second));
+    accept(await runtime.connect(saved, first)).socket.close(1000, "Rotate again");
+    const copy = accept(await runtime.connect(first, second));
     expect((await daemon.closed).reason).toBe("Daemon connection replaced");
 
-    const reconnect = accept(await computer.connect(saved, computerCredentialSuccessor(saved)));
+    const reconnect = accept(await runtime.connect(saved, computerCredentialSuccessor(saved)));
 
     expect(await reconnect.closed).toMatchObject({ code: 1008, reason: "Computer revoked" });
     expect(await copy.closed).toMatchObject({ code: 1008, reason: "Computer revoked" });
 });
 
 it("Given a daemon whose connection reply was lost, When it repeats the same rotation, Then the Relay accepts it and the successor stays current", async () => {
-    const computer = await pairedComputer("repeated-computer-rotation");
-    const successor = computerCredentialSuccessor(computer.credential);
-    accept(await computer.connect(computer.credential, successor)).socket.close(1000, "Reply lost");
+    const runtime = await pairedComputer("repeated-computer-rotation");
+    const successor = computerCredentialSuccessor(runtime.credential);
+    accept(await runtime.connect(runtime.credential, successor)).socket.close(1000, "Reply lost");
 
-    const repeated = accept(await computer.connect(computer.credential, successor));
+    const repeated = accept(await runtime.connect(runtime.credential, successor));
     repeated.socket.close(1000, "Reconnect");
 
-    accept(await computer.connect(successor, computerCredentialSuccessor(successor))).socket.close(1000, "Done");
+    accept(await runtime.connect(successor, computerCredentialSuccessor(successor))).socket.close(1000, "Done");
 });

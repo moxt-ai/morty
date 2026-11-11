@@ -267,8 +267,8 @@ test("Given a native session handoff whose Computer went offline, When the page 
 }, async () => {
     const app = await createTestApp({
         prepare: async (application) => {
-            const computer = await application.connectAgent({ harness: "claude", label: "Claude" });
-            await computer.disconnect();
+            const runtime = await application.connectAgent({ harness: "claude", label: "Claude" });
+            await runtime.disconnect();
         },
         page: {
             harness: "claude",

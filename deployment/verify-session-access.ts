@@ -3,7 +3,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { parseArgs } from "node:util";
 import * as v from "valibot";
 import { memoryComputerCredentials } from "../packages/cli/tests/support/computer-credentials.ts";
-import { connectControlledAgentComputer, createMortyFakeDaemon } from "../tests/support/fake-daemon/computer.ts";
+import { connectControlledAgentRuntime, createMortyFakeDaemon } from "../tests/support/fake-daemon/runtime.ts";
 import { mortyReply } from "../tests/support/fake-daemon/scenarios.ts";
 
 const targets = v.parse(
@@ -68,7 +68,7 @@ const claim = v.parse(
         agents: harness.catalog,
     }),
 );
-await using _computer = await connectControlledAgentComputer({
+await using _runtime = await connectControlledAgentRuntime({
     behavior,
     signal,
     connection: {
@@ -129,7 +129,7 @@ await writeFile(
             architecture: "single-worker",
             revision: process.env["EXPECTED_REVISION"],
             configuredSigningKeyVerified: true,
-            computerVerificationStatus: 200,
+            runtimeVerificationStatus: 200,
             forgeryStatus: 401,
             retiredEndpointsStatus: 404,
             endedHolderStatus: 401,

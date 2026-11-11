@@ -1,14 +1,14 @@
 import { computerRequestTarget } from "@morty-build/client/relay";
 import { decodeComputerPlacement } from "../entity/computer-id.ts";
-import type { ComputerExecutionBindings, RelayRelayBindings } from "../relay-worker.ts";
+import type { RelayRelayBindings, RuntimeExecutionBindings } from "../relay-worker.ts";
 
 export { computerRequestTarget };
 
 export async function routeComputerSessionRequest(
     request: Request,
-    environment: RelayRelayBindings | ComputerExecutionBindings,
+    environment: RelayRelayBindings | RuntimeExecutionBindings,
 ): Promise<Response | null> {
-    if ("MORTY_COMPUTER_EXECUTION" in environment) {
+    if ("MORTY_RUNTIME_EXECUTION" in environment) {
         return null;
     }
     const target = computerRequestTarget(request);

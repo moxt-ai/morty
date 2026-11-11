@@ -1,8 +1,8 @@
 import { dataTestId } from "../web/src/data-testid.ts";
 import { expect, test } from "./infra/test.ts";
 
-const machineName = "Browser test Computer — Engineering workstation with a long machine name";
-test.use({ computerMachineName: machineName });
+const machineName = "Browser test Runtime — Engineering workstation with a long machine name";
+test.use({ runtimeMachineName: machineName });
 
 for (const viewport of [
     { width: 1440, height: 900 },
@@ -11,29 +11,29 @@ for (const viewport of [
     { width: 320, height: 740 },
 ]) {
     test(`Given a paired chat at ${viewport.width}px, When the user opens and renames a conversation, Then its compact header and full execution details stay accessible`, async ({
-        computer,
+        runtime,
     }, testInfo) => {
-        const { page } = computer;
+        const { page } = runtime;
         await page.setViewportSize(viewport);
-        await computer.openPairedChat();
+        await runtime.openPairedChat();
         // Wider windows keep the computer switcher in the sidebar; phones list the computer in the navigation drawer.
         const phone = viewport.width < 640;
-        const computerSwitcher = page.getByRole("button", { name: `Switch computer, ${machineName}` });
+        const computer = page.getByRole("button", { name: `Switch computer, ${machineName}` });
         const navigation = page.getByRole("button", { name: "Open navigation", exact: true });
         const viewDetails = phone
             ? page.getByRole("button", { name: `View execution details for ${machineName}`, exact: true })
             : page.getByRole("menuitem", { name: `View execution details for ${machineName}`, exact: true });
         const openDetails = async () => {
-            await (phone ? navigation : computerSwitcher).click();
+            await (phone ? navigation : computer).click();
             await expect(viewDetails).toBeVisible();
             // A phone row is a 44px touch target; a desktop menu item is sized for a pointer.
             expect((await viewDetails.boundingBox())?.height).toBeGreaterThanOrEqual(phone ? 44 : 24);
             await viewDetails.click();
         };
         if (!phone) {
-            await expect(computerSwitcher).toHaveAccessibleDescription("Connection available");
+            await expect(computer).toHaveAccessibleDescription("Connection available");
             // The switcher names the computer and shows its connection status.
-            await expect(computerSwitcher).toContainText("Online");
+            await expect(computer).toContainText("Online");
         }
         await page.getByRole("textbox", { name: "Message" }).fill("Verify execution context");
         await page.getByRole("button", { name: "Send message" }).click();
@@ -95,7 +95,7 @@ for (const viewport of [
         await page.keyboard.press("Escape");
         await expect(dialog).toBeHidden();
         if (!phone) {
-            await expect(computerSwitcher).toBeFocused();
+            await expect(computer).toBeFocused();
         }
         await page.reload();
         await expect(page.getByRole("article", { name: "Agent response" })).toBeVisible();
@@ -104,7 +104,7 @@ for (const viewport of [
         await dialog.getByRole("button", { name: "Close execution details" }).click();
         await expect(dialog).toBeHidden();
         if (!phone) {
-            await expect(computerSwitcher).toBeFocused();
+            await expect(computer).toBeFocused();
         }
     });
 }

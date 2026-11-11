@@ -28,11 +28,11 @@ import {
 import { listen, port, sendText } from "@morty-build/relay-test-support/websocket";
 import { describe, expect, it } from "vitest";
 import { AcpAgentDefinition } from "../../src/engine/acp/agent/agent-definition.ts";
-import { ComputerLocalContext } from "../../src/engine/computer/config.ts";
-import { runComputer } from "../../src/engine/computer/run.ts";
+import { RuntimeLocalContext } from "../../src/engine/runtime/config.ts";
+import { runRuntime } from "../../src/engine/runtime/run.ts";
 import { ControlledAcpConnection } from "../support/agents/controlled-acp-connection.ts";
 import { memoryComputerCredentials } from "../support/computer-credentials.ts";
-import { createControlledComputerConfig as createComputerConfig } from "../support/controlled-computer-config.ts";
+import { createControlledRuntimeConfig as createRuntimeConfig } from "../support/controlled-runtime-config.ts";
 
 const websocketGuid = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 const fakeAgentPath = fileURLToPath(new URL("./fixtures/acp-peer.ts", import.meta.url));
@@ -291,7 +291,7 @@ describe("daemon session configuration boundary", () => {
                 ),
             { MORTY_FAKE_ACP_STATE_DIRECTORY: nativeStateDirectory },
         );
-        const config = createComputerConfig(
+        const config = createRuntimeConfig(
             {
                 computerId: "channel_alpha",
                 defaultWorkspace: workspace,
@@ -299,10 +299,10 @@ describe("daemon session configuration boundary", () => {
                 credentials: memoryComputerCredentials("d".repeat(43)),
             },
             [agent],
-            new ComputerLocalContext(stateDirectory, process.env),
+            new RuntimeLocalContext(stateDirectory, process.env),
         );
         const cancellation = new AbortController();
-        const computer = runComputer(config, cancellation.signal);
+        const runtime = runRuntime(config, cancellation.signal);
 
         try {
             const frames = new ClientFrames(await socketReady.promise);
@@ -329,7 +329,7 @@ describe("daemon session configuration boundary", () => {
                 socket.destroy();
             }
             relay.close();
-            await computer;
+            await runtime;
             await rm(stateDirectory, { force: true, recursive: true });
         }
     });
@@ -395,7 +395,7 @@ describe("daemon session configuration boundary", () => {
                 MORTY_FAKE_ACP_STATE_DIRECTORY: nativeStateDirectory,
             },
         );
-        const config = createComputerConfig(
+        const config = createRuntimeConfig(
             {
                 computerId: "channel_alpha",
                 defaultWorkspace: workspace,
@@ -403,10 +403,10 @@ describe("daemon session configuration boundary", () => {
                 credentials: memoryComputerCredentials("d".repeat(43)),
             },
             [agent],
-            new ComputerLocalContext(stateDirectory, process.env),
+            new RuntimeLocalContext(stateDirectory, process.env),
         );
         const cancellation = new AbortController();
-        const computer = runComputer(config, cancellation.signal);
+        const runtime = runRuntime(config, cancellation.signal);
 
         try {
             const frames = new ClientFrames(await socketReady.promise);
@@ -436,7 +436,7 @@ describe("daemon session configuration boundary", () => {
                 socket.destroy();
             }
             relay.close();
-            await computer;
+            await runtime;
             await rm(stateDirectory, { force: true, recursive: true });
         }
     });
@@ -506,7 +506,7 @@ describe("daemon session configuration boundary", () => {
                 MORTY_FAKE_ACP_STATE_DIRECTORY: nativeStateDirectory,
             },
         );
-        const config = createComputerConfig(
+        const config = createRuntimeConfig(
             {
                 computerId: "channel_alpha",
                 defaultWorkspace: workspace,
@@ -514,10 +514,10 @@ describe("daemon session configuration boundary", () => {
                 credentials: memoryComputerCredentials("d".repeat(43)),
             },
             [agent],
-            new ComputerLocalContext(stateDirectory, process.env),
+            new RuntimeLocalContext(stateDirectory, process.env),
         );
         const cancellation = new AbortController();
-        const computer = runComputer(config, cancellation.signal);
+        const runtime = runRuntime(config, cancellation.signal);
 
         try {
             const socket = await socketReady.promise;
@@ -556,7 +556,7 @@ describe("daemon session configuration boundary", () => {
                 socket.destroy();
             }
             relay.close();
-            await computer;
+            await runtime;
             await rm(stateDirectory, { force: true, recursive: true });
         }
     });
@@ -627,7 +627,7 @@ describe("daemon session configuration boundary", () => {
                 MORTY_FAKE_ACP_STATE_DIRECTORY: nativeStateDirectory,
             },
         );
-        const config = createComputerConfig(
+        const config = createRuntimeConfig(
             {
                 computerId: "channel_alpha",
                 defaultWorkspace: workspace,
@@ -635,10 +635,10 @@ describe("daemon session configuration boundary", () => {
                 credentials: memoryComputerCredentials("d".repeat(43)),
             },
             [agent],
-            new ComputerLocalContext(stateDirectory, process.env),
+            new RuntimeLocalContext(stateDirectory, process.env),
         );
         const cancellation = new AbortController();
-        const computer = runComputer(config, cancellation.signal);
+        const runtime = runRuntime(config, cancellation.signal);
 
         try {
             const frames = new ClientFrames(await socketReady.promise);
@@ -668,7 +668,7 @@ describe("daemon session configuration boundary", () => {
                 socket.destroy();
             }
             relay.close();
-            await computer;
+            await runtime;
             await rm(stateDirectory, { force: true, recursive: true });
         }
     });
@@ -731,7 +731,7 @@ describe("daemon session configuration boundary", () => {
                 MORTY_FAKE_ACP_STATE_DIRECTORY: nativeStateDirectory,
             },
         );
-        const config = createComputerConfig(
+        const config = createRuntimeConfig(
             {
                 computerId: "channel_alpha",
                 defaultWorkspace: workspace,
@@ -739,10 +739,10 @@ describe("daemon session configuration boundary", () => {
                 credentials: memoryComputerCredentials("d".repeat(43)),
             },
             [agent],
-            new ComputerLocalContext(stateDirectory, process.env),
+            new RuntimeLocalContext(stateDirectory, process.env),
         );
         const cancellation = new AbortController();
-        const computer = runComputer(config, cancellation.signal);
+        const runtime = runRuntime(config, cancellation.signal);
 
         try {
             const frames = new ClientFrames(await socketReady.promise);
@@ -779,7 +779,7 @@ describe("daemon session configuration boundary", () => {
                 socket.destroy();
             }
             relay.close();
-            await computer;
+            await runtime;
             await rm(stateDirectory, { force: true, recursive: true });
         }
     });
@@ -843,7 +843,7 @@ describe("daemon session configuration boundary", () => {
                 ),
             { MORTY_FAKE_ACP_STATE_DIRECTORY: nativeStateDirectory },
         );
-        const config = createComputerConfig(
+        const config = createRuntimeConfig(
             {
                 computerId: "channel_alpha",
                 defaultWorkspace: workspace,
@@ -851,10 +851,10 @@ describe("daemon session configuration boundary", () => {
                 credentials: memoryComputerCredentials("d".repeat(43)),
             },
             [agent],
-            new ComputerLocalContext(stateDirectory, process.env),
+            new RuntimeLocalContext(stateDirectory, process.env),
         );
         const cancellation = new AbortController();
-        const computer = runComputer(config, cancellation.signal);
+        const runtime = runRuntime(config, cancellation.signal);
 
         try {
             const socket = await socketReady.promise;
@@ -902,7 +902,7 @@ describe("daemon session configuration boundary", () => {
             expect(runningResult.text).toContain("Steered: focus on the requested fix");
         } finally {
             cancellation.abort();
-            await computer;
+            await runtime;
             for (const socket of relaySockets) {
                 socket.destroy();
             }
@@ -966,7 +966,7 @@ describe("daemon session configuration boundary", () => {
                 ),
             { MORTY_FAKE_ACP_STATE_DIRECTORY: nativeStateDirectory },
         );
-        const config = createComputerConfig(
+        const config = createRuntimeConfig(
             {
                 computerId: "channel_alpha",
                 defaultWorkspace: workspace,
@@ -974,10 +974,10 @@ describe("daemon session configuration boundary", () => {
                 credentials: memoryComputerCredentials("d".repeat(43)),
             },
             [agent],
-            new ComputerLocalContext(stateDirectory, process.env),
+            new RuntimeLocalContext(stateDirectory, process.env),
         );
         const cancellation = new AbortController();
-        const computer = runComputer(config, cancellation.signal);
+        const runtime = runRuntime(config, cancellation.signal);
 
         try {
             const socket = await socketReady.promise;
@@ -1028,7 +1028,7 @@ describe("daemon session configuration boundary", () => {
             expect(runningResult.text).toContain("Steered: focus on the requested fix");
         } finally {
             cancellation.abort();
-            await computer;
+            await runtime;
             for (const socket of relaySockets) {
                 socket.destroy();
             }

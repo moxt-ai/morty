@@ -59,11 +59,11 @@ class PromptWithdrawal extends Error {
     }
 }
 
-/** Whether `signal` was aborted because its prompt was withdrawn, not because the Computer stopped. */
+/** Whether `signal` was aborted because its prompt was withdrawn, not because the Runtime stopped. */
 export const isWithdrawn = (signal: AbortSignal): boolean =>
     signal.aborted && signal.reason instanceof PromptWithdrawal;
 
-export class ActiveComputerTurn {
+export class ActiveRuntimeTurn {
     readonly attemptId: string;
     readonly command: SessionPromptCommand;
     readonly epoch = decodeIdentifier(randomUUID());
@@ -119,7 +119,7 @@ export class ActiveComputerTurn {
         !this.#started() &&
         !this.#controller.signal.aborted;
 
-    readonly abortComputer = (): void => {
+    readonly abortRuntime = (): void => {
         this.#controller.abort();
     };
 
@@ -229,7 +229,7 @@ export class ActiveComputerTurn {
 
     /**
      * Withdraws the prompt while the Session has not begun executing it; otherwise names the execution whose
-     * cancellation the caller requests. Withdrawing again, or after the Computer stopped the prompt, changes nothing.
+     * cancellation the caller requests. Withdrawing again, or after the Runtime stopped the prompt, changes nothing.
      */
     readonly requestCancellation = (): TurnCancellation => {
         if (this.#started() || this.#executing()) {

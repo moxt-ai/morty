@@ -209,9 +209,9 @@ importers:
       '@morty-build/client':
         specifier: workspace:*
         version: link:packages/client
-      '@morty-build/computer-test-support':
+      '@morty-build/runtime-test-support':
         specifier: workspace:*
-        version: link:packages/computer-test-support
+        version: link:packages/runtime-test-support
       '@sentry/cli':
         specifier: 2.58.6
         version: 2.58.6(supports-color@10.2.2)
@@ -471,7 +471,7 @@ importers:
         specifier: ^8.22.1
         version: 8.22.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)
 
-  packages/computer-test-support:
+  packages/runtime-test-support:
     dependencies:
       '@agentclientprotocol/sdk':
         specifier: 'catalog:'

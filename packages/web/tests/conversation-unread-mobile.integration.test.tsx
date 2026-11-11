@@ -23,7 +23,7 @@ test("Given a reply finished in another session on a phone, When the user looks 
         app = await createTestApp({ connectAgent: true });
         const daemon = app.daemon;
         if (daemon === null) {
-            throw new Error("Expected a connected controlled Agent Computer");
+            throw new Error("Expected a connected controlled Agent Runtime");
         }
         const composer = await app.queryElementByTestId(
             dataTestId.messageComposer,

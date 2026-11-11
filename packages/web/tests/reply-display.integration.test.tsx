@@ -47,7 +47,7 @@ async function startControlled(prompt: string, clock?: TestClock): Promise<TestA
 
 function controlledDaemon(app: TestApp): NonNullable<TestApp["daemon"]> {
     if (app.daemon === null) {
-        throw new Error("Expected a controlled Agent Computer");
+        throw new Error("Expected a controlled Agent Runtime");
     }
     return app.daemon;
 }

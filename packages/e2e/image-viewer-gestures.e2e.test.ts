@@ -4,10 +4,10 @@ import { expect, test } from "./infra/test.ts";
 test.use({ contextOptions: { viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true } });
 
 test("Given a touch gallery, When the user pinches, pans and swipes at fit size, Then zooming keeps the current image and swiping advances the gallery", async ({
-    computer,
+    runtime,
 }) => {
-    const { page } = computer;
-    await computer.openPairedChat();
+    const { page } = runtime;
+    await runtime.openPairedChat();
     const png = imagePreviewPng(1600, 2400);
     await page.getByLabel("Choose attachments").setInputFiles([
         { name: "first.png", mimeType: "image/png", buffer: png },

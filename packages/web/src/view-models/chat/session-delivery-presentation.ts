@@ -6,7 +6,7 @@ import {
     type SessionDeliveryStore,
     type SubmittedMessage,
 } from "./session-delivery-store.ts";
-import { computerCoversMessage, type SessionExecutionState } from "./session-execution.ts";
+import { runtimeCoversMessage, type SessionExecutionState } from "./session-execution.ts";
 import { queuedMessages, type SessionMessageQueueStore } from "./session-message-queue-store.ts";
 import { type SessionExecutionMessage, sessionUserCommandIds } from "./session-presentation.ts";
 
@@ -57,7 +57,7 @@ export function sessionDeliveryPresentation(
     const candidates: readonly LocalMessage[] = [
         ...(current === null ? [] : [current]),
         ...delivery.accepted
-            .filter((message) => !computerCoversMessage(execution, message))
+            .filter((message) => !runtimeCoversMessage(execution, message))
             .map((message): LocalMessage => ({ kind: "accepted", message })),
     ];
     const local = candidates.filter(({ message }) => {

@@ -193,7 +193,7 @@ test("Given the daemon has queued work, When the user steers it into the active 
     }
     const daemon = app.daemon;
     if (daemon === null) {
-        throw new Error("Expected a connected controlled Agent Computer");
+        throw new Error("Expected a connected controlled Agent Runtime");
     }
     await daemon.continueReply("wait for steering", { outcome: "complete", output: [] });
     await app.waitForView(() => expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());
@@ -396,7 +396,7 @@ test("Given a reply is running with a queued follow-up, When I edit the follow-u
         ).not.toContain("Turn stopped.");
     }
     if (app.daemon === null) {
-        throw new Error("Expected a connected controlled Agent Computer");
+        throw new Error("Expected a connected controlled Agent Runtime");
     }
     await app.daemon.continueReply("wait for steering", {
         outcome: "complete",
@@ -500,7 +500,7 @@ test("Given two queued submissions are accepted before their snapshot arrives, W
     expect(document.body.textContent).not.toContain("Files attached to this message could not be restored here.");
 
     if (app.daemon === null) {
-        throw new Error("Expected a connected controlled Agent Computer");
+        throw new Error("Expected a connected controlled Agent Runtime");
     }
     await app.daemon.continueReply("wait for steering", { outcome: "complete", output: [] });
     await app.waitForView(() => expect(app.optionalElementByTestId(dataTestId.sessionStatus)).toBeNull());

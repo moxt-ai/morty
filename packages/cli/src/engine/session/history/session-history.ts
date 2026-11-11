@@ -17,7 +17,7 @@ function lifecycle(payload: Extract<SessionEventPayload, { readonly type: "lifec
     return { payload, type: "lifecycle-metadata" } satisfies SessionEventPayload;
 }
 
-/** A settled turn's start, as the Computer recorded it when the turn joined the Session. */
+/** A settled turn's start, as the Runtime recorded it when the turn joined the Session. */
 function turnStart(turn: SettledTurn, content: AcpSessionUpdate, steers: string | null): PlacedLifecycle[] {
     const { commandId } = turn.outcome;
     const requested =
@@ -42,7 +42,7 @@ const turnEnd = (turn: SettledTurn): PlacedLifecycle => ({
 });
 
 /**
- * Places the lifecycle of the turns the Computer ran among the Agent's replayed history, where they happened. A turn
+ * Places the lifecycle of the turns the Runtime ran among the Agent's replayed history, where they happened. A turn
  * starts at the user message its Agent recorded for it and ends before the next user message that does not steer into
  * it, or where the replay ends. A message steered into a turn joins that turn.
  */

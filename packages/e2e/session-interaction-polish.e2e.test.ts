@@ -1,13 +1,13 @@
 import { expect, test } from "./infra/test.ts";
 
 test.describe("answer request spacing", () => {
-    test.use({ computerAgent: { harness: "interaction-test", name: "Interaction Agent" } });
+    test.use({ runtimeAgent: { harness: "interaction-test", name: "Interaction Agent" } });
 
     test("Given a pending answer request, When it is shown, Then the card sits 8px above the composer", async ({
-        computer,
+        runtime,
     }) => {
-        const { page } = computer;
-        await computer.openPairedChat();
+        const { page } = runtime;
+        await runtime.openPairedChat();
 
         await page.getByRole("textbox", { name: "Message" }).fill("Review the verification action");
         await page.getByRole("button", { name: "Send message" }).click();
@@ -29,10 +29,10 @@ test.describe("answer request spacing", () => {
     });
 
     test("Given a pending answer request, When the agent waits for the user, Then no generating text shimmers", async ({
-        computer,
+        runtime,
     }) => {
-        const { page } = computer;
-        await computer.openPairedChat();
+        const { page } = runtime;
+        await runtime.openPairedChat();
 
         await page.getByRole("textbox", { name: "Message" }).fill("Review the verification action");
         await page.getByRole("button", { name: "Send message" }).click();
@@ -46,11 +46,11 @@ test.describe("answer request spacing", () => {
     });
 
     test("Given a tall permission request, When it is shown, Then the interaction scroller is capped at 360px", async ({
-        computer,
+        runtime,
     }) => {
-        const { page } = computer;
+        const { page } = runtime;
         await page.setViewportSize({ width: 851, height: 1600 });
-        await computer.openPairedChat();
+        await runtime.openPairedChat();
 
         await page.getByRole("textbox", { name: "Message" }).fill("request long permission");
         await page.getByRole("button", { name: "Send message" }).click();
@@ -68,10 +68,10 @@ test.describe("answer request spacing", () => {
 
 test.describe("working text shimmer", () => {
     test("Given a running turn, When the user reads Working, Then its text uses the text-shimmer animation", async ({
-        computer,
+        runtime,
     }, testInfo) => {
-        const { page } = computer;
-        await computer.openPairedChat();
+        const { page } = runtime;
+        await runtime.openPairedChat();
 
         await page.getByRole("textbox", { name: "Message" }).fill("interleaved compaction hold");
         await page.getByRole("button", { name: "Send message" }).click();

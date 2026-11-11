@@ -109,7 +109,7 @@ test("Given commands the Computer finished, failed, is running or never received
                     command: { state: "completed", stopReason: "end_turn" },
                 });
                 expect((await readExecution(peer, running)).result).toMatchObject({
-                    command: { state: "failed", code: "computer_restarted" },
+                    command: { state: "failed", code: "runtime_restarted" },
                 });
                 expect((await readExecution(peer, neverReceived)).result).toMatchObject({
                     command: { state: "unknown" },
@@ -161,12 +161,12 @@ test("Given a running turn and a later queued command, When the clock moves back
                     {
                         commandId: queued,
                         state: "failed",
-                        code: "computer_restarted",
+                        code: "runtime_restarted",
                     },
                     {
                         commandId: queued,
                         state: "failed",
-                        code: "computer_restarted",
+                        code: "runtime_restarted",
                     },
                 ]);
                 expect(first).toEqual(second);
@@ -248,7 +248,7 @@ test("Given turns that complete, fail, run or are interrupted by a restart, When
 
                 await peer.restart();
                 expect((await readExecution(peer)).result).toMatchObject({
-                    lastTurn: { commandId: interrupted, state: "failed", code: "computer_restarted" },
+                    lastTurn: { commandId: interrupted, state: "failed", code: "runtime_restarted" },
                 });
 
                 const next = randomUUID();

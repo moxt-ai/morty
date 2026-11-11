@@ -98,7 +98,7 @@ test("Given a partially streamed reply, When Chat remounts and the daemon contin
     const app = await createTestApp({ connectAgent: true });
     const daemon = app.daemon;
     if (daemon === null) {
-        throw new Error("Expected a connected controlled Agent Computer");
+        throw new Error("Expected a connected controlled Agent Runtime");
     }
     await app.queryElementByTestId(
         dataTestId.botConnectionStatus,
@@ -184,7 +184,7 @@ test("Given a conversation is running in the background, When it completes after
     await app.queryElementByTestId(dataTestId.sessionStatus);
     const daemon = app.daemon;
     if (daemon === null) {
-        throw new Error("Expected a connected controlled Agent Computer");
+        throw new Error("Expected a connected controlled Agent Runtime");
     }
     await daemon.continueReply("hold after first delta", { outcome: "complete", output: [] });
     await refreshSessions(app);
@@ -269,7 +269,7 @@ test("Given a running reply, When the user reads the conversation, Then its work
     });
     const daemon = app.daemon;
     if (daemon === null) {
-        throw new Error("Expected a connected controlled Agent Computer");
+        throw new Error("Expected a connected controlled Agent Runtime");
     }
     await daemon.continueReply("hold after first delta", {
         outcome: "complete",

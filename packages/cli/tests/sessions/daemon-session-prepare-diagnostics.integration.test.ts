@@ -49,8 +49,8 @@ if (process.argv.includes("--version")) {
         await withRealDaemon(
             new ControlledAcpAgentSpecification(),
             {
-                MORTY_FAKE_ACP_ALWAYS_FAIL_COMPUTER_INITIALIZATION: "1",
-                MORTY_FAKE_ACP_FAIL_COMPUTER_INITIALIZATION: "Controlled ACP",
+                MORTY_FAKE_ACP_ALWAYS_FAIL_RUNTIME_INITIALIZATION: "1",
+                MORTY_FAKE_ACP_FAIL_RUNTIME_INITIALIZATION: "Controlled ACP",
                 PATH: executableDirectory,
             },
             async (peer) => {

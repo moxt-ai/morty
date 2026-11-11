@@ -15,11 +15,11 @@ import {
 import { listen, port, sendText } from "@morty-build/relay-test-support/websocket";
 import { expect, test } from "vitest";
 import { AcpAgentDefinition } from "../../src/engine/acp/agent/agent-definition.ts";
-import { ComputerLocalContext } from "../../src/engine/computer/config.ts";
-import { runComputer } from "../../src/engine/computer/run.ts";
+import { RuntimeLocalContext } from "../../src/engine/runtime/config.ts";
+import { runRuntime } from "../../src/engine/runtime/run.ts";
 import { ControlledAcpConnection } from "../support/agents/controlled-acp-connection.ts";
 import { memoryComputerCredentials } from "../support/computer-credentials.ts";
-import { createControlledComputerConfig } from "../support/controlled-computer-config.ts";
+import { createControlledRuntimeConfig } from "../support/controlled-runtime-config.ts";
 
 const websocketGuid = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 const recorderPath = fileURLToPath(new URL("./fixtures/acp-environment-recorder.ts", import.meta.url));
@@ -118,7 +118,7 @@ async function inheritedStateDirectory(daemonEnvironment: NodeJS.ProcessEnv): Pr
             MORTY_TEST_ENVIRONMENT_RECORD: record,
         },
     );
-    const config = createControlledComputerConfig(
+    const config = createControlledRuntimeConfig(
         {
             credentials: memoryComputerCredentials("r".repeat(43)),
             computerId: "channel_environment",
@@ -127,10 +127,10 @@ async function inheritedStateDirectory(daemonEnvironment: NodeJS.ProcessEnv): Pr
         },
         [agent],
         // As the worker does: the Computer's local data is this installation's directory.
-        new ComputerLocalContext(installationData, daemonEnvironment),
+        new RuntimeLocalContext(installationData, daemonEnvironment),
     );
     const cancellation = new AbortController();
-    const computer = runComputer(config, cancellation.signal);
+    const runtime = runRuntime(config, cancellation.signal);
     try {
         const socket = await socketReady.promise;
         const discovered = nextMessageOfKind(socket, AGENT_SETTINGS_DISCOVERED_KIND);
@@ -151,7 +151,7 @@ async function inheritedStateDirectory(daemonEnvironment: NodeJS.ProcessEnv): Pr
             socket.destroy();
         }
         relay.close();
-        await computer;
+        await runtime;
         await rm(directory, { force: true, recursive: true });
     }
 }

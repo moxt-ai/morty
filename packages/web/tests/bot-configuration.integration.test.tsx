@@ -253,8 +253,8 @@ test("Given a paired Bot, When its Computer disconnects, Then the disconnected s
 }, async () => {
     const app = await createTestApp({
         prepare: async (application) => {
-            const computer = await application.connectAgent();
-            await computer.disconnect();
+            const runtime = await application.connectAgent();
+            await runtime.disconnect();
         },
     });
     await app.queryElementByTestId(
@@ -642,7 +642,7 @@ test("Given a paired Bot, When the composer controls are visible, Then the confi
     const configurationTrigger = await app.queryElementByTestId(dataTestId.agentConfiguration);
     expect(configurationTrigger.textContent).toContain("Test Small");
     expect(configurationTrigger.textContent).not.toContain("Codex");
-    expect(configurationTrigger.textContent).not.toContain("Controlled Agent Computer");
+    expect(configurationTrigger.textContent).not.toContain("Controlled Agent Runtime");
     expect(configurationTrigger.querySelector(".lucide-sliders-horizontal")).toBeNull();
     expect(app.elementByTestId(dataTestId.harnessTriggerMark, configurationTrigger)).toBeDefined();
 });

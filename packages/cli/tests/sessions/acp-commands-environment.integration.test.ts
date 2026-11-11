@@ -4,15 +4,15 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { AcpAgentDefinition } from "../../src/engine/acp/agent/agent-definition.ts";
 import { AcpContentExternalizer } from "../../src/engine/acp/content/content-externalizer.ts";
-import { ComputerLocalContext } from "../../src/engine/computer/config.ts";
+import { RuntimeLocalContext } from "../../src/engine/runtime/config.ts";
 import { NullSessionObserver } from "../../src/engine/session/api/session-api.ts";
 import { MemorySessionStore } from "../../src/engine/session/record/session-store.ts";
 import { systemTimer } from "../../src/engine/util/timer.ts";
 import { acpAdapters } from "../support/acp-adapters.ts";
 import { ControlledAcpConnection } from "../support/agents/controlled-acp-connection.ts";
 import { memoryComputerCredentials } from "../support/computer-credentials.ts";
-import { createControlledComputerConfig as createComputerConfig } from "../support/controlled-computer-config.ts";
-import { SessionComputerFixture as SessionManager } from "../support/session-computer.ts";
+import { createControlledRuntimeConfig as createRuntimeConfig } from "../support/controlled-runtime-config.ts";
+import { SessionRuntimeFixture as SessionManager } from "../support/session-runtime.ts";
 import { UnretainedExternalContentStore } from "../support/unretained-external-content-store.ts";
 import { fakeAgent, fakeAgentPath, RecordingObserver } from "./acp-feature-fixture.ts";
 
@@ -148,11 +148,11 @@ describe("acp commands environment", () => {
             timer: systemTimer,
             maxProcesses: null,
         });
-        const localContext = new ComputerLocalContext(join(workspace, "state"), {
+        const localContext = new RuntimeLocalContext(join(workspace, "state"), {
             FAKE_ACP_IMAGE_DIRECTORY: generatedImages,
             PATH: process.env["PATH"] ?? "",
         });
-        const config = createComputerConfig(
+        const config = createRuntimeConfig(
             {
                 credentials: memoryComputerCredentials("r".repeat(43)),
                 computerId: "login-shell-environment",

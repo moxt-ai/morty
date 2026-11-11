@@ -19,7 +19,7 @@ test("Given an open conversation, When its Agent is renamed on the computer, The
     const app = await createTestApp({ agents: [{ harness: "codex", label: "Codex" }], connectAgent: true, clock });
     const daemon = app.daemon;
     if (daemon === null) {
-        throw new Error("Expected a connected controlled Agent Computer");
+        throw new Error("Expected a connected controlled Agent Runtime");
     }
     const draft = await app.queryElementByTestId(
         dataTestId.messageComposer,
@@ -51,7 +51,7 @@ test("Given a new conversation draft, When its Agent is renamed on the computer,
     const app = await createTestApp({ agents: [{ harness: "codex", label: "Codex" }], connectAgent: true, clock });
     const daemon = app.daemon;
     if (daemon === null) {
-        throw new Error("Expected a connected controlled Agent Computer");
+        throw new Error("Expected a connected controlled Agent Runtime");
     }
     await app.queryElementByTestId(
         dataTestId.messageComposer,

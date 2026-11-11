@@ -41,7 +41,7 @@ test("Given a settled response with answer Markdown and tool output, When I copy
     const app = await createTestApp({ connectAgent: true });
     const daemon = app.daemon;
     if (daemon === null) {
-        throw new Error("Expected a controlled Agent Computer");
+        throw new Error("Expected a controlled Agent Runtime");
     }
     const composer = await app.queryElementByTestId(dataTestId.messageComposer);
     if (!(composer instanceof HTMLTextAreaElement)) {
@@ -95,7 +95,7 @@ test.each(["", " \n\t"])(
         const app = await createTestApp({ connectAgent: true });
         const daemon = app.daemon;
         if (daemon === null) {
-            throw new Error("Expected a controlled Agent Computer");
+            throw new Error("Expected a controlled Agent Runtime");
         }
         await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "hold reasoning only");
         const response = await app.waitForView(() => getByRole(document.body, "article", { name: "Agent response" }));

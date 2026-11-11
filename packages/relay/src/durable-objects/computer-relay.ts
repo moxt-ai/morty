@@ -86,8 +86,8 @@ export class ComputerRelay extends DurableObject<ConfiguredRelayRelayBindings> {
                 logger.child({
                     durableObjectClass: "ComputerRelay",
                     durableObjectId: this.ctx.id.toString(),
-                    computerInstanceId: crypto.randomUUID(),
-                    computerInstanceStartedAt: Date.now(),
+                    runtimeInstanceId: crypto.randomUUID(),
+                    runtimeInstanceStartedAt: Date.now(),
                 }),
             ),
         };
@@ -293,7 +293,7 @@ export class ComputerRelay extends DurableObject<ConfiguredRelayRelayBindings> {
                 MORTY_COMPUTER_ID: current.computerId,
                 MORTY_LOCAL_CHANNEL: this.#localChannel,
                 MORTY_COMPUTER_STORE: this.#operate(current.computerId),
-                MORTY_COMPUTER_EXECUTION: {
+                MORTY_RUNTIME_EXECUTION: {
                     computerId: current.computerId,
                     operations: createLocalSessionOperations(this.#connectionsForComputer.context, current.computerId),
                 },
@@ -317,7 +317,7 @@ export class ComputerRelay extends DurableObject<ConfiguredRelayRelayBindings> {
             MORTY_COMPUTER_ID: computerId,
             MORTY_LOCAL_CHANNEL: this.#localChannel,
             MORTY_COMPUTER_STORE: this.#operate(computerId),
-            MORTY_COMPUTER_EXECUTION: {
+            MORTY_RUNTIME_EXECUTION: {
                 computerId,
                 operations: createLocalSessionOperations(this.#connectionsForComputer.context, computerId),
             },

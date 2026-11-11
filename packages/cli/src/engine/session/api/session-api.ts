@@ -51,7 +51,7 @@ export interface AgentSettingsInspectionOptions {
     readonly signal: AbortSignal;
 }
 
-/** A setting the Computer applies on its own authority: a launch, stored or prompt-requested selection. */
+/** A setting the Runtime applies on its own authority: a launch, stored or prompt-requested selection. */
 export interface SessionConfigurationChange extends SessionPrepareOptions {
     readonly booleanValue: boolean;
     readonly configId: string;
@@ -187,9 +187,9 @@ export class AgentSettingsSnapshot {
     }
 }
 
-// What the computer supplies to the session layer. The session layer never imports the computer.
+// What the runtime supplies to the session layer. The session layer never imports the runtime.
 
-/** Resolves a catalog Agent's current launch definition and its Computer-owned adapter. */
+/** Resolves a catalog Agent's current launch definition and its Runtime-owned adapter. */
 export type ResolveAgent = (
     harness: string,
     signal: AbortSignal,
@@ -203,7 +203,7 @@ export type ResolveAgent = (
 /** Records a failure's code and correlation identifiers in the local diagnostics log, never its text. */
 export type ReportFailure = (event: string, requestId: string, details: Readonly<Record<string, string>>) => void;
 
-/** Delivers session events to connected clients. The computer's relay publisher implements it. */
+/** Delivers session events to connected clients. The runtime's relay publisher implements it. */
 export interface SessionEventSink {
     readonly publish: (event: SessionLiveEvent) => void;
     readonly publishClosed: (event: SessionCloseNoticeEvent) => void;

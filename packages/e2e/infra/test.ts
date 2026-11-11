@@ -1,6 +1,6 @@
 import { test as base, expect, type Page } from "@playwright/test";
 import { E2EHarness } from "./harness.ts";
-import { createTestComputer } from "./test-computer.ts";
+import { createTestRuntime } from "./test-runtime.ts";
 
 export { expect } from "@playwright/test";
 
@@ -14,29 +14,29 @@ export async function conversationLoaded(page: Page): Promise<void> {
     ).toBeHidden();
 }
 
-function computerTest() {
+function runtimeTest() {
     return base.extend<{
-        readonly computer: Awaited<ReturnType<typeof createTestComputer>>;
-        readonly computerMachineName: string;
-        readonly computerAgent: { readonly harness: string; readonly name: string };
+        readonly runtime: Awaited<ReturnType<typeof createTestRuntime>>;
+        readonly runtimeMachineName: string;
+        readonly runtimeAgent: { readonly harness: string; readonly name: string };
     }>({
-        computerMachineName: ["Browser test Computer", { option: true }],
-        computerAgent: [{ harness: "claude", name: "Claude Code" }, { option: true }],
-        computer: async ({ browserName, contextOptions, computerMachineName, computerAgent }, use, testInfo) => {
+        runtimeMachineName: ["Browser test Runtime", { option: true }],
+        runtimeAgent: [{ harness: "claude", name: "Claude Code" }, { option: true }],
+        runtime: async ({ browserName, contextOptions, runtimeMachineName, runtimeAgent }, use, testInfo) => {
             const harness = await E2EHarness.create("chat-e2e");
             let failure: unknown;
             try {
-                const computer = await createTestComputer(
+                const runtime = await createTestRuntime(
                     harness,
                     browserName,
                     contextOptions,
-                    computerMachineName,
-                    computerAgent,
+                    runtimeMachineName,
+                    runtimeAgent,
                 );
                 try {
-                    await Promise.race([use(computer), computer.failure]);
+                    await Promise.race([use(runtime), runtime.failure]);
                 } finally {
-                    await computer.close();
+                    await runtime.close();
                 }
             } catch (error) {
                 failure = error;
@@ -52,4 +52,4 @@ function computerTest() {
     });
 }
 
-export const test = computerTest();
+export const test = runtimeTest();

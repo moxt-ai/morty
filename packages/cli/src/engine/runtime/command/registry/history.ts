@@ -1,0 +1,238 @@
+import { sameNativeSession } from "@morty-build/client/native-session";
+import {
+    type decodeSessionHistoryPageLoad,
+    type decodeSessionPreviewHistoryPageLoad,
+    type NativeSessionEvents,
+    type NativeSessionTarget,
+    type QueuedPromptRequestEventLog,
+    SESSION_HISTORY_PAGE_LOAD_KIND,
+    SESSION_HISTORY_PAGE_LOADED_KIND,
+    SESSION_PREVIEW_HISTORY_PAGE_LOAD_KIND,
+    SESSION_PREVIEW_HISTORY_PAGE_LOADED_KIND,
+    type SessionEvent,
+} from "@morty-build/client/protocol";
+import type { WebSocket } from "undici";
+import { operationErrorCode } from "../../../infra/operation-error.ts";
+import type { ResolveAgent } from "../../../session/api/session-api.ts";
+import { SessionError } from "../../../session/api/session-error.ts";
+import type { SessionEventPage } from "../../../session/history/session-event-store.ts";
+import type { SessionManager } from "../../../session/manager/session-manager.ts";
+import type { NativeSessionService } from "../../../session/native/native-session-browser.ts";
+import type { PromptLifecycle } from "../../../session/prompt/prompt-lifecycle.ts";
+import { resolveSessionDirectory } from "../../../session/workspace/resolve-session-directory.ts";
+import type { WorkspaceDirectoryService } from "../../../session/workspace/workspace-directory.ts";
+import type { RelayConnectionDiagnostics } from "../../relay/diagnostics.ts";
+import type { RuntimeCommand } from "../definition.ts";
+import { reportOperationFailure, send } from "../transport.ts";
+
+interface OrderedHistoryEvent {
+    readonly cursor: string | null;
+    readonly event: SessionEvent;
+}
+
+async function loadHistoryPage(
+    target: NativeSessionTarget,
+    eventLimit: number,
+    initialCursor: string | null,
+    queuedPromptRequests: readonly QueuedPromptRequestEventLog[],
+    load: (eventLimit: number, cursor: string | null) => Promise<SessionEventPage>,
+): Promise<NativeSessionEvents> {
+    let cursor = initialCursor;
+    let loaded: readonly OrderedHistoryEvent[] = [];
+    let sessionGenerationId: string | null = null;
+    let sourceNextCursor: string | null = null;
+    let throughPosition: string | null = null;
+    do {
+        const replay = await load(eventLimit, cursor);
+        // Keep the newest page's cut: older pages must not advance the live boundary.
+        throughPosition ??= replay.throughPosition;
+        if (sessionGenerationId !== null && replay.sessionGenerationId !== sessionGenerationId) {
+            throw new SessionError("session_reloaded", "The Session reloaded while history was loading");
+        }
+        if (
+            replay.events.some(
+                (event) =>
+                    !sameNativeSession(event.target, target) ||
+                    event.sessionGenerationId !== replay.sessionGenerationId,
+            )
+        ) {
+            throw new SessionError(
+                "session_history_unavailable",
+                "The Session history contains events from another Session",
+            );
+        }
+        sessionGenerationId = replay.sessionGenerationId;
+        const events = replay.events.map((event, index) => {
+            const eventCursor = replay.nextCursor === null && index === 0 ? null : event.eventId;
+            return { cursor: eventCursor, event };
+        });
+        loaded = [...events, ...loaded];
+        sourceNextCursor = replay.nextCursor;
+        if (loaded.length >= eventLimit) {
+            break;
+        }
+        cursor = sourceNextCursor;
+    } while (cursor !== null);
+
+    if (sessionGenerationId === null || throughPosition === null) {
+        throw new SessionError("session_history_unavailable", "The Session history is unavailable");
+    }
+    const orderedEvents = loaded.slice(-eventLimit);
+    const nextCursor = orderedEvents[0]?.cursor ?? null;
+    return {
+        events: {
+            events: orderedEvents.map(({ event }) => event),
+            nextCursor,
+            sessionGenerationId,
+            tailCursor: orderedEvents.at(-1)?.event.eventId ?? "",
+            throughPosition,
+            truncated: nextCursor !== null,
+            version: 2,
+        },
+        queuedPromptRequests,
+    };
+}
+
+async function executeSessionHistoryPageLoad(
+    socket: WebSocket,
+    command: ReturnType<typeof decodeSessionHistoryPageLoad>,
+    resolveAgent: ResolveAgent,
+    directories: WorkspaceDirectoryService,
+    diagnostics: RelayConnectionDiagnostics,
+    sessions: SessionManager,
+    nativeSessions: NativeSessionService,
+    eventProjection: PromptLifecycle,
+    signal: AbortSignal,
+): Promise<void> {
+    let harness: string | undefined;
+    try {
+        const [entry] = await nativeSessions.querySessions([command.target], signal);
+        if (entry === undefined) {
+            throw new SessionError("session_not_found", "The Session was not found");
+        }
+        harness = entry.harness;
+        const resolved = await resolveSessionDirectory(directories, entry.directory, signal);
+        const loadOptions = {
+            ...(await resolveAgent(entry.harness, signal, command.target)),
+            cwd: resolved.cwd,
+            target: command.target,
+            signal,
+        };
+        const recovery = eventProjection.promptRequestRecovery(command.target);
+        const events = await loadHistoryPage(
+            command.target,
+            command.eventLimit,
+            command.cursor,
+            recovery.queuedPromptRequests,
+            async (eventLimit, cursor) => await sessions.loadSessionEvents(loadOptions, eventLimit, cursor),
+        );
+        signal.throwIfAborted();
+        send(socket, {
+            events,
+            kind: SESSION_HISTORY_PAGE_LOADED_KIND,
+            requestId: command.requestId,
+            target: command.target,
+        });
+    } catch (error) {
+        if (!signal.aborted) {
+            diagnostics.daemonDiagnostic(
+                "session_history_v2_load_failed",
+                command.requestId,
+                {
+                    ...(harness === undefined ? {} : { harness }),
+                    code: operationErrorCode(error),
+                    sessionId: command.target.sessionId,
+                },
+                error,
+            );
+            reportOperationFailure(socket, command.requestId, command.target, error);
+        }
+    }
+}
+
+async function executeSessionPreviewHistoryPageLoad(
+    socket: WebSocket,
+    command: ReturnType<typeof decodeSessionPreviewHistoryPageLoad>,
+    resolveAgent: ResolveAgent,
+    directories: WorkspaceDirectoryService,
+    diagnostics: RelayConnectionDiagnostics,
+    nativeSessions: NativeSessionService,
+    signal: AbortSignal,
+): Promise<void> {
+    try {
+        const resolved = await resolveSessionDirectory(directories, command.directory, signal);
+        const loadOptions = {
+            ...(await resolveAgent(command.target.harness, signal, command.target)),
+            cwd: resolved.cwd,
+            target: command.target,
+            signal,
+        };
+        const events = await loadHistoryPage(
+            command.target,
+            command.eventLimit,
+            command.cursor,
+            [],
+            async (eventLimit, cursor) =>
+                await nativeSessions.readSessionHistory(loadOptions, command.target.sessionId, eventLimit, cursor),
+        );
+        signal.throwIfAborted();
+        send(socket, {
+            events,
+            kind: SESSION_PREVIEW_HISTORY_PAGE_LOADED_KIND,
+            requestId: command.requestId,
+            target: command.target,
+        });
+    } catch (error) {
+        if (!signal.aborted) {
+            diagnostics.daemonDiagnostic(
+                "session_history_v2_load_failed",
+                command.requestId,
+                {
+                    harness: command.target.harness,
+                    code: operationErrorCode(error),
+                    sessionId: command.target.sessionId,
+                },
+                error,
+            );
+            reportOperationFailure(socket, command.requestId, command.target, error);
+        }
+    }
+}
+
+export const sessionHistoryPageLoadCommand: RuntimeCommand = {
+    kind: SESSION_HISTORY_PAGE_LOAD_KIND,
+    handle: (context, message): void => {
+        if (message.kind !== SESSION_HISTORY_PAGE_LOAD_KIND) {
+            throw new Error("Command kind mismatch");
+        }
+        void executeSessionHistoryPageLoad(
+            context.socket,
+            message,
+            context.resolveAgent,
+            context.directories,
+            context.diagnostics,
+            context.sessions,
+            context.nativeSessions,
+            context.eventProjection,
+            context.signal,
+        );
+    },
+};
+
+export const previewHistoryPageLoadCommand: RuntimeCommand = {
+    kind: SESSION_PREVIEW_HISTORY_PAGE_LOAD_KIND,
+    handle: (context, message): void => {
+        if (message.kind !== SESSION_PREVIEW_HISTORY_PAGE_LOAD_KIND) {
+            throw new Error("Command kind mismatch");
+        }
+        void executeSessionPreviewHistoryPageLoad(
+            context.socket,
+            message,
+            context.resolveAgent,
+            context.directories,
+            context.diagnostics,
+            context.nativeSessions,
+            context.signal,
+        );
+    },
+};

@@ -9,7 +9,7 @@ export class ComputerScope {
     }
 }
 
-function sessionComputerErrorStatus(code: string): number {
+function sessionRuntimeErrorStatus(code: string): number {
     if (code === "session_not_found") {
         return 404;
     }
@@ -38,21 +38,21 @@ function sessionComputerErrorStatus(code: string): number {
     return 503;
 }
 
-interface SessionComputerErrorOptions extends ErrorOptions {
-    readonly computerTimings?: NonNullable<SessionOperationFailedEvent["computerTimings"]> | undefined;
+interface SessionRuntimeErrorOptions extends ErrorOptions {
+    readonly runtimeTimings?: NonNullable<SessionOperationFailedEvent["runtimeTimings"]> | undefined;
 }
 
-export class SessionComputerError extends Error implements HttpError {
+export class SessionRuntimeError extends Error implements HttpError {
     readonly code: string;
     readonly httpStatus: number;
-    readonly computerTimings: NonNullable<SessionOperationFailedEvent["computerTimings"]>;
+    readonly runtimeTimings: NonNullable<SessionOperationFailedEvent["runtimeTimings"]>;
 
-    constructor(code: string, message: string, options: SessionComputerErrorOptions = {}) {
+    constructor(code: string, message: string, options: SessionRuntimeErrorOptions = {}) {
         super(message, options);
         this.code = code;
-        this.httpStatus = sessionComputerErrorStatus(code);
-        this.name = "SessionComputerError";
-        this.computerTimings = options.computerTimings ?? [];
+        this.httpStatus = sessionRuntimeErrorStatus(code);
+        this.name = "SessionRuntimeError";
+        this.runtimeTimings = options.runtimeTimings ?? [];
     }
 
     readonly toHttpJson: HttpError["toHttpJson"] = () => ({
@@ -65,4 +65,4 @@ export class SessionComputerError extends Error implements HttpError {
  * The Computer answered a control command with its own `session.operation.failed`: it finished handling that command
  * without a result. Unlike a lost connection, timeout or invalid reply, nothing about the command is still in flight.
  */
-export class ComputerOperationFailedError extends SessionComputerError {}
+export class RuntimeOperationFailedError extends SessionRuntimeError {}

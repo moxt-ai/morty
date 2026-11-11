@@ -1,4 +1,4 @@
-import type { VerifiedComputerConnection } from "../../../../engine/computer/connection/computer-connection.ts";
+import type { VerifiedComputerConnection } from "../../../../engine/runtime/connection/computer-connection.ts";
 import { writeExistingFile } from "../../../../storage/files/output-file.ts";
 
 export interface SavedPairSummary {

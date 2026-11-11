@@ -1,10 +1,10 @@
-import { refreshAgentCatalog } from "../../engine/computer/catalog/refresh-agent-catalog.ts";
-import { ComputerLoop } from "../../engine/computer/computer-loop.ts";
-import type { ComputerConfig } from "../../engine/computer/config.ts";
-import { prepareComputerConnection } from "../../engine/computer/pairing.ts";
-import { ComputerRelayRevokedError } from "../../engine/computer/relay/computer-revocation.ts";
-import { ComputerAgentProcesses } from "../../engine/session/process/computer-agent-processes.ts";
-import { ComputerTurnActivity } from "../../engine/session/turn/computer-turn-activity.ts";
+import { refreshAgentCatalog } from "../../engine/runtime/catalog/refresh-agent-catalog.ts";
+import type { RuntimeConfig } from "../../engine/runtime/config.ts";
+import { prepareComputerConnection } from "../../engine/runtime/pairing.ts";
+import { ComputerRelayRevokedError } from "../../engine/runtime/relay/computer-revocation.ts";
+import { RuntimeLoop } from "../../engine/runtime/runtime-loop.ts";
+import { RuntimeAgentProcesses } from "../../engine/session/process/runtime-agent-processes.ts";
+import { RuntimeTurnActivity } from "../../engine/session/turn/runtime-turn-activity.ts";
 import type { InstallationDirectory } from "../../engine/storage/installation/installation-files.ts";
 import { BoundedLineLog } from "../../engine/storage/logs/bounded-log.ts";
 import { logDirectory, WORKER_LIFECYCLE_LOG_FILENAME } from "../../engine/storage/logs/log-files.ts";
@@ -16,8 +16,8 @@ import { serveLocalControl } from "../control/local-server.ts";
 import { openMortyInstallation } from "../pairing/pair-local-machine.ts";
 import { surviveUnhandledRejections, type UnhandledRejectionGuard } from "./unhandled-rejection.ts";
 
-class DaemonComputerError extends Error {
-    readonly code = "worker_computer_failed";
+class DaemonRuntimeError extends Error {
+    readonly code = "worker_runtime_failed";
     constructor(pairingGeneration: string, cause: unknown) {
         super(`Computer pairing ${pairingGeneration} failed`, { cause });
     }
@@ -68,7 +68,7 @@ export async function runDaemon(version: string, signal: AbortSignal): Promise<v
     const shutdown = new AbortController();
     const combined = AbortSignal.any([signal, shutdown.signal]);
     try {
-        await runDaemonComputer(version, combined, shutdown, rejectionGuard);
+        await runDaemonRuntime(version, combined, shutdown, rejectionGuard);
     } catch (cause) {
         const control = await openMortyInstallation(AbortSignal.timeout(5_000), process.env);
         new BoundedLineLog(logDirectory(control.stateDirectory), WORKER_LIFECYCLE_LOG_FILENAME, 512 * 1024).record(
@@ -84,7 +84,7 @@ export async function runDaemon(version: string, signal: AbortSignal): Promise<v
     }
 }
 
-async function runDaemonComputer(
+async function runDaemonRuntime(
     version: string,
     combined: AbortSignal,
     shutdown: AbortController,
@@ -106,19 +106,19 @@ async function runDaemonComputer(
     try {
         const installation = control;
         rejectionGuard.bindStateDirectory(control.stateDirectory);
-        const turnActivity = new ComputerTurnActivity();
-        const agentProcesses = new ComputerAgentProcesses();
+        const turnActivity = new RuntimeTurnActivity();
+        const agentProcesses = new RuntimeAgentProcesses();
         let active:
             | {
                   readonly pairingGeneration: string;
-                  readonly config: ComputerConfig;
+                  readonly config: RuntimeConfig;
                   readonly controller: AbortController;
                   readonly completion: Promise<void>;
               }
             | undefined;
         const fail = (pairingGeneration: string, cause: unknown): void => {
             console.error(`Computer pairing ${pairingGeneration} failed; stopping the daemon`, cause);
-            shutdown.abort(new DaemonComputerError(pairingGeneration, cause));
+            shutdown.abort(new DaemonRuntimeError(pairingGeneration, cause));
         };
         const reconcile = async (): Promise<void> => {
             const connection = await installation.currentConnection(combined);
@@ -142,7 +142,7 @@ async function runDaemonComputer(
                     const controller = new AbortController();
                     // Process diagnostics live beside the shared control directory,
                     // so every Computer can include them in bug reports.
-                    const loop = new ComputerLoop(async () => config, {
+                    const loop = new RuntimeLoop(async () => config, {
                         processLogsDirectory: control.stateDirectory,
                         turnActivity,
                         agentProcesses,
@@ -252,7 +252,7 @@ async function runDaemonComputer(
                     }
                 },
             );
-            if (shutdown.signal.reason instanceof DaemonComputerError) {
+            if (shutdown.signal.reason instanceof DaemonRuntimeError) {
                 throw shutdown.signal.reason;
             }
         } finally {

@@ -10,7 +10,7 @@ test("Given a response contains inline and display LaTeX, When I read it, Then t
     const app = await createTestApp({ connectAgent: true });
     const daemon = app.daemon;
     if (daemon === null) {
-        throw new Error("Expected a controlled Agent Computer");
+        throw new Error("Expected a controlled Agent Runtime");
     }
     const composer = await app.queryElementByTestId(dataTestId.messageComposer);
     if (!(composer instanceof HTMLTextAreaElement)) {

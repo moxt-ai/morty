@@ -11,10 +11,10 @@ for (const mobile of [false, true]) {
             },
         });
         test("Given a new conversation, When I send a message and continue typing, Then one message is shown and the next draft survives in the focused composer", async ({
-            computer,
+            runtime,
         }, testInfo) => {
-            const { page } = computer;
-            await computer.openPairedChat();
+            const { page } = runtime;
+            await runtime.openPairedChat();
             const composer = page.getByRole("textbox", { name: "Message" });
             await composer.fill("Read my first message");
             await page.getByRole("button", { name: "Send message" }).click();

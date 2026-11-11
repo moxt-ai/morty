@@ -1,7 +1,7 @@
 import { resolve } from "node:path";
 import { MortyClient, StaticMortyCredentialProvider } from "@morty-build/client";
 import * as v from "valibot";
-import type { ControlledAgent } from "../../../../tests/support/fake-daemon/computer.ts";
+import type { ControlledAgent } from "../../../../tests/support/fake-daemon/runtime.ts";
 import { createResponseLossProxy } from "../../../relay-test-support/src/response-loss-proxy.ts";
 import { createIdentityFixture } from "../../../worker/tests/support/identity-fixture.ts";
 import { TestApiTransport } from "./test-api-transport.ts";
@@ -61,9 +61,9 @@ export async function createChatWorkerEnvironment(
         const transport = new TestApiTransport(origin);
         transport.open();
         const connect = async (agents: readonly ControlledAgent[], sessionIds?: ReadonlySet<string>) => {
-            const computer = await cloud.connectAgent(identity.computerId, identity.token, agents, sessionIds);
+            const runtime = await cloud.connectAgent(identity.computerId, identity.token, agents, sessionIds);
             const setup = await request(`chat/computers/${identity.computerId}/setup`, {
-                computerId: computer.computerId,
+                computerId: runtime.computerId,
                 harness: agents[0]?.harness ?? "codex",
             });
             if (setup.status !== 202) {
@@ -73,20 +73,20 @@ export async function createChatWorkerEnvironment(
                 target: { readonly harness: string; readonly sessionId: string },
                 signal: AbortSignal,
             ) => {
-                const access = await computer.api.access(signal, target);
+                const access = await runtime.api.access(signal, target);
                 return new MortyClient({
                     endpoint: cloud.directOrigin,
-                    computerId: computer.computerId,
+                    computerId: runtime.computerId,
                     credentialProvider: new StaticMortyCredentialProvider(access.credential),
                 });
             };
             return {
-                failure: computer.failure,
-                continueReply: computer.continueReply,
+                failure: runtime.failure,
+                continueReply: runtime.continueReply,
                 /** Closes a Session through the Relay, the way another Morty client of this Computer would. */
                 closeSession: async (sessionId: string): Promise<void> => {
                     const response = await cloud.dispatchFetch(
-                        `${origin}/__test/computers/${computer.computerId}/harnesses/${agents[0]?.harness ?? "codex"}/sessions/${encodeURIComponent(sessionId)}/close`,
+                        `${origin}/__test/computers/${runtime.computerId}/harnesses/${agents[0]?.harness ?? "codex"}/sessions/${encodeURIComponent(sessionId)}/close`,
                         { method: "POST" },
                     );
                     if (response.status !== 200) {
@@ -136,7 +136,7 @@ export async function createChatWorkerEnvironment(
                     if (first === undefined) {
                         throw new Error("A controlled Computer needs at least one Agent");
                     }
-                    await computer.restartWithAgents({
+                    await runtime.restartWithAgents({
                         additionalAgents: others.map((agent) => ({ harness: agent.harness, name: agent.label })),
                         harness: first.harness,
                         agentName: first.label,
@@ -144,7 +144,7 @@ export async function createChatWorkerEnvironment(
                 },
                 /** Reads the current title through a separate client's production Computer API. */
                 readSessionTitle: async (sessionId: string) => {
-                    const session = await computer.api.managedSession(
+                    const session = await runtime.api.managedSession(
                         { harness: agents[0]?.harness ?? "codex", sessionId },
                         AbortSignal.timeout(30000),
                     );
@@ -161,11 +161,11 @@ export async function createChatWorkerEnvironment(
                         client.close();
                     }
                 },
-                disconnect: computer.disconnect,
-                reconnect: computer.reconnect,
+                disconnect: runtime.disconnect,
+                reconnect: runtime.reconnect,
                 /** Revokes the Computer through the Relay, as the Relay does when its credential was reused. */
                 revoke: async (): Promise<void> => await cloud.revokeComputer(identity.computerId),
-                writeFiles: computer.writeFiles,
+                writeFiles: runtime.writeFiles,
             };
         };
         return {
@@ -179,9 +179,9 @@ export async function createChatWorkerEnvironment(
             ) => await connect([agent], sessionIds),
             connectAgents: async (agents: readonly ControlledAgent[], sessionIds?: ReadonlySet<string>) =>
                 await connect(agents, sessionIds),
-            connectComputer: async () => {
-                const computer = await cloud.connectAgent(identity.computerId, identity.token);
-                return { failure: computer.failure, computerId: computer.computerId };
+            connectRuntime: async () => {
+                const runtime = await cloud.connectAgent(identity.computerId, identity.token);
+                return { failure: runtime.failure, computerId: runtime.computerId };
             },
             createTransferUrl: async () => {
                 const response = await request(`computers/${identity.computerId}/identity/transfers`, {

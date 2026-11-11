@@ -11,7 +11,7 @@ import { RecordingObserver } from "../sessions/acp-feature-fixture.ts";
 import { acpAdapters } from "../support/acp-adapters.ts";
 import { CodexFixture } from "../support/agents/codex.ts";
 import { FakeOpenAiProvider } from "../support/llm/openai.ts";
-import { SessionComputerFixture as SessionManager } from "../support/session-computer.ts";
+import { SessionRuntimeFixture as SessionManager } from "../support/session-runtime.ts";
 import { UnretainedExternalContentStore } from "../support/unretained-external-content-store.ts";
 
 test("Given real Codex initializes but its process is killed during model discovery, When discovery completes, Then the dead backend is unavailable", async () => {

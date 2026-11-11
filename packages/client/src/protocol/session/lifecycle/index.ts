@@ -208,7 +208,7 @@ export const decodeSessionCreationReadCommand = (encoded: string): SessionCreati
 export const encodeSessionCreationReadCommand = (message: SessionCreationReadCommand): string =>
     encode(message, sessionCreationReadCommandSchema);
 
-const computerTimingsSchema = z
+const runtimeTimingsSchema = z
     .array(
         z
             .object({
@@ -234,7 +234,7 @@ export const sessionReadyEventSchema = z
         kind: z.literal(SESSION_READY_KIND),
         requestId: IDENTIFIER,
         restored: z.boolean(),
-        computerTimings: computerTimingsSchema.optional(),
+        runtimeTimings: runtimeTimingsSchema.optional(),
         target: nativeSessionTargetSchema,
     })
     .readonly();
@@ -318,7 +318,7 @@ const sessionOperationFailedEventSchema = z
         kind: z.literal(SESSION_OPERATION_FAILED_KIND),
         message: z.string().min(1).max(500),
         requestId: IDENTIFIER,
-        computerTimings: computerTimingsSchema.optional(),
+        runtimeTimings: runtimeTimingsSchema.optional(),
         target: nativeSessionTargetSchema.optional(),
     })
     .readonly();

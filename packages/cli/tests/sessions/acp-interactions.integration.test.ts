@@ -3,7 +3,7 @@ import { AcpContentExternalizer } from "../../src/engine/acp/content/content-ext
 import { MemorySessionStore } from "../../src/engine/session/record/session-store.ts";
 import { systemTimer } from "../../src/engine/util/timer.ts";
 import { acpAdapters } from "../support/acp-adapters.ts";
-import { SessionComputerFixture as SessionManager } from "../support/session-computer.ts";
+import { SessionRuntimeFixture as SessionManager } from "../support/session-runtime.ts";
 import { UnretainedExternalContentStore } from "../support/unretained-external-content-store.ts";
 import { completeAcpControls, createControlledSession } from "./acp-controls-fixture.ts";
 

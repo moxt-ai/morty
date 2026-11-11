@@ -1,10 +1,10 @@
 export { createMortyApplication } from "./app.ts";
 export { createDurableObjectContext } from "./di/create-durable-object-context.ts";
 export type { RelayContext } from "./di/create-relay-dependencies.ts";
-export { createWorkerContext, type WorkerComputerGateways } from "./di/create-worker-context.ts";
+export { createWorkerContext, type WorkerRuntimeGateways } from "./di/create-worker-context.ts";
 export { RelaySockets } from "./durable-objects/relay-sockets.ts";
 export * from "./entity/authentication/project-authentication.ts";
-export { ComputerScope, SessionComputerError } from "./entity/do/session.ts";
+export { ComputerScope, SessionRuntimeError } from "./entity/do/session.ts";
 export { isHttpError, toHttpError } from "./entity/http-error.ts";
 export { createRandomToken, hashSecret, PairingDirectoryError, validateIdentifier } from "./entity/pairing/pairing.ts";
 export { CloudflareChannelComputer } from "./gateway/cloudflare-channel-computer.ts";

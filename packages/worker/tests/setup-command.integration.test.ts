@@ -58,7 +58,7 @@ test.runIf(process.platform !== "win32")(
 
         const setup = await run(["setup", "--base-url", fixture.origin, "--harness", "codex"], true);
         expect(setup.code, setup.stderr).toBe(1);
-        expect(setup.stdout).toContain('"status":"computer_verified"');
+        expect(setup.stdout).toContain('"status":"runtime_verified"');
         expect(setup.stdout).toContain('"status":"identity_ready"');
         expect(setup.stdout).toContain('"code":"CANCELLED"');
         const configuration = v.parse(

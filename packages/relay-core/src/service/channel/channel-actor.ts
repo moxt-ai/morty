@@ -53,12 +53,12 @@ import {
     type SessionPromptCommand,
     WORKSPACE_ENTRIES_KIND,
 } from "@morty-build/client/protocol";
-import { SessionComputerError } from "../../entity/do/session.ts";
+import { SessionRuntimeError } from "../../entity/do/session.ts";
 import { logger } from "../../infra/logger.ts";
 import type { SessionStatusNotifications } from "../../infra/session-status-notifications.ts";
 import { SessionLiveEventRelay } from "./session-live-event-relay.ts";
 
-function sessionErrorCloseCode(error: SessionComputerError): 1008 | 1013 {
+function sessionErrorCloseCode(error: SessionRuntimeError): 1008 | 1013 {
     if (error.code === "session_busy") {
         return 1013;
     }
@@ -320,7 +320,7 @@ export class ChannelActor {
             if (signal.aborted) {
                 throw error;
             }
-            if (error instanceof SessionComputerError) {
+            if (error instanceof SessionRuntimeError) {
                 socket.close(sessionErrorCloseCode(error), error.code);
                 return;
             }
@@ -362,7 +362,7 @@ export class ChannelActor {
         }
         const daemon = this.#peers.daemons().find((candidate) => candidate.isOpen());
         if (daemon === undefined) {
-            throw new SessionComputerError("computer_offline", "The local computer is offline");
+            throw new SessionRuntimeError("computer_offline", "The local computer is offline");
         }
         daemon.send(copyBinaryFrame(message));
     };
@@ -413,7 +413,7 @@ export class ChannelActor {
             if (signal.aborted) {
                 throw error;
             }
-            if (error instanceof SessionComputerError) {
+            if (error instanceof SessionRuntimeError) {
                 socket.close(sessionErrorCloseCode(error), error.code);
                 return;
             }
@@ -465,7 +465,7 @@ export class ChannelActor {
                 return;
             case WORKSPACE_ENTRIES_KIND:
                 return;
-            case "computer.upgrade.result":
+            case "runtime.upgrade.result":
             case "computer.diagnostics.result":
             case COMPUTER_PONG_KIND:
                 return;

@@ -15,11 +15,11 @@ for (const viewport of [
         });
 
         test("Given a new visitor, When they connect their original session and continue their work, Then guidance explains each step and leaves them in control", async ({
-            computer,
+            runtime,
         }, testInfo) => {
-            const { page } = computer;
+            const { page } = runtime;
             await page.context().grantPermissions(["clipboard-read", "clipboard-write"]);
-            await page.goto(computer.origin);
+            await page.goto(runtime.origin);
             await expect(page.getByRole("heading", { name: "Step away. Keep your agent working." })).toBeVisible();
             await expect(page.getByRole("heading")).toHaveCount(1);
             const details = page.getByText("Review what setup does", { exact: true });
@@ -34,7 +34,7 @@ for (const viewport of [
 
                 await copy.click();
                 const instruction = await page.evaluate(() => navigator.clipboard.readText());
-                expect(instruction).toContain(`${computer.origin}/setup.md`);
+                expect(instruction).toContain(`${runtime.origin}/setup.md`);
                 await expect(page.getByRole("status", { name: "Setup next step" })).toContainText(
                     "Paste into your agent, then open the link it returns.",
                 );
@@ -66,9 +66,9 @@ for (const viewport of [
                 await page.screenshot({ path: testInfo.outputPath(`01-home-${viewport.name}.png`), fullPage: true });
 
                 await sendLink.click();
-                expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(`${computer.origin}/`);
+                expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(`${runtime.origin}/`);
                 await details.click();
-                await expect(setupText).toHaveValue(new RegExp(`${computer.origin}/setup\\.md`, "u"));
+                await expect(setupText).toHaveValue(new RegExp(`${runtime.origin}/setup\\.md`, "u"));
                 await page.screenshot({
                     path: testInfo.outputPath(`07-setup-prompt-${viewport.name}.png`),
                     fullPage: true,
@@ -78,7 +78,7 @@ for (const viewport of [
 
             // The controlled Agent follows the served instructions through the
             // real setup, Chat, Relay and daemon, returning the user's link.
-            const connected = await computer.followInstructions("/setup.md", "setup-reconnect-session");
+            const connected = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
             await page.goto(connected.url);
             await expect(page).toHaveURL((url) => url.pathname === "/chat" && url.searchParams.has("sessionId"));
             const sessionUrl = page.url();

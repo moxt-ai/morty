@@ -28,15 +28,15 @@ import { lifecycleResponse } from "../../../src/daemon/control/protocol.ts";
 import { openMortyInstallation } from "../../../src/daemon/pairing/pair-local-machine.ts";
 import { harnessAdapters } from "../../../src/engine/acp/adapter/registry.ts";
 import type { AdapterResolver } from "../../../src/engine/acp/native-history/preview-contract.ts";
-import { ComputerAgentDependencies } from "../../../src/engine/agent/computer-agents.ts";
 import { discoverLocalAgentInventory } from "../../../src/engine/agent/discovery/discover-local-agents.ts";
+import { RuntimeAgentDependencies } from "../../../src/engine/agent/runtime-agents.ts";
 import type { LocalAgentSpecification } from "../../../src/engine/agent/specification/agent-specification.ts";
-import { ComputerLocalContext, createComputerConfig } from "../../../src/engine/computer/config.ts";
+import { createRuntimeConfig, RuntimeLocalContext } from "../../../src/engine/runtime/config.ts";
 import {
     HEARTBEAT_ACK_TIMEOUT_MILLISECONDS,
     HEARTBEAT_INTERVAL_MILLISECONDS,
-} from "../../../src/engine/computer/relay/liveness.ts";
-import { runComputer } from "../../../src/engine/computer/run.ts";
+} from "../../../src/engine/runtime/relay/liveness.ts";
+import { runRuntime } from "../../../src/engine/runtime/run.ts";
 import { systemTimer, type Timer } from "../../../src/engine/util/timer.ts";
 import { acpAdapters } from "../acp-adapters.ts";
 import { memoryComputerCredentials } from "../computer-credentials.ts";
@@ -157,8 +157,8 @@ async function withDaemonConnection(
         }
     });
     const server = new WebSocketServer({ server: relay });
-    const computerTimer = withoutRelayLivenessDeadlines(timer);
-    let computer: Promise<void> | undefined;
+    const runtimeTimer = withoutRelayLivenessDeadlines(timer);
+    let runtime: Promise<void> | undefined;
     let execution = new AbortController();
     const cliEnvironment = { ...process.env, ...environment, MORTY_STATE_DIRECTORY: join(directory, "state") };
     const cli = async (args: readonly string[], deadline = signal): Promise<void> => {
@@ -244,15 +244,15 @@ async function withDaemonConnection(
                               `Real ${specification.label} unavailable: ${JSON.stringify(inventory.unavailable)}`,
                           );
                       }
-                      return createComputerConfig(
+                      return createRuntimeConfig(
                           {
                               credentials: memoryComputerCredentials("r".repeat(43)),
                               computerId: "real-agent",
                               defaultWorkspace: workspace,
                               relayUrl,
                           },
-                          new ComputerAgentDependencies([agent], adapters),
-                          new ComputerLocalContext(
+                          new RuntimeAgentDependencies([agent], adapters),
+                          new RuntimeLocalContext(
                               directory,
                               { ...process.env, ...environment },
                               resolveMaxAcpProcesses(cliEnvironment),
@@ -277,8 +277,8 @@ async function withDaemonConnection(
                 await cli(["start"]);
             } else {
                 execution = new AbortController();
-                computer = runComputer(config, AbortSignal.any([signal, execution.signal]), computerTimer);
-                void computer.catch((error: unknown) => {
+                runtime = runRuntime(config, AbortSignal.any([signal, execution.signal]), runtimeTimer);
+                void runtime.catch((error: unknown) => {
                     connected.reject(error);
                     waiter?.reject(error);
                 });
@@ -327,7 +327,7 @@ async function withDaemonConnection(
                     }
                 } else {
                     execution.abort();
-                    await computer;
+                    await runtime;
                 }
                 await restoreFiles?.();
                 await start();
@@ -383,7 +383,7 @@ async function withDaemonConnection(
         } finally {
             controller.abort();
             signal.removeEventListener("abort", stopWaiting);
-            await computer?.catch(() => {});
+            await runtime?.catch(() => {});
             for (const connection of server.clients) {
                 connection.terminate();
             }

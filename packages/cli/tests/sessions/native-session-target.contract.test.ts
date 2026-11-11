@@ -8,7 +8,7 @@ it("Given two harnesses create conversations, When I restore each conversation, 
         await using relay = await startTestRelay();
         const signal = AbortSignal.timeout(30_000);
         const project = await relay.createOwner();
-        const computer = await relay.connectAgent(
+        const runtime = await relay.connectAgent(
             project.computerId,
             ["claude", "codex"].map((harness) => ({
                 harness,
@@ -19,13 +19,13 @@ it("Given two harnesses create conversations, When I restore each conversation, 
         );
         const targets: { readonly harness: string; readonly sessionId: string }[] = [];
         for (const harness of ["claude", "codex"]) {
-            const ready = await computer.createSession(
+            const ready = await runtime.createSession(
                 {
                     harness: harness,
 
                     configurations: [],
                     directory: ".",
-                    computerId: computer.computerId,
+                    computerId: runtime.computerId,
                     operationId: crypto.randomUUID(),
                 },
                 signal,
@@ -35,7 +35,7 @@ it("Given two harnesses create conversations, When I restore each conversation, 
         }
         expect(targets[0]?.harness).not.toBe(targets[1]?.harness);
         for (const target of targets) {
-            await expect(computer.api.managedSession(target, signal)).resolves.toMatchObject({
+            await expect(runtime.api.managedSession(target, signal)).resolves.toMatchObject({
                 harness: target.harness,
                 entry: { sessionId: target.sessionId },
             });
@@ -52,25 +52,25 @@ it("Given a harness announces its title during creation, When the caller creates
         await using relay = await startTestRelay();
         const signal = AbortSignal.timeout(30_000);
         const project = await relay.createOwner();
-        const computer = await relay.connectAgent(project.computerId, [
+        const runtime = await relay.connectAgent(project.computerId, [
             {
                 harness: "claude",
                 label: "Controlled ACP",
                 arguments: ["--announce-title-while-creating"],
             },
         ]);
-        const ready = await computer.createSession(
+        const ready = await runtime.createSession(
             {
                 harness: "claude",
 
                 configurations: [],
                 directory: ".",
-                computerId: computer.computerId,
+                computerId: runtime.computerId,
                 operationId: crypto.randomUUID(),
             },
             signal,
         );
-        const entries = await computer.api.managedSessions(signal);
+        const entries = await runtime.api.managedSessions(signal);
         expect(entries).toMatchObject([
             {
                 target: ready.target,
@@ -90,7 +90,7 @@ it("Given two harnesses own the same native session ID without prior discovery, 
         const signal = AbortSignal.timeout(30_000);
         const project = await relay.createOwner();
         const sessionId = "same-native-session";
-        const computer = await relay.connectAgent(
+        const runtime = await relay.connectAgent(
             project.computerId,
             [
                 { harness: "claude", label: "Claude Code" },
@@ -101,8 +101,8 @@ it("Given two harnesses own the same native session ID without prior discovery, 
         const imported = new Map<string, string>();
         for (const harness of ["claude", "codex"]) {
             const workspace = { harness: harness, directory: "." };
-            const opened = await computer.api.nativeSessions(
-                computer.computerId,
+            const opened = await runtime.api.nativeSessions(
+                runtime.computerId,
                 {
                     ...workspace,
                     action: "import",
@@ -117,14 +117,14 @@ it("Given two harnesses own the same native session ID without prior discovery, 
         }
         for (const harness of ["claude", "codex"]) {
             const target = { harness, sessionId };
-            await expect(computer.api.managedSession(target, signal)).resolves.toMatchObject({
+            await expect(runtime.api.managedSession(target, signal)).resolves.toMatchObject({
                 harness,
                 entry: { sessionId },
                 result: { target, ready: { harness, target: { harness, sessionId: imported.get(harness) } } },
             });
         }
         await expect(
-            computer.api.managedSession(
+            runtime.api.managedSession(
                 {
                     harness: "pi",
                     sessionId,

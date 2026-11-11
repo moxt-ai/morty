@@ -324,7 +324,7 @@ test("Given the last computer's access ended, When I return through the plain ad
                 .some((item) => item.textContent?.includes("The remaining computer")),
         ).toBe(true),
     );
-    expect(document.body.textContent).toContain("Access to Controlled Agent Computer ended");
+    expect(document.body.textContent).toContain("Access to Controlled Agent Runtime ended");
 });
 
 test("Given a revoked explicit computer link and another saved computer, When I open the link, Then only a deliberate fallback is offered", {
@@ -480,7 +480,7 @@ test("Given two computers, When I end the current access, Then the other compute
         expect(new URL(window.location.href).searchParams.get("sessionId")).toBe(firstSession),
     );
     await returned.waitForView(() =>
-        expect(document.body.textContent).toContain("Access to Controlled Agent Computer ended"),
+        expect(document.body.textContent).toContain("Access to Controlled Agent Runtime ended"),
     );
     const composer = await returned.waitForView(() => getByRole(document.body, "textbox", { name: "Message" }));
     expect(composer).toHaveProperty("value", "");

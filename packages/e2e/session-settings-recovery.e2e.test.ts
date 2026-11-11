@@ -2,10 +2,10 @@ import { dataTestId } from "../web/src/data-testid.ts";
 import { expect, test } from "./infra/test.ts";
 
 test("Given a selected model, When the Computer restarts, Then the conversation and new-chat preference retain that selection", async ({
-    computer,
+    runtime,
 }, testInfo) => {
-    const { page } = computer;
-    await computer.openPairedChat();
+    const { page } = runtime;
+    await runtime.openPairedChat();
     const composer = page.getByRole("textbox", { name: "Message" });
     await composer.fill("Before the Computer restart");
     await page.getByRole("button", { name: "Send message" }).click();
@@ -19,7 +19,7 @@ test("Given a selected model, When the Computer restarts, Then the conversation 
     await expect(configuration).toContainText("Test Large");
 
     // The conversation reconnects on its own once the Computer is back.
-    await computer.restartComputer();
+    await runtime.restartRuntime();
     await expect(composer).toBeEnabled();
     await expect(page.getByRole("button", { name: "Retry now" })).toBeHidden();
     await expect(configuration).toContainText("Test Large");

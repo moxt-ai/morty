@@ -14,25 +14,25 @@ export class PairingService {
     readonly #channels: ChannelGateway;
     readonly #pairings: PairingOperations;
     // Computer operations execute only in the ComputerRelay that holds the daemon connection; every Computer route reaches it there.
-    readonly #computerOperations: LocalSessionOperations | undefined;
+    readonly #runtimeOperations: LocalSessionOperations | undefined;
 
     constructor(cx: {
         readonly services: { readonly pairings: PairingOperations };
         readonly gateways: {
             readonly channelGateway: ChannelGateway;
-            readonly computerOperations?: LocalSessionOperations;
+            readonly runtimeOperations?: LocalSessionOperations;
         };
     }) {
         this.#channels = cx.gateways.channelGateway;
-        this.#computerOperations = cx.gateways.computerOperations;
+        this.#runtimeOperations = cx.gateways.runtimeOperations;
         this.#pairings = cx.services.pairings;
     }
 
     readonly #operations = (): LocalSessionOperations => {
-        if (this.#computerOperations === undefined) {
+        if (this.#runtimeOperations === undefined) {
             throw new Error("Computer operations run only in the ComputerRelay");
         }
-        return this.#computerOperations;
+        return this.#runtimeOperations;
     };
 
     readonly createProjectComputerPairing = (

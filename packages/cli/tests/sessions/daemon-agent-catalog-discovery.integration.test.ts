@@ -22,13 +22,13 @@ import { listen, port, sendText } from "@morty-build/relay-test-support/websocke
 import { expect, test } from "vitest";
 import { discoverLocalAgentInventory } from "../../src/engine/agent/discovery/discover-local-agents.ts";
 import type { LocalAgentSpecification } from "../../src/engine/agent/specification/agent-specification.ts";
-import { publishAgentCatalog } from "../../src/engine/computer/catalog/publish-agent-catalog.ts";
-import { createCatalogAgentResolver } from "../../src/engine/computer/catalog/resolve-catalog-agent.ts";
-import { ComputerLocalContext } from "../../src/engine/computer/config.ts";
-import { runComputer } from "../../src/engine/computer/run.ts";
+import { publishAgentCatalog } from "../../src/engine/runtime/catalog/publish-agent-catalog.ts";
+import { createCatalogAgentResolver } from "../../src/engine/runtime/catalog/resolve-catalog-agent.ts";
+import { RuntimeLocalContext } from "../../src/engine/runtime/config.ts";
+import { runRuntime } from "../../src/engine/runtime/run.ts";
 import { ControlledAcpSpecification } from "../support/agents/controlled-acp-specification.ts";
 import { memoryComputerCredentials } from "../support/computer-credentials.ts";
-import { createControlledComputerConfig as createComputerConfig } from "../support/controlled-computer-config.ts";
+import { createControlledRuntimeConfig as createRuntimeConfig } from "../support/controlled-runtime-config.ts";
 
 const websocketGuid = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
 const fakeAgentPath = fileURLToPath(new URL("./fixtures/acp-peer.ts", import.meta.url));
@@ -343,7 +343,7 @@ test("Given the daemon started before an Agent was installed, When the Relay req
     if (inventory.readyAgents().length !== 1) {
         throw new Error(`Expected exactly one ready Agent, got: ${JSON.stringify(inventory.discoveries)}`);
     }
-    const config: ReturnType<typeof createComputerConfig> = createComputerConfig(
+    const config: ReturnType<typeof createRuntimeConfig> = createRuntimeConfig(
         {
             credentials: memoryComputerCredentials("r".repeat(43)),
             computerId: "channel_catalog",
@@ -351,13 +351,13 @@ test("Given the daemon started before an Agent was installed, When the Relay req
             relayUrl,
         },
         inventory.readyAgents(),
-        new ComputerLocalContext(stateDirectory, environment),
+        new RuntimeLocalContext(stateDirectory, environment),
         null,
         createCatalogAgentResolver(discover, () => config, publishAgentCatalog),
         (refreshSignal: AbortSignal) => discover(refreshSignal).then((result) => result.readyAgents()),
     );
     const cancellation = new AbortController();
-    const computer = runComputer(config, cancellation.signal);
+    const runtime = runRuntime(config, cancellation.signal);
 
     try {
         const socket = await relay.socket;
@@ -389,7 +389,7 @@ test("Given the daemon started before an Agent was installed, When the Relay req
         ).toEqual(["controlled-acp", "controlled-acp-later"]);
     } finally {
         cancellation.abort();
-        await computer;
+        await runtime;
         await relay.close();
         await rm(stateDirectory, { force: true, recursive: true });
     }
@@ -430,7 +430,7 @@ test("Given a full catalog discovery is publishing, When the per-Agent resolver 
     if (inventory.readyAgents().length !== 1) {
         throw new Error(`Expected exactly one ready Agent, got: ${JSON.stringify(inventory.discoveries)}`);
     }
-    const config: ReturnType<typeof createComputerConfig> = createComputerConfig(
+    const config: ReturnType<typeof createRuntimeConfig> = createRuntimeConfig(
         {
             credentials: memoryComputerCredentials("r".repeat(43)),
             computerId: "channel_catalog_race",
@@ -438,13 +438,13 @@ test("Given a full catalog discovery is publishing, When the per-Agent resolver 
             relayUrl,
         },
         inventory.readyAgents(),
-        new ComputerLocalContext(stateDirectory, environment),
+        new RuntimeLocalContext(stateDirectory, environment),
         null,
         createCatalogAgentResolver(discover, () => config, publishAgentCatalog),
         (refreshSignal: AbortSignal) => discover(refreshSignal).then((result) => result.readyAgents()),
     );
     const cancellation = new AbortController();
-    const computer = runComputer(config, cancellation.signal);
+    const runtime = runRuntime(config, cancellation.signal);
 
     try {
         const socket = await relay.socket;
@@ -505,7 +505,7 @@ test("Given a full catalog discovery is publishing, When the per-Agent resolver 
         expect(catalogedVersion).toBe("1.1.0");
     } finally {
         cancellation.abort();
-        await computer;
+        await runtime;
         await relay.close();
         await rm(stateDirectory, { force: true, recursive: true });
     }
@@ -547,7 +547,7 @@ test("Given a full catalog discovery has published, When a queued per-Agent reso
         throw new Error(`Expected exactly one ready Agent, got: ${JSON.stringify(inventory.discoveries)}`);
     }
     const resolverDiscovered = Promise.withResolvers<void>();
-    const config: ReturnType<typeof createComputerConfig> = createComputerConfig(
+    const config: ReturnType<typeof createRuntimeConfig> = createRuntimeConfig(
         {
             credentials: memoryComputerCredentials("r".repeat(43)),
             computerId: "channel_catalog_reply",
@@ -555,7 +555,7 @@ test("Given a full catalog discovery has published, When a queued per-Agent reso
             relayUrl,
         },
         inventory.readyAgents(),
-        new ComputerLocalContext(stateDirectory, environment),
+        new RuntimeLocalContext(stateDirectory, environment),
         null,
         createCatalogAgentResolver(
             async (signal) => {
@@ -569,7 +569,7 @@ test("Given a full catalog discovery has published, When a queued per-Agent reso
         (refreshSignal: AbortSignal) => discover(refreshSignal).then((result) => result.readyAgents()),
     );
     const cancellation = new AbortController();
-    const computer = runComputer(config, cancellation.signal);
+    const runtime = runRuntime(config, cancellation.signal);
 
     try {
         const socket = await relay.socket;
@@ -626,7 +626,7 @@ test("Given a full catalog discovery has published, When a queued per-Agent reso
         expect(config.catalog.read().agents[0]?.agentVersion).toBe("1.1.0");
     } finally {
         cancellation.abort();
-        await computer;
+        await runtime;
         await relay.close();
         await rm(stateDirectory, { force: true, recursive: true });
     }

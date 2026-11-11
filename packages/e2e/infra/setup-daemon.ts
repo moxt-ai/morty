@@ -1,13 +1,13 @@
 import { writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import type { HarnessReplyPlan } from "@morty-build/computer-test-support/fake-daemon";
+import type { HarnessReplyPlan } from "@morty-build/runtime-test-support/fake-daemon";
 import {
     type ControlledAgentBehavior,
-    connectControlledAgentComputer,
+    connectControlledAgentRuntime,
     createMortyFakeDaemon,
-} from "../../../tests/support/fake-daemon/computer.ts";
-import type { ComputerCredentials } from "../../cli/src/engine/computer/connection/computer-credentials.ts";
-import type { SetupComputer } from "../../cli/src/setup/setup.ts";
+} from "../../../tests/support/fake-daemon/runtime.ts";
+import type { ComputerCredentials } from "../../cli/src/engine/runtime/connection/computer-credentials.ts";
+import type { SetupRuntime } from "../../cli/src/setup/setup.ts";
 import { memoryComputerCredentials } from "../../cli/tests/support/computer-credentials.ts";
 import { jsonRequest, text } from "./chat-api.ts";
 
@@ -39,11 +39,11 @@ type ControlledUpgrade = "available" | "unavailable" | "unresponsive" | "interru
 type DaemonRelease = "outdated" | "latest";
 
 /** Setup CLI test port backed by the production daemon and a controlled Agent harness. */
-export class ControlledSetupComputer implements SetupComputer {
+export class ControlledSetupRuntime implements SetupRuntime {
     readonly #saved = new Map<string, Connection>();
     /** Each saved connection's relay credential, which rotates on every connection like the daemon's saved one. */
     readonly #credentials = new Map<string, ComputerCredentials>();
-    readonly #active = new Map<string, Awaited<ReturnType<typeof connectControlledAgentComputer>>>();
+    readonly #active = new Map<string, Awaited<ReturnType<typeof connectControlledAgentRuntime>>>();
     readonly #failed = Promise.withResolvers<never>();
     readonly failure = this.#failed.promise;
 
@@ -75,9 +75,9 @@ export class ControlledSetupComputer implements SetupComputer {
         void this.failure.catch(() => undefined);
     }
 
-    readonly run: SetupComputer["run"] = async (directory, args, _cwd, signal, input) => {
+    readonly run: SetupRuntime["run"] = async (directory, args, _cwd, signal, input) => {
         signal.throwIfAborted();
-        const result = { pid: process.pid, logPath: join(directory, "controlled-computer.log") };
+        const result = { pid: process.pid, logPath: join(directory, "controlled-runtime.log") };
         if (args[0] === "--version") {
             return result;
         }
@@ -260,7 +260,7 @@ export class ControlledSetupComputer implements SetupComputer {
         if (this.#active.has(connection.pairingGeneration)) {
             return;
         }
-        const daemon = await connectControlledAgentComputer({
+        const daemon = await connectControlledAgentRuntime({
             behavior: this.#options,
             connection: {
                 computerId: connection.computer_id,

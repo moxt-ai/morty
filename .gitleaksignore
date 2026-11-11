@@ -15,5 +15,5 @@ dbe7ae368d663db2e473fc918bd13532af4e04c5:packages/e2e/infra/local-stack.ts:gener
 c066e4f850a7a354d939225e1e959d159a9592c9:packages/relay-cloudflare-standalone/vitest.config.ts:generic-api-key:18
 a9ad4230988d003ef187ef9268ece00ce03506de:scripts/local-dev.cjs:generic-api-key:493
 986d187826caa601242b3e8850e54994caf3171d:tests/agent-daemon/providers/cursor.ts:jwt:18
-efb951aecaae823702bbfce2ae3bf7d58fab22b7:packages/e2e/infra/test-computer.ts:generic-api-key:29
+efb951aecaae823702bbfce2ae3bf7d58fab22b7:packages/e2e/infra/test-runtime.ts:generic-api-key:29
 19567653a3bb8d664dab115cae8c094d660079ea:scripts/e2e/new-conversation.mjs:generic-api-key:22

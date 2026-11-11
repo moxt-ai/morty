@@ -8,7 +8,7 @@ import { NullSessionObserver } from "../../src/engine/session/api/session-api.ts
 import { MemorySessionStore } from "../../src/engine/session/record/session-store.ts";
 import { systemTimer } from "../../src/engine/util/timer.ts";
 import { acpAdapters } from "../support/acp-adapters.ts";
-import { SessionComputerFixture as SessionManager } from "../support/session-computer.ts";
+import { SessionRuntimeFixture as SessionManager } from "../support/session-runtime.ts";
 import { UnretainedExternalContentStore } from "../support/unretained-external-content-store.ts";
 
 import { fixture } from "./native-session-fixture.ts";

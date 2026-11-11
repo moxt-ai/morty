@@ -64,7 +64,7 @@ jobs:
       - run: pnpm test:relay
       - run: pnpm test:worker
 
-  computer:
+  runtime:
     if: ${{ !inputs.markdown-only }}
     strategy:
       fail-fast: false
@@ -82,7 +82,7 @@ jobs:
       - run: corepack enable
       - run: pnpm install --frozen-lockfile
       - run: pnpm build:cli
-      - run: pnpm test:computer --shard=${{ matrix.shard }}/2
+      - run: pnpm test:runtime --shard=${{ matrix.shard }}/2
 
   web:
     if: ${{ !inputs.markdown-only }}
@@ -242,7 +242,7 @@ jobs:
           path: .release
       - name: Install the accepted real Claude boundary dependency
         run: npm install --global @anthropic-ai/claude-code@2.1.273
-      - name: Compile source Computer adapters used by deployment verification
+      - name: Compile source Runtime adapters used by deployment verification
         run: pnpm --dir packages/cli run prebuild
       - name: Verify setup, pairing, image conversation and restart with the exact archive
         run: node scripts/test-release-journey.mjs

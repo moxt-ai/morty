@@ -19,8 +19,8 @@ import type { AgentProcessPool } from "../process/agent-process-pool.ts";
 import { PromptLifecycle } from "../prompt/prompt-lifecycle.ts";
 import { SessionCreations } from "../record/session-creations.ts";
 import { SqliteSessionStore } from "../record/session-store.ts";
-import type { ComputerTurnActivity } from "../turn/computer-turn-activity.ts";
 import { ExecutionReceipts } from "../turn/execution-receipts.ts";
+import type { RuntimeTurnActivity } from "../turn/runtime-turn-activity.ts";
 import { SessionTurns } from "../turn/session-turns.ts";
 import { WorkspaceDirectoryService } from "../workspace/workspace-directory.ts";
 import type { ResolveAgent, SessionEventSink } from "./session-api.ts";
@@ -58,10 +58,10 @@ class SessionLayerObserver extends NullSessionObserver {
     };
 }
 
-/** What the session layer needs to wire itself: the computer's identity, its agent source, and its sink. */
+/** What the session layer needs to wire itself: the runtime's identity, its agent source, and its sink. */
 export interface SessionLayerOptions {
     readonly processes: AgentProcessPool;
-    readonly turnActivity?: ComputerTurnActivity;
+    readonly turnActivity?: RuntimeTurnActivity;
     readonly onExecutionCountChange?: (count: number) => void;
 
     readonly computerId: string;
@@ -72,7 +72,7 @@ export interface SessionLayerOptions {
     readonly timer: Timer;
 }
 
-/** Wires the session layer for one computer: its stores, manager, turns, and native session browsing. */
+/** Wires the session layer for one runtime: its stores, manager, turns, and native session browsing. */
 export function buildSessionLayer(options: SessionLayerOptions) {
     const { computerId, defaultWorkspace, resolveAgent, sink, stateDirectory, timer } = options;
     const databases = channelSessionDatabasePaths(stateDirectory, computerId);

@@ -2,10 +2,10 @@ import { mock } from "node:test";
 import { expect, test } from "./infra/test.ts";
 
 test("Given an agent answer with reasoning and a tool call, When the user inspects the agent work, Then every process row shares compact hover disclosure styling", async ({
-    computer,
+    runtime,
 }, testInfo) => {
-    const { page } = computer;
-    await computer.openPairedChat();
+    const { page } = runtime;
+    await runtime.openPairedChat();
 
     await page.getByRole("textbox", { name: "Message" }).fill("distinguish agent work");
     await page.getByRole("button", { name: "Send message" }).click();
@@ -141,11 +141,11 @@ test.describe("elapsed time across reloads", () => {
         mock.timers.reset();
     });
     test("Given a working reply, When the user reloads after 65 seconds, Then elapsed time and live content remain consistent", async ({
-        computer,
+        runtime,
     }, testInfo) => {
-        const { page } = computer;
+        const { page } = runtime;
         await page.clock.setFixedTime(new Date("2026-10-13T08:00:00Z"));
-        await computer.openPairedChat();
+        await runtime.openPairedChat();
 
         await page.getByRole("textbox", { name: "Message" }).fill("First conversation");
         await page.getByRole("button", { name: "Send message" }).click();

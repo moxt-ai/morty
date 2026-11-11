@@ -14,7 +14,7 @@ import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import { afterAll, beforeAll, expect, it } from "vitest";
 
 const logs: Record<string, unknown>[] = [];
-let computer: Miniflare;
+let runtime: Miniflare;
 
 beforeAll(async () => {
     const bundle = await build({
@@ -37,7 +37,7 @@ beforeAll(async () => {
     if (output === undefined) {
         throw new Error("Expected the observability Worker bundle");
     }
-    computer = new Miniflare(
+    runtime = new Miniflare(
         convertV4MiniflareOptions({
             modules: true,
             script: output.text,
@@ -62,8 +62,8 @@ beforeAll(async () => {
             },
         }),
     );
-    await computer.ready;
-    const bindings = await computer.getBindings<{ RELAY_DIRECTORY_DATABASE: D1Database }>();
+    await runtime.ready;
+    const bindings = await runtime.getBindings<{ RELAY_DIRECTORY_DATABASE: D1Database }>();
     const directory = fileURLToPath(new URL("../../relay/migrations/d1", import.meta.url));
     for (const migration of await readD1Migrations(directory)) {
         await bindings.RELAY_DIRECTORY_DATABASE.batch(
@@ -73,11 +73,11 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-    await computer?.dispose();
+    await runtime?.dispose();
     const artifact = process.env["MORTY_LOG_E2E_ARTIFACT"];
     if (artifact !== undefined) {
         await mkdir(dirname(artifact), { recursive: true });
-        await writeFile(artifact, `${JSON.stringify({ computer: "workerd", logs }, null, 2)}\n`);
+        await writeFile(artifact, `${JSON.stringify({ runtime: "workerd", logs }, null, 2)}\n`);
     }
 });
 
@@ -101,7 +101,7 @@ async function api(
     init: { method?: string; headers?: Record<string, string>; body?: string },
     status: number,
 ) {
-    const response = await computer.dispatchFetch(`https://relay.test/morty/api${path}`, {
+    const response = await runtime.dispatchFetch(`https://relay.test/morty/api${path}`, {
         ...init,
         headers: {
             "content-type": "application/json",
@@ -166,7 +166,7 @@ function registeredLoggingComputer() {
 
 async function httpFailure(kind: string): Promise<Record<string, unknown>> {
     const start = logs.length;
-    const response = await computer.dispatchFetch(`https://relay.test/failure/${kind}?token=QUERY_CANARY`, {
+    const response = await runtime.dispatchFetch(`https://relay.test/failure/${kind}?token=QUERY_CANARY`, {
         method: "POST",
         headers: { authorization: "Bearer HEADER_CANARY", "cf-ray": "logging-test-ray" },
         body: "BODY_CANARY",
@@ -226,7 +226,7 @@ it.each(["primitive", "object", "circular", "deep", "long", "secrets", "getter"]
 it("identifies the failing Computer Durable Object through the public pairing and connect APIs", async () => {
     const { computerId, claimed } = await pairComputer();
     const start = logs.length;
-    const response = await computer.dispatchFetch("https://relay.test/morty/api/v1/computers/connect", {
+    const response = await runtime.dispatchFetch("https://relay.test/morty/api/v1/computers/connect", {
         headers: {
             authorization: `Bearer ${text(claimed, "computerCredential")}`,
             [COMPUTER_SUCCESSOR_CREDENTIAL_HEADER]: computerCredentialSuccessor(text(claimed, "computerCredential")),
@@ -282,7 +282,7 @@ it("identifies a Project Relay overload through the public HTTP API", async () =
 // @no-uc: Performance; short-lived Host/control sockets must not add routine lifecycle logs.
 it("keeps ordinary Host closes quiet after the real relay close callback completes", async () => {
     const { computerId } = await registeredLoggingComputer();
-    const response = await computer.dispatchFetch(`https://relay.test/computers/${computerId}/host`, {
+    const response = await runtime.dispatchFetch(`https://relay.test/computers/${computerId}/host`, {
         headers: {
             Upgrade: "websocket",
             "x-morty-computer-id": computerId,
@@ -319,7 +319,7 @@ it("keeps ordinary Host closes quiet after the real relay close callback complet
 async function daemon() {
     const { computerId } = await registeredLoggingComputer();
     const start = logs.length;
-    const response = await computer.dispatchFetch(`https://relay.test/computers/${computerId}/daemon`, {
+    const response = await runtime.dispatchFetch(`https://relay.test/computers/${computerId}/daemon`, {
         headers: {
             Upgrade: "websocket",
             "x-morty-computer-id": computerId,
@@ -404,7 +404,7 @@ it("retains a relay WebSocket error and connection identity before closing the s
             socket.addEventListener("close", (event) => resolve(event.code), { once: true }),
         );
         const start = logs.length;
-        const responsePending = computer.dispatchFetch(
+        const responsePending = runtime.dispatchFetch(
             `https://relay.test/computers/${computerId}/inject-websocket-error`,
         );
         await expect
