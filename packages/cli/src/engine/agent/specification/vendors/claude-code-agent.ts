@@ -20,7 +20,6 @@ export class ClaudeCodeAgentSpecification extends InProcessAcpAgentSpecification
     readonly harness = "claude";
     readonly label = "Claude Code";
     override readonly minimumSupportedAgentVersion = "2.1.273";
-    override readonly maximumTestedAgentVersion = "2.1.273";
 
     constructor() {
         super("MORTY_CLAUDE_PATH");

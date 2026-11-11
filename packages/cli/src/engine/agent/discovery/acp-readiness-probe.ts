@@ -1,9 +1,7 @@
 import {
-    type ClientConnection,
     type CompleteElicitationNotification,
     type CreateElicitationRequest,
     type CreateElicitationResponse,
-    type InitializeResponse,
     methods,
     PROTOCOL_VERSION,
     type RequestPermissionRequest,
@@ -67,12 +65,6 @@ export async function probeAcpReadiness(
     specification: {
         readonly acpProbeTimeoutMilliseconds: number;
         readonly authenticationCommand: () => string;
-        readonly verifyAcp: (
-            connection: ClientConnection,
-            initialized: InitializeResponse,
-            defaultWorkspace: string,
-            signal: AbortSignal,
-        ) => Promise<void>;
     },
     agent: AcpAgentDefinition,
     environment: Readonly<NodeJS.ProcessEnv>,
@@ -117,7 +109,6 @@ export async function probeAcpReadiness(
                             "ACP agent selected an unsupported protocol version",
                         );
                     }
-                    await specification.verifyAcp(runtime.connection, initialized, defaultWorkspace, controller.signal);
                     return new VerifiedAcpReadiness(
                         normalizeVersionOutput(initialized.agentInfo?.version ?? ""),
                         normalizeAcpCapabilities(initialized),

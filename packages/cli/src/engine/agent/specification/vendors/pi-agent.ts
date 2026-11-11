@@ -117,7 +117,6 @@ export class PiAgentSpecification extends InProcessAcpAgentSpecification {
     readonly harness = "pi";
     readonly label = "Pi";
     override readonly minimumSupportedAgentVersion = "0.85.0";
-    override readonly maximumTestedAgentVersion = "1.1.0";
     override readonly authenticationCommand = (): string => "pi";
     constructor() {
         super("MORTY_PI_PATH");

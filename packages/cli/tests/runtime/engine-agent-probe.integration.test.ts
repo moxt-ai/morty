@@ -10,8 +10,7 @@ import { listen, port } from "@morty-build/relay-test-support/websocket";
 import { expect, test, vi } from "vitest";
 import { type WebSocket, WebSocketServer } from "ws";
 import { RuntimeInstallationStore } from "../../src/engine/runtime/connection/runtime-installation-store.ts";
-import { MortyRuntimeEngine, type RunLoopParams } from "../../src/engine/runtime/engine.ts";
-import { memoryRuntimeCredentials } from "../support/runtime-credentials.ts";
+import { MortyRuntimeEngine } from "../../src/engine/runtime/engine.ts";
 
 interface ProbeOptions {
     readonly scenario:
@@ -24,7 +23,6 @@ interface ProbeOptions {
         | "limit"
         | "held";
     readonly stream: "stdout" | "stderr";
-    readonly connection: "saved" | "provided";
 }
 
 interface VersionWriter {
@@ -123,7 +121,6 @@ async function createProbeEngine(options: ProbeOptions, signal: AbortSignal) {
             MORTY_CODEX_PATH: agent,
             MORTY_CLAUDE_PATH: "",
             MORTY_PI_PATH: "",
-            MORTY_OPENCODE_PATH: "",
             MORTY_TEST_PROBE_CONTROL: `http://127.0.0.1:${port(control)}`,
             MORTY_TEST_PROBE_SCENARIO: options.scenario,
             MORTY_TEST_PROBE_STREAM: options.stream,
@@ -141,20 +138,8 @@ async function createProbeEngine(options: ProbeOptions, signal: AbortSignal) {
         },
         signal,
     );
-    const connection: RunLoopParams["connection"] =
-        options.connection === "saved"
-            ? { kind: "saved", pairingGeneration: saved.pairingGeneration }
-            : {
-                  kind: "provided",
-                  connection: {
-                      computerId: saved.computerId,
-                      defaultWorkspace: workspace,
-                      relayUrl: `ws://127.0.0.1:${port(http)}/daemon`,
-                      credentials: memoryRuntimeCredentials(saved.credentials.current),
-                  },
-              };
     const execution = engine.runLoop({
-        connection,
+        pairingGeneration: saved.pairingGeneration,
         signal: loopSignal,
         onConnectionStatus: (status) => {
             if (status === "online") {
@@ -263,10 +248,7 @@ test("Given three Runtime connections discovered delayed version output, When th
     const peers: Awaited<ReturnType<typeof createProbeEngine>>[] = [];
     try {
         for (let index = 0; index < 3; index += 1) {
-            const peer = await createProbeEngine(
-                { scenario: "delayed", stream: "stdout", connection: "saved" },
-                signal,
-            );
+            const peer = await createProbeEngine({ scenario: "delayed", stream: "stdout" }, signal);
             peers.push(peer);
             await peer.online();
         }
@@ -292,11 +274,8 @@ test("Given three Runtime connections discovered delayed version output, When th
     }
 });
 
-test.for([
-    { stream: "stdout", connection: "provided" },
-    { stream: "stderr", connection: "saved" },
-] as const)(
-    "Given a version launcher exits before its inherited $stream pipe closes, When a $connection Engine discovers the Agent, Then its catalog retains the Agent and a Session can be prepared",
+test.for([{ stream: "stdout" }, { stream: "stderr" }] as const)(
+    "Given a version launcher exits before its inherited $stream pipe closes, When an Engine discovers the Agent, Then its catalog retains the Agent and a Session can be prepared",
     async (options, { signal }) => {
         vi.useFakeTimers({ now: new Date("2026-10-29T00:00:00Z"), toFake: ["Date"] });
         const peer = await createProbeEngine({ ...options, scenario: "delayed" }, signal);
@@ -376,7 +355,7 @@ test.for([
     "Given a $scenario version probe failure, When an Engine publishes its inventory, Then the diagnostic report identifies the failed stage without publishing private output",
     async ({ scenario, code, ...expected }, { signal }) => {
         vi.useFakeTimers({ now: new Date("2026-10-29T00:00:00Z"), toFake: ["Date"] });
-        const peer = await createProbeEngine({ scenario, stream: "stdout", connection: "provided" }, signal);
+        const peer = await createProbeEngine({ scenario, stream: "stdout" }, signal);
         try {
             const socket = await peer.online();
             expect(peer.catalogs).toEqual([{ agents: [] }]);
@@ -413,7 +392,7 @@ test("Given a version launcher exited but a descendant holds its output open, Wh
     signal,
 }) => {
     vi.useFakeTimers({ now: new Date("2026-10-29T00:00:00Z"), toFake: ["Date", "setTimeout", "clearTimeout"] });
-    const peer = await createProbeEngine({ scenario: "held", stream: "stdout", connection: "saved" }, signal);
+    const peer = await createProbeEngine({ scenario: "held", stream: "stdout" }, signal);
     try {
         const first = await peer.nextWriter();
         await vi.advanceTimersByTimeAsync(10_000);
@@ -452,7 +431,7 @@ test("Given a version pipe times out once, When the retry drains normally, Then 
     signal,
 }) => {
     vi.useFakeTimers({ now: new Date("2026-10-29T00:00:00Z"), toFake: ["Date", "setTimeout", "clearTimeout"] });
-    const peer = await createProbeEngine({ scenario: "held", stream: "stderr", connection: "provided" }, signal);
+    const peer = await createProbeEngine({ scenario: "held", stream: "stderr" }, signal);
     try {
         const first = await peer.nextWriter();
         await vi.advanceTimersByTimeAsync(10_000);
@@ -482,7 +461,7 @@ test("Given a version pipe remains open after its launcher exits, When the host 
     signal,
 }) => {
     vi.useFakeTimers({ now: new Date("2026-10-29T00:00:00Z"), toFake: ["Date", "setTimeout", "clearTimeout"] });
-    const peer = await createProbeEngine({ scenario: "held", stream: "stdout", connection: "saved" }, signal);
+    const peer = await createProbeEngine({ scenario: "held", stream: "stdout" }, signal);
     try {
         const writer = await peer.nextWriter();
         const reason = new Error("Host cancelled discovery");

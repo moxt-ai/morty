@@ -7,7 +7,6 @@ export class ControlledAcpAgentSpecification extends ControlledAcpSpecification 
     readonly agentExecutable = "controlled-acp";
     readonly harness = "controlled-acp";
     readonly label = "Controlled ACP";
-    override readonly maximumTestedAgentVersion = this.adapterVersion;
     override readonly minimumSupportedAgentVersion = this.adapterVersion;
 
     constructor() {

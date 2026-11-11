@@ -1,32 +1,22 @@
 import { methods } from "@agentclientprotocol/sdk/unstable";
-import type { NativeSessionTarget, SessionCapabilities } from "@morty-build/client/protocol";
+import type { SessionCapabilities } from "@morty-build/client/protocol";
 import { AcpExecutionError } from "../acp-error.ts";
-import type { NativeSessionQuery, SessionEventPage, SessionEventStore } from "../native-history/preview-contract.ts";
+import type { NativeSessionQuery } from "../native-history/preview-contract.ts";
 import { type NativeSessionPage, nativeSessionPageSchema } from "../protocol/native-session.ts";
 import { RetryableAcpInitializationError, validateAgentRuntime } from "./agent-initialization.ts";
 import type { AcpSessionConnector, AdapterSessionConnection } from "./session-events.ts";
 
 /** Adapter-owned ACP reader. It has neither a live observer nor interactive-session state. */
 export class AcpQuerySession {
-    readonly #options: NativeSessionQuery;
-    readonly #events: SessionEventStore;
     readonly #connection: AdapterSessionConnection;
     #lifecycle: { readonly kind: "open" } | { readonly kind: "terminated" } = { kind: "open" };
-    #eventScope: { readonly kind: "unselected" } | { readonly kind: "selected"; readonly target: NativeSessionTarget } =
-        { kind: "unselected" };
 
-    private constructor(options: NativeSessionQuery, events: SessionEventStore, connector: AcpSessionConnector) {
-        this.#options = options;
-        this.#events = events;
+    private constructor(options: NativeSessionQuery, connector: AcpSessionConnector) {
         this.#connection = connector.connectQuerySession({
             agent: options.agent,
             cwd: options.cwd,
             ...(options.externalizeUpdate === undefined ? {} : { externalizeUpdate: options.externalizeUpdate }),
-            onEvent: async (event) => {
-                if (this.#eventScope.kind === "selected") {
-                    this.#events.append(this.#eventScope.target, { type: "acp", payload: event.payload });
-                }
-            },
+            onEvent: async () => {},
         });
         void this.#connection.termination.then(() => {
             this.#lifecycle = { kind: "terminated" };
@@ -35,13 +25,12 @@ export class AcpQuerySession {
 
     static readonly start = async (
         options: NativeSessionQuery,
-        events: SessionEventStore,
         connector: AcpSessionConnector,
     ): Promise<AcpQuerySession> => {
         const { agent, signal } = options;
         for (let attempt = 1; attempt <= 2; attempt += 1) {
             await validateAgentRuntime(agent, signal);
-            const runtime = new AcpQuerySession(options, events, connector);
+            const runtime = new AcpQuerySession(options, connector);
             try {
                 await runtime.#connection.initializeAgent(options.signal);
                 return runtime;
@@ -100,46 +89,5 @@ export class AcpQuerySession {
         return decoded.data;
     };
 
-    readonly previewEvents = async (
-        sessionId: string,
-        eventLimit: number,
-        signal: AbortSignal,
-    ): Promise<SessionEventPage> => {
-        if (!this.capabilities().loadSession) {
-            throw new AcpExecutionError(
-                "This Agent restores context but does not provide message history.",
-                {},
-                "native_history_unsupported",
-            );
-        }
-        const target = { harness: this.#options.agent.harness, sessionId };
-        this.#eventScope = { kind: "selected", target };
-        this.#events.reset(target);
-        this.#connection.events.select(sessionId);
-        this.#connection.beginStateChange();
-        const response: unknown = await this.#connection.race(
-            this.#connection.connection.agent.request(
-                methods.agent.session.load,
-                {
-                    cwd: this.#options.cwd,
-                    mcpServers: [],
-                    sessionId: sessionId,
-                },
-                { cancellationSignal: signal },
-            ),
-            "ACP agent exited while loading history",
-            signal,
-        );
-        await this.#connection.events.drained();
-        signal.throwIfAborted();
-        this.#connection.commitLifecycle(response);
-        return this.#events.page(target, eventLimit, null);
-    };
-
     readonly closeProcess = async (): Promise<void> => await this.#connection.closeProcess();
-    readonly discardEvents = (): void => {
-        if (this.#eventScope.kind === "selected") {
-            this.#events.remove(this.#eventScope.target);
-        }
-    };
 }

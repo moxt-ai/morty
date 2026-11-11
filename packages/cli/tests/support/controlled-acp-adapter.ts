@@ -13,19 +13,25 @@ import type { AcpAgentDefinition } from "../../src/engine/acp/agent/agent-defini
 import type { Adapter, AdapterDependencies } from "../../src/engine/acp/native-history/preview-contract.ts";
 import { sessionIdSchema } from "../../src/engine/acp/protocol/native-session.ts";
 import { runCleanup } from "../../src/engine/util/run-cleanup.ts";
+import { ControlledAcpHistory } from "./controlled-acp-history.ts";
 
 /** Controlled ACP peers use the production transport, never a named vendor's concrete harness. */
 export class ControlledAcpAdapter implements Adapter {
+    readonly #history: ControlledAcpHistory;
     readonly #queryProcesses: AgentQueryProcesses;
     readonly #executionConnections: AcpExecutionConnections;
 
     constructor(agent: AcpAgentDefinition, dependencies: AdapterDependencies) {
         const connector = new AcpSessionConnector(dependencies.contentExternalizer);
+        this.#history = new ControlledAcpHistory(agent, dependencies.processes, connector);
         this.#executionConnections = new AcpExecutionConnections(dependencies.contentExternalizer);
         this.#queryProcesses = new AgentQueryProcesses(agent, dependencies.processes, connector);
     }
 
-    readonly refreshAgent: Adapter["refreshAgent"] = (agent) => this.#queryProcesses.refreshAgent(agent);
+    readonly refreshAgent: Adapter["refreshAgent"] = (agent) => {
+        this.#queryProcesses.refreshAgent(agent);
+        this.#history.refreshAgent(agent);
+    };
     readonly getCapabilities: Adapter["getCapabilities"] = (query) => this.#queryProcesses.capabilities(query);
     readonly createSession: Adapter["createSession"] = (params) =>
         this.#executionConnections.withConnection(params, async (execution, signal) => {
@@ -111,9 +117,10 @@ export class ControlledAcpAdapter implements Adapter {
     readonly findSession: Adapter["findSession"] = ({ query, sessionId, budget }) =>
         findNativeSession(this.listSessions, query, sessionId, budget);
     readonly readSessionHistory: Adapter["readSessionHistory"] = ({ query, request }) =>
-        this.#queryProcesses.previewSessionEvents(query, request);
+        this.#history.read(query, request);
     readonly close = async (): Promise<void> =>
         await runCleanup(
+            () => this.#history.close(),
             () => this.#queryProcesses.close(),
             () => this.#executionConnections.close(),
         );
