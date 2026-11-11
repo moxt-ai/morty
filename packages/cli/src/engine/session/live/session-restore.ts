@@ -2,17 +2,18 @@ import type { NativeSessionTarget, SessionCapabilities } from "@morty-build/clie
 import { AcpExecutionError } from "../../acp/acp-error.ts";
 import { type NativeSessionOrigin, sessionIdSchema } from "../../acp/protocol/native-session.ts";
 import type { SessionRecovery } from "../api/session-api.ts";
-import { FoundStoredSession, type SessionStore, StoredSession } from "../record/session-store.ts";
+import { FoundStoredSession, StoredSession, type StoredSessionLookup } from "../record/session-store.ts";
 
 /**
  * The established native conversation a reopened Session continues: the one the Runtime recorded, or the one an
  * import names. Reopening never creates or assigns a destination.
  */
 export function restoredConversation(
-    store: SessionStore,
+    recorded: StoredSessionLookup,
     target: NativeSessionTarget,
     cwd: string,
     origin: NativeSessionOrigin | undefined,
+    importedAt: string,
 ): StoredSession {
     if (origin?.kind === "fork") {
         throw new AcpExecutionError(
@@ -29,9 +30,10 @@ export function restoredConversation(
                       cwd,
                       true,
                       origin.title,
+                      importedAt,
                   ),
               )
-            : store.read(target);
+            : recorded;
     if (!(stored instanceof FoundStoredSession)) {
         throw new AcpExecutionError("The native Session was not found", {}, "session_not_found");
     }

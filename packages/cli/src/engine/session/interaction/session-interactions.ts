@@ -13,6 +13,7 @@ import {
     SESSION_PERMISSION_RESOLVED_KIND,
     type SessionElicitationRequestedEvent,
     type SessionElicitationResolvedEvent,
+    type SessionEventPayload,
     type SessionPermissionOption,
     type SessionPermissionRequestedEvent,
     type SessionPermissionResolvedEvent,
@@ -22,12 +23,7 @@ import { normalizeElicitationFields, validateElicitationContent } from "../../ac
 import type { ProjectedToolCall } from "../../acp/tool-call-projection.ts";
 
 import { readString, truncate } from "../../util/value-utils.ts";
-import type {
-    ElicitationResponseOptions,
-    PermissionResponseOptions,
-    SessionLifecycleEvent,
-    SessionObserver,
-} from "../api/session-api.ts";
+import type { ElicitationResponseOptions, PermissionResponseOptions, SessionObserver } from "../api/session-api.ts";
 import { PendingElicitation, PendingPermission } from "./pending-interactions.ts";
 
 interface SessionInteractionContext {
@@ -43,7 +39,7 @@ interface SessionInteractionContext {
     readonly commandId: () => string;
     readonly assertNativeSession: (sessionId: string) => void;
     readonly observer: () => SessionObserver;
-    readonly recordSessionEvent: (event: SessionLifecycleEvent) => Promise<void>;
+    readonly recordSessionEvent: (event: SessionEventPayload) => Promise<void>;
 }
 export class SessionInteractions {
     // A bounded receipt window for answers in this live Session. Eviction or Session replacement makes an

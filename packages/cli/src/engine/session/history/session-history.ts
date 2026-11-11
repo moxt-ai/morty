@@ -128,6 +128,13 @@ export class HistoryReplayCapture {
         await onRecorded(event);
     };
 
+    readonly recordLifecycle = (event: SessionEventPayload): SessionLiveEvent => {
+        if (event.type !== "lifecycle-metadata") {
+            throw new Error("Lifecycle history only accepts lifecycle metadata");
+        }
+        return this.#events.append(this.#sessionTarget, event);
+    };
+
     readonly eventPage = (eventLimit: number, cursor: string | null): SessionEventPage =>
         this.#events.page(this.#sessionTarget, eventLimit, cursor);
 }

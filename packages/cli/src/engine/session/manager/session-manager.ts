@@ -6,6 +6,7 @@ import {
     SESSION_CLOSE_NOTICE_KIND,
     type SessionCapabilities,
     type SessionCloseNoticeEvent,
+    type SessionEventPayload,
     type SessionInteractionSnapshot,
     type SessionStatus,
     type SessionStatusChangedEvent,
@@ -54,7 +55,6 @@ import {
     type SessionConfigurationSnapshot,
     type SessionConfigureOptions,
     type SessionCreationOptions,
-    type SessionLifecycleEvent,
     type SessionObserver,
     type SessionPrepareOptions,
     type SessionRecovery,
@@ -126,17 +126,15 @@ export class SessionManager {
         this.#timer = timer;
     }
 
-    /** Records a lifecycle event through the Session's live process; false when no process holds the Session. */
     readonly recordLifecycleEvent = async (
         target: NativeSessionTarget,
-        event: SessionLifecycleEvent,
+        event: SessionEventPayload,
     ): Promise<boolean> => {
         const runtime = this.#executionProcesses.get(target);
         if (runtime === undefined) {
             return false;
         }
-        await runtime.recordLifecycleEvent(event);
-        return true;
+        return await runtime.recordControlEvent(event);
     };
 
     readonly setObserver = (observer: SessionObserver): void => {

@@ -10,6 +10,7 @@ import {
     type SessionCapabilities,
     type SessionCommand,
     type SessionConfigOption,
+    type SessionEventPayload,
     type SessionInteractionSnapshot,
 } from "@morty-build/client/protocol";
 import { AcpExecutionError, AcpPromptExecutionError } from "../../acp/acp-error.ts";
@@ -41,7 +42,6 @@ import {
     type SessionConfigurationSnapshot,
     type SessionConfigureOptions,
     type SessionCreationOptions,
-    type SessionLifecycleEvent,
     type SessionObserver,
     type SessionPrepareOptions,
     type SessionRecovery,
@@ -581,7 +581,13 @@ export class AgentSession {
         origin: NativeSessionOrigin | undefined,
     ): Promise<void> => {
         const conversation = this.#metrics.measureSync("session-state-read", () =>
-            restoredConversation(this.#store, this.target, this.#cwd, origin),
+            restoredConversation(
+                origin === undefined ? this.#store.read(this.target) : new MissingStoredSession(),
+                this.target,
+                this.#cwd,
+                origin,
+                new Date().toISOString(),
+            ),
         );
         this.#bind(conversation.target, "reopened", conversation.prompted);
         this.#sessionTitle = conversation.title;
@@ -986,9 +992,19 @@ export class AgentSession {
         await this.#interactions.respondElicitation(options);
     };
 
-    /** Records a lifecycle event in the Session's history and reports it, whether or not its replay is held here. */
-    readonly recordLifecycleEvent = async (event: SessionLifecycleEvent): Promise<void> => {
-        const liveEvent = this.#store.events.append(this.target, event);
+    readonly recordControlEvent = async (event: SessionEventPayload): Promise<boolean> => {
+        if (this.#sessionLoad.kind !== "loaded") {
+            return false;
+        }
+        await this.recordLifecycleEvent(event);
+        return true;
+    };
+
+    readonly recordLifecycleEvent = async (event: SessionEventPayload): Promise<void> => {
+        if (event.type !== "lifecycle-metadata" || this.#sessionLoad.kind !== "loaded") {
+            return;
+        }
+        const liveEvent = this.#sessionLoad.history.recordLifecycle(event);
         await this.#getObserver().onSessionEvent?.(liveEvent);
     };
 

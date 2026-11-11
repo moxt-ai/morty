@@ -10,7 +10,7 @@ import type {
     SessionPromptCommand,
 } from "@morty-build/client/protocol";
 import { isPromptTerminal, SessionPromptDisposition } from "@morty-build/client/protocol";
-import type { SessionEventSink, SessionLifecycleEvent } from "../api/session-api.ts";
+import type { SessionEventSink } from "../api/session-api.ts";
 import { SessionError } from "../api/session-error.ts";
 import type { PromptDispatch } from "../turn/active-turn.ts";
 import type { ExecutionReceipts, RestatedOutcome } from "../turn/execution-receipts.ts";
@@ -69,7 +69,7 @@ export class PromptLifecycle {
     readonly #recordActiveTurn: (event: SessionLiveEvent) => void;
     readonly #executions: ExecutionProgress;
 
-    readonly #recordLifecycle: (sessionTarget: NativeSessionTarget, event: SessionLifecycleEvent) => Promise<void>;
+    readonly #recordLifecycle: (sessionTarget: NativeSessionTarget, event: SessionEventPayload) => Promise<void>;
     readonly #append: (
         sessionTarget: NativeSessionTarget,
         event: SessionEventPayload,
@@ -77,7 +77,7 @@ export class PromptLifecycle {
     ) => SessionLiveEvent;
     constructor(
         sink: SessionEventSink,
-        recordLifecycle: (sessionTarget: NativeSessionTarget, event: SessionLifecycleEvent) => Promise<void>,
+        recordLifecycle: (sessionTarget: NativeSessionTarget, event: SessionEventPayload) => Promise<void>,
         append: (
             sessionTarget: NativeSessionTarget,
             event: SessionEventPayload,
