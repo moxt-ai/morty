@@ -7,7 +7,7 @@ import { isAbsolute, join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { parseArgs } from "node:util";
 import { decodeIdentifier, isIdentifier } from "@morty-build/client/protocol";
-import { claimMortyState, mortyStateDirectory } from "@morty-build/local-state";
+import { mortyStateDirectory } from "@morty-build/local-state";
 import jsQrImport from "jsqr";
 import { PNG } from "pngjs";
 import QRCode from "qrcode";
@@ -650,7 +650,6 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         const directory = resolve(requested);
         await mkdir(directory, { recursive: true, mode: 0o700 });
         await safeLocalPath(directory, true, false);
-        await claimMortyState(directory, signal);
         await safeLocalPath(directory, true, true);
         signal.throwIfAborted();
         return directory;

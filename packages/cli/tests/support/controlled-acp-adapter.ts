@@ -1,18 +1,14 @@
 import { methods } from "@agentclientprotocol/sdk/unstable";
-import { AcpExecutionConnections } from "../../src/engine/acp/adapter/execution-connections.ts";
-import {
-    createdSessionId,
-    normalizeOpenedSession,
-    sessionCreationResponse,
-    sessionWorkspace,
-} from "../../src/engine/acp/adapter/lifecycle-output.ts";
+import { sessionCreationResponse } from "../../src/engine/acp/adapter/lifecycle-output.ts";
 import { findNativeSession } from "../../src/engine/acp/adapter/native-session-lookup.ts";
-import { AgentQueryProcesses } from "../../src/engine/acp/adapter/query-processes.ts";
-import { AcpSessionConnector } from "../../src/engine/acp/adapter/session-events.ts";
 import type { AcpAgentDefinition } from "../../src/engine/acp/agent/agent-definition.ts";
 import type { Adapter, AdapterDependencies } from "../../src/engine/acp/native-history/preview-contract.ts";
 import { sessionIdSchema } from "../../src/engine/acp/protocol/native-session.ts";
 import { runCleanup } from "../../src/engine/util/run-cleanup.ts";
+import { AcpExecutionConnections } from "./acp/execution-connections.ts";
+import { createdSessionId, normalizeOpenedSession, sessionWorkspace } from "./acp/lifecycle-output.ts";
+import { AgentQueryProcesses } from "./acp/query-processes.ts";
+import { AcpSessionConnector } from "./acp/session-events.ts";
 import { ControlledAcpHistory } from "./controlled-acp-history.ts";
 
 /** Controlled ACP peers use the production transport, never a named vendor's concrete harness. */

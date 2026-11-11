@@ -39,7 +39,7 @@ async function runCli(
     return { code, stderr, stdout };
 }
 
-/** A state root that `morty pair list` has opened, and the installation data directory it created inside it. */
+/** A state root initialized by a real daemon, and the daemon data directory it created inside it. */
 async function openedStateRoot(): Promise<{
     readonly root: string;
     readonly installation: string;
@@ -48,8 +48,14 @@ async function openedStateRoot(): Promise<{
     const home = await mkdtemp(join(tmpdir(), "morty-state-root-"));
     temporaryDirectories.push(home);
     const root = join(home, "state");
-    const listed = await runCli(["pair", "list"], environment(home, root));
-    expect(listed.code, listed.stderr).toBe(0);
+    const env = environment(home, root);
+    try {
+        const started = await runCli(["start"], env);
+        expect(started.code, started.stderr).toBe(0);
+    } finally {
+        const stopped = await runCli(["quit"], env);
+        expect(stopped.code, stopped.stderr).toBe(0);
+    }
     const application = join(root, "machine");
     return { root, installation: application, home };
 }
@@ -121,7 +127,7 @@ describe("Morty state root", () => {
         expect(listed.stderr).toContain(`MORTY_STATE_DIRECTORY=${root}`);
     });
 
-    it("Given an unmarked nested legacy state root, When Morty runs with it, Then it refuses adoption and retains its data", async () => {
+    it("Given leftover files nested inside daemon data, When Morty is directed there as a state root, Then it refuses and retains those files", async () => {
         const { installation, home } = await openedStateRoot();
         // A daemon that ran with this directory as its root recorded its current version data there.
         await mkdir(join(installation, "versions", packageMetadata.version), { recursive: true, mode: 0o700 });

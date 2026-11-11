@@ -23,10 +23,6 @@ const tokenSchema = v.pipe(
         /^(?:morty_anon_v1_[A-Za-z0-9_-]{43}|morty_recovery_v1\.prj_(?:wn|en|sa|we|ee|ap|an|as|oc|af|me)_01_[A-Za-z0-9_-]{24}\.[A-Za-z0-9_-]{43})$/u,
     ),
 );
-const recoveryTokenSchema = v.pipe(
-    v.string(),
-    v.regex(/^morty_recovery_v1\.prj_(?:wn|en|sa|we|ee|ap|an|as|oc|af|me)_01_[A-Za-z0-9_-]{24}\.[A-Za-z0-9_-]{43}$/u),
-);
 const computerIdSchema = v.pipe(v.string(), v.regex(/^prj_(wn|en|sa|we|ee|ap|an|as|oc|af|me)_01_[A-Za-z0-9_-]{24}$/u));
 const userIdSchema = v.pipe(v.string(), v.minLength(8), v.maxLength(128));
 const identityFields = { token: tokenSchema, userId: userIdSchema, computerId: computerIdSchema };
@@ -378,22 +374,6 @@ export class AnonymousIdentityApi {
             access.forget(scope);
         }
         leaveComputerAddress();
-    };
-
-    readonly createRecoveryToken = async (
-        accessToken: string,
-        computerId: string,
-        signal: AbortSignal,
-    ): Promise<string> => {
-        const result = v.parse(
-            v.object({ token: recoveryTokenSchema }),
-            await this.#request(
-                `/computers/${encodeURIComponent(v.parse(computerIdSchema, computerId))}/identity/recovery-token`,
-                { method: "POST", headers: { authorization: `Bearer ${v.parse(tokenSchema, accessToken)}` } },
-                signal,
-            ),
-        );
-        return result.token;
     };
 
     readonly #saveIdentity = (identity: AnonymousIdentity, access: StoredAccessWriter) => {

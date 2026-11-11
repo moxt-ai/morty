@@ -9,7 +9,7 @@ import { replacedToken, storedToken } from "../services/identity/remembered-comp
 import { type Clock, systemClock } from "../services/time/clock.ts";
 import { type ActiveAnonymousSession, createAnonymousSessionStore } from "./authentication/anonymous-session-store.ts";
 import { createContinueStore } from "./authentication/continue-store.ts";
-import { createIdentityAccess, type IdentityAccess } from "./authentication/identity-access.ts";
+import { createIdentityAccess } from "./authentication/identity-access.ts";
 import { createBugReportDialogStore } from "./bug-report-dialog-store.ts";
 import { type ChatWorkspace, createChatWorkspace } from "./chat/chat-workspace.ts";
 import { createComputerSwitcher } from "./chat/computer-switcher-store.ts";
@@ -55,7 +55,6 @@ export interface MortyApplication {
     readonly continuation: ReturnType<typeof createContinueStore>;
     /** The signed-in surface; carries the workspace for the active identity. */
     readonly sessionWorkspace: SessionWorkspaceStoreApi;
-    readonly identityAccess: (identity: ChatIdentity, onAccessEnded: () => void) => IdentityAccess;
     readonly transport: ApiTransport;
     readonly reloadIdentity: () => void;
     readonly dispose: () => void;
@@ -268,16 +267,6 @@ export function createMortyApplication(options: {
         remoteImages: createRemoteImageConsentStore(),
         continuation,
         sessionWorkspace,
-        identityAccess: (identity, onAccessEnded) =>
-            createIdentityAccess({
-                fetchRequest: transport.fetch,
-                waitForChange: transport.waitForChange,
-                origin: options.origin,
-                identity,
-                onAccessEnded,
-                currentAccess,
-                credentialRejected,
-            }),
         transport,
         reloadIdentity,
         dispose: () => {

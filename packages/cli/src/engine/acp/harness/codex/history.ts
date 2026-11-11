@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { AcpExecutionError } from "../../acp-error.ts";
-import { embedLocalHistoryImages } from "../../native-history/codex/history-images.ts";
+import { resolveHistoryTextImages } from "../../native-history/codex/history-images.ts";
 import type { CodexAppServerClient } from "./app-server-client.ts";
 import { CODEX_HISTORY_TURN_PAGE_LIMIT, threadTurnsPageSchema } from "./app-server-protocol.ts";
 import { decodeThreadItem, messageQuestions, reasoningText, toolCallUpdate } from "./items.ts";
@@ -56,22 +56,15 @@ export async function replayCodexHistory(
                     // Keep native input boundaries: joining adjacent resource links
                     // would turn the first file URL into part of the next input.
                     for (const text of contents) {
-                        const history = await embedLocalHistoryImages(
-                            { status: "available", truncated: false, messages: [{ role: "user", text }] },
-                            deadline,
-                        );
-                        if (history.status !== "available") {
-                            continue;
-                        }
-                        const message = history.messages[0];
-                        for (const image of message?.images ?? []) {
+                        const message = await resolveHistoryTextImages(text, deadline);
+                        for (const image of message.images) {
                             await emit({
                                 content: { type: "image", data: image.data, mimeType: image.mimeType },
                                 messageId: item.id,
                                 sessionUpdate: "user_message_chunk",
                             });
                         }
-                        const restoredText = message?.text ?? "";
+                        const restoredText = message.text;
                         if (restoredText.length > 0) {
                             await emit({
                                 content: { text: restoredText, type: "text" },
