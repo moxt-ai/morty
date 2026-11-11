@@ -472,6 +472,7 @@ test("Given an active turn on mobile, when the browser goes offline and the user
     const { page } = runtime;
     await page.clock.install({ time: new Date("2026-10-24T00:00:00Z") });
     await runtime.openPairedChat();
+    await conversationLoaded(page);
     const composer = page.getByRole("textbox", { name: "Message" });
     await composer.fill("wait for steering");
     await page.getByRole("button", { name: "Send message" }).click();
