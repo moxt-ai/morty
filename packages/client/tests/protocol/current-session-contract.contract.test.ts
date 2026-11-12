@@ -1,6 +1,6 @@
 import {
     decodeAgentSettingsDiscoveredEvent,
-    decodeSessionEventLogPage,
+    decodeKnownSessionEventLogPage,
     decodeSessionPermissionRequestedEvent,
     decodeSessionsListedEvent,
 } from "@morty-build/client/protocol";
@@ -86,7 +86,7 @@ it("Given history holding a turn's lifecycle, When a client decodes it, Then the
         truncated: false,
         version: 2,
     };
-    expect(decodeSessionEventLogPage(JSON.stringify(page))).toEqual(page);
+    expect(decodeKnownSessionEventLogPage(JSON.stringify(page))).toEqual(page);
 });
 it("Given a session list entry without status, When a client decodes it, Then it rejects the retired entry", () => {
     const entry = {

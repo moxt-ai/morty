@@ -1,4 +1,6 @@
-import type { ProjectLocationHint } from "@morty-build/client/protocol";
+/** Where Cloudflare places a computer's Durable Object. */
+export type ProjectLocationHint = "wnam" | "apac" | "apac-ne" | "apac-se";
+
 import * as v from "valibot";
 
 const northeastAsia = new Set(["CN", "HK", "JP", "KP", "KR", "MO", "MN", "TW"]);

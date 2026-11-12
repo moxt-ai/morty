@@ -1,4 +1,4 @@
-import { SqliteComputerRelayStore } from "../../src/computer-relay/components/management/storage/sqlite-computer-relay-store.ts";
+import { ComputerRelayStore } from "../../src/computer-relay/components/management/storage/computer-relay-store.ts";
 import { ComputerRelay as ProductionComputerRelay } from "../../src/computer-relay/computer-relay.ts";
 import { DurableObjectDatabase } from "../../src/computer-relay/infra/durable-object-database.ts";
 import type { ConfiguredRelayBindings } from "../../src/contracts/relay-bindings.ts";
@@ -14,11 +14,8 @@ export class ComputerRelay extends ProductionComputerRelay {
     override async fetch(request: Request): Promise<Response> {
         if (request.url === "https://computer.internal/revoked-computer" && request.method === "POST") {
             const computerId = await request.text();
-            await new SqliteComputerRelayStore(computerId, new DurableObjectDatabase(this.ctx.storage)).revokeComputer(
-                {
-                    computerId,
-                    now: Date.now(),
-                },
+            await new ComputerRelayStore(computerId, new DurableObjectDatabase(this.ctx.storage)).revokeComputer(
+                Date.now(),
                 request.signal,
             );
             return new Response(null, { status: 204 });

@@ -13,13 +13,10 @@ export function assertRequiredKeys(value: Readonly<Record<string, unknown>>, req
     }
 }
 
-export async function parseJsonBody(
-    request: Request,
-    maximumLength = MAX_REQUEST_BODY_LENGTH,
-): Promise<Readonly<Record<string, unknown>>> {
+export async function parseJsonBody(request: Request): Promise<Readonly<Record<string, unknown>>> {
     let encoded: string;
     try {
-        encoded = await readBoundedUtf8Body(request, maximumLength);
+        encoded = await readBoundedUtf8Body(request, MAX_REQUEST_BODY_LENGTH);
     } catch (cause) {
         if (cause instanceof RequestBodyError) {
             throw new PairingDirectoryError(

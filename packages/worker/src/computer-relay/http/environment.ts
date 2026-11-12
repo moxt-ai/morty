@@ -1,7 +1,7 @@
 import type { MiddlewareHandler } from "hono";
 import type { ConfiguredRelayBindings } from "../../contracts/relay-bindings.ts";
 import type { ComputerTargetEnvironment } from "../../http/computer-target.ts";
-import type { ComputerInternalService } from "../components/management/service/computer-internal-service.ts";
+import type { DurableComputerAccount } from "../components/management/storage/durable-computer-account.ts";
 import type { LocalSessionOperations } from "../components/runtime/service/local-session-operations.ts";
 import type {
     SessionAccessService,
@@ -30,5 +30,5 @@ export type RelayRouteMiddleware = readonly [
 
 export type ComputerRouteHttpEnvironment = RelayHttpEnvironment & {
     readonly Bindings: ConfiguredRelayBindings;
-    readonly Variables: ComputerTargetEnvironment["Variables"] & { readonly computerInternal: ComputerInternalService };
+    readonly Variables: ComputerTargetEnvironment["Variables"] & { readonly computerAccount: DurableComputerAccount };
 };

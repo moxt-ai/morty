@@ -1,5 +1,5 @@
-import type { ProjectLocationHint } from "@morty-build/client/protocol";
 import { ComputerManagementError } from "./computer-management.ts";
+import type { ProjectLocationHint } from "./project-location.ts";
 import type { ComputerManagementPlacement } from "./relay/computer-management.ts";
 
 const placements: ReadonlyMap<string, ComputerManagementPlacement> = new Map([

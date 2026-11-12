@@ -1,5 +1,5 @@
-import type { ProjectLocationHint } from "@morty-build/client/protocol";
 import { ComputerManagementError } from "../computer-management.ts";
+import type { ProjectLocationHint } from "../project-location.ts";
 
 export class RelayAuthenticationConfiguration {
     readonly allowedOrigins: ReadonlySet<string>;

@@ -12,13 +12,11 @@ export const computerPairing = sqliteTable("computer_pairings", {
     expiresAt: integer("expires_at").notNull(),
     // Each computer has its own database, so the key's namespace is the database boundary.
     creationIdempotencyKey: text("creation_idempotency_key").notNull().unique(),
-    createdByOwnerCredentialId: text("created_by_owner_credential_id").notNull(),
 });
 
 /** The daemon that claimed a generation's pairing code, and the Agents it currently reports. */
 export const computerRegistration = sqliteTable("computer_registrations", {
     generation: integer("generation").primaryKey(),
-    claimedAt: integer("claimed_at").notNull(),
     // Keep the persisted column name so retained registrations remain readable.
     computerName: text("machine_name").notNull(),
     workspaceName: text("workspace_name").notNull(),

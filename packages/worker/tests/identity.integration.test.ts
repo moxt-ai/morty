@@ -420,7 +420,6 @@ test("Given a first-time visitor, When their identity and Bot are managed, Then 
 
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
-        authentication: { kind: "anonymous" },
         computerId: identity.computerId,
         accessExpiresAt: null,
     });
@@ -580,7 +579,6 @@ test("Given anonymous Morty sessions, When the account endpoint authenticates th
     const response = await worker.fetch(accountRequest(local.token, local.computerId), environment);
     expect(response.status).toBe(200);
     expect(await response.json()).toEqual({
-        authentication: { kind: "anonymous" },
         computerId: local.computerId,
         accessExpiresAt: null,
     });

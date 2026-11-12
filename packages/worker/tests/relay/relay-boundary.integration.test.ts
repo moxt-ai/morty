@@ -28,7 +28,6 @@ import {
 } from "@morty-build/client/protocol";
 import { afterAll, afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { createTestMortyRelayApp } from "../../../relay-test-support/src/app.ts";
-import { DurableComputerAccount } from "../../src/computer-relay/components/management/storage/durable-computer-account.ts";
 import { DaemonWebSocketRoutes } from "../../src/computer-relay/components/runtime/daemon-websocket-routes.ts";
 import { createRuntimeContext } from "../../src/computer-relay/components/runtime/runtime-context.ts";
 import { createRelayDurableObjectContext } from "../../src/computer-relay/composition/relay-durable-object-context.ts";
@@ -38,7 +37,7 @@ import { RelayAuthenticationConfiguration } from "../../src/contracts/relay/comp
 import type { RelayBindings } from "../../src/contracts/relay-bindings.ts";
 import { browserOperationHeaders, closeBrowserSocket, requestBrowserOperation } from "./browser-session.ts";
 import { computerBackend, createOwner, issueSession, ownerRequest } from "./owner-fixture.ts";
-import { computerManagementStore, revokeTestComputer } from "./registered-computer.ts";
+import { computerAccess, revokeTestComputer } from "./registered-computer.ts";
 
 const nativeTarget = (sessionId: string): NativeSessionTarget => ({ harness: "codex", sessionId });
 
@@ -917,15 +916,11 @@ it.each(["text", "binary"])(
             runInDurableObject(env.COMPUTER_RELAY.getByName(runtime.computerId), async (_instance, state) => {
                 const pending: Promise<void>[] = [];
                 const database = new DurableObjectDatabase(state.storage);
-                const context = createRelayDurableObjectContext(state, {
-                    accounts: new DurableComputerAccount(state.storage),
-                    database,
-                    storeFor: (computerId) => computerManagementStore(computerId, state.storage),
-                });
+                const { access } = computerAccess(runtime.computerId, state.storage);
+                const context = createRelayDurableObjectContext(state, { database, access: () => access });
                 const relay = new DaemonWebSocketRoutes(
                     createRuntimeContext({
                         doDatabase: database,
-                        storages: context.storages,
                         services: context.services,
                         gateways: context.gateways,
                         utilities: {

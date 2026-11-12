@@ -6,10 +6,9 @@ import { createTestOwner } from "../../../relay-test-support/src/identity-fixtur
 import { IdentityStorage } from "../../src/computer-relay/components/management/storage/identity-storage.ts";
 import { SessionAccessSigner } from "../../src/computer-relay/components/runtime/entity/session-access-credential.ts";
 import { SessionAccessService } from "../../src/computer-relay/components/runtime/service/session-access-service.ts";
-import { computerDirectory } from "../../src/computer-relay/composition/computer-directory.ts";
-import { ComputerRelayGateway } from "../../src/computer-relay/gateway/computer-relay.ts";
 import { DurableObjectDatabase } from "../../src/computer-relay/infra/durable-object-database.ts";
 import worker from "../../src/worker/application.ts";
+import { computerAccess } from "./registered-computer.ts";
 
 export const ownerOrigin = "https://relay.test";
 const ownerEnvironment = () => ({ ...env, APP_ORIGIN: ownerOrigin });
@@ -41,10 +40,13 @@ async function ownerHolder(computerId: string): Promise<SessionAccessHolder> {
 
 /** Session protocol scenarios start with an authorized computer and an issued Session credential. */
 export async function issueSession(computerId: string, target: NativeSessionTarget) {
-    return new SessionAccessService(
-        computerDirectory(env, (id) => new ComputerRelayGateway(env, id)),
-        new SessionAccessSigner(env.MORTY_SESSION_SIGNING_SECRET),
-    ).issue({ kind: "session", computerId, target }, 900, await ownerHolder(computerId), AbortSignal.timeout(10_000));
+    const holder = await ownerHolder(computerId);
+    return runInDurableObject(env.COMPUTER_RELAY.getByName(computerId), async (_instance, state) =>
+        new SessionAccessService(
+            computerAccess(computerId, state.storage).access,
+            new SessionAccessSigner(env.MORTY_SESSION_SIGNING_SECRET),
+        ).issue({ kind: "session", computerId, target }, 900, holder, AbortSignal.timeout(10_000)),
+    );
 }
 
 export const computerBackend = (computerId: string) => {

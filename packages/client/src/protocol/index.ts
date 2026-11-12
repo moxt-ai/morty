@@ -37,7 +37,6 @@ export {
     MORTY_API_PREFIX,
     mortyApiUrl,
 } from "./relay/morty-api.ts";
-export type { ProjectLocationHint } from "./relay/project-location.ts";
 
 export type {
     SessionAccessClaims,
@@ -138,9 +137,7 @@ export {
     decodeNativeSessionEvents,
     decodeSessionEvent,
     decodeSessionEventEnvelope,
-    decodeSessionEventLogPage,
     decodeSessionLiveEvent,
-    encodeSessionEvent,
     encodeSessionEventEnvelope,
     isPromptTerminal,
     promptCompletion,
