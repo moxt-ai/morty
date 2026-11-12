@@ -3,7 +3,7 @@ import { readFile, writeFile } from "node:fs/promises";
 import { parseArgs } from "node:util";
 import * as v from "valibot";
 import { memoryComputerCredentials } from "../packages/cli/tests/support/computer-credentials.ts";
-import { WsTransport } from "../packages/client/src/index.ts";
+import { type MortyEndpointCall, sessionEndpoints, WsTransport } from "../packages/client/src/index.ts";
 import { connectControlledAgentRuntime, createMortyFakeDaemon } from "../tests/support/fake-daemon/runtime.ts";
 import { mortyReply } from "../tests/support/fake-daemon/scenarios.ts";
 
@@ -34,16 +34,17 @@ using sessionConnection = {
     },
 };
 
-async function requestSession(path: string, status: number, token: string): Promise<unknown> {
-    const response = await sessionConnection.transport.fetch(
-        new Request(new URL(path, origin), {
-            headers: { authorization: `Bearer ${token}` },
-            signal,
-        }),
-    );
+async function requestSession(endpoint: MortyEndpointCall, status: number, token: string): Promise<unknown> {
+    const response = await sessionConnection.transport.fetch({
+        endpoint,
+        origin: new URL("/morty/api/", origin),
+        headers: { authorization: `Bearer ${token}` },
+        body: null,
+        signal,
+    });
     if (response.status !== status) {
         await response.body?.cancel();
-        throw new Error(`Morty verification failed (${path}, WS operation status ${response.status})`);
+        throw new Error(`Morty verification failed (${endpoint.path}, WS operation status ${response.status})`);
     }
     return await response.json();
 }
@@ -120,19 +121,19 @@ const expected = createHmac("sha256", signingSecret).update(signed).digest();
 if (!timingSafeEqual(expected, Buffer.from(signature, "base64url"))) {
     throw new Error("The configured signing key was not used");
 }
-const sessionPath = `/morty/api/v1/computers/${owner.computerId}/harnesses/${access.target.harness}/sessions/${access.target.sessionId}`;
-await requestSession(`${sessionPath}/configuration`, 200, access.credential);
-await requestSession(`${sessionPath}/configuration`, 401, `${signed}.${Buffer.alloc(32).toString("base64url")}`);
+const readConfiguration = sessionEndpoints.readConfiguration({ computerId: owner.computerId, target: access.target });
+await requestSession(readConfiguration, 200, access.credential);
+await requestSession(readConfiguration, 401, `${signed}.${Buffer.alloc(32).toString("base64url")}`);
 const successor = `morty_computer_v1_${randomBytes(32).toString("base64url")}`;
 await request(`/morty/api/computers/${owner.computerId}/identity/revoke-all-access`, 200, owner.computerToken, {
     successor,
 });
-await requestSession(`${sessionPath}/configuration`, 401, access.credential);
+await requestSession(readConfiguration, 401, access.credential);
 const renewed = v.parse(
     v.object({ credential: v.string() }),
     await request(`${chat}/session-access`, 200, successor, access.target),
 );
-await requestSession(`${sessionPath}/configuration`, 200, renewed.credential);
+await requestSession(readConfiguration, 200, renewed.credential);
 await writeFile(
     values.evidence,
     `${JSON.stringify(

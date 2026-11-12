@@ -22,3 +22,19 @@ export function computerIdFromApiPath(request: Request): string | null {
     }
     return computerId;
 }
+
+/** Validate the untrusted wire path against the connection's Computer before dispatching to its authorizing router. */
+export function matchesComputerApiTarget(request: Request, computerId: string): boolean {
+    const path = new URL(request.url).pathname;
+    const sessionPrefix = `${MORTY_API_PREFIX}/v1/computers/${encodeURIComponent(computerId)}/harnesses/`;
+    if (!path.startsWith(sessionPrefix)) {
+        return computerIdFromApiPath(request) === computerId;
+    }
+    const parts = path.slice(sessionPrefix.length).split("/");
+    return (
+        parts[1] === "sessions" &&
+        parts.length >= 4 &&
+        parts[3] !== "access-credentials" &&
+        /^Bearer [^\s]+$/u.test(request.headers.get("authorization") ?? "")
+    );
+}
