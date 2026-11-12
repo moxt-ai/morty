@@ -48,7 +48,7 @@ deployed API supports it. R2 uploads currently use the Cloudflare REST API; its
 account-level storage permission must stay in the Morty-only account. Bucket-scoped
 object credentials require a separately verified S3 upload path.
 
-Ordinary deployment does not need D1, DNS, zone administration, member management
+Ordinary deployment does not need DNS, zone administration, member management
 or API-token provisioning permissions.
 
 Deployment and restore verify account ownership, active status and a valid future
