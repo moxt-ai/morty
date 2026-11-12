@@ -1020,7 +1020,7 @@ export class SessionManager {
         target: NativeSessionTarget,
         resolveAgent: ResolveAgent,
     ): Promise<SessionPrepareOptions> {
-        const resolved = await resolveAgent(options.agent.harness, options.signal, target);
+        const resolved = await resolveAgent(options.agent.harness, options.signal);
         options.signal.throwIfAborted();
         return { ...options, ...resolved, target };
     }

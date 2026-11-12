@@ -101,6 +101,7 @@ test("Given real Codex dispatches and waits for a subagent, When the turn runs t
         },
         new RuntimeAgentDependencies([agent]),
         new RuntimeLocalContext(stateDirectory, process.env),
+        async (agent) => agent,
     );
     const cancellation = new AbortController();
     const runtime = runRuntime(config, cancellation.signal);

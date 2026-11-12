@@ -54,12 +54,6 @@ function addFailureDetails(details: Record<string, string>, failure: unknown): v
     }
 }
 
-export function describeRelayFailure(failure: unknown): Readonly<Record<string, string>> {
-    const details: Record<string, string> = {};
-    addFailureDetails(details, failure);
-    return details;
-}
-
 export class RelayConnectionDiagnostics {
     #lastSkippedLogAt = Number.NEGATIVE_INFINITY;
     #skippedCount = 0;

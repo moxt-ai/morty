@@ -1,11 +1,10 @@
 import { PROTOCOL_VERSION } from "@agentclientprotocol/sdk/unstable";
-import { AcpExecutionError } from "../../acp-error.ts";
 import type { AcpAgentDefinition } from "../../agent/agent-definition.ts";
 import { spawnClaudeWithParentLifeline } from "../../harness/claude/parent-lifeline.ts";
 import { type AcpClient, ClaudeAcpAgent } from "../../harness/claude/upstream/dist/acp-agent.js";
 import { validateAgentRuntime } from "../agent-initialization.ts";
 
-export type ClaudeClientRuntime = Pick<AcpAgentDefinition, "command" | "environment" | "runtimeExecutables">;
+export type ClaudeClientRuntime = Pick<AcpAgentDefinition, "agentIdentity" | "command" | "environment">;
 
 export function createClaudeCatalogClient(
     runtime: ClaudeClientRuntime,
@@ -35,13 +34,6 @@ export async function createClaudeClient(
 ): Promise<ClaudeAcpAgent> {
     await validateAgentRuntime(runtime, signal);
     signal.throwIfAborted();
-    if (!runtime.runtimeExecutables.some((identity) => identity.realPath === runtime.command)) {
-        throw new AcpExecutionError(
-            "The Claude command is not a verified runtime executable",
-            {},
-            "agent_runtime_changed",
-        );
-    }
     return createClaudeCatalogClient(runtime, callbacks, onBackgroundActivity);
 }
 

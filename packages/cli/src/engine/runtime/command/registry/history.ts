@@ -113,7 +113,7 @@ async function executeSessionHistoryPageLoad(
         harness = entry.harness;
         const resolved = await resolveSessionDirectory(directories, entry.directory, signal);
         const loadOptions = {
-            ...(await resolveAgent(entry.harness, signal, command.target)),
+            ...(await resolveAgent(entry.harness, signal)),
             cwd: resolved.cwd,
             target: command.target,
             signal,
@@ -162,7 +162,7 @@ async function executeSessionPreviewHistoryPageLoad(
     try {
         const resolved = await resolveSessionDirectory(directories, command.directory, signal);
         const loadOptions = {
-            ...(await resolveAgent(command.target.harness, signal, command.target)),
+            ...(await resolveAgent(command.target.harness, signal)),
             cwd: resolved.cwd,
             target: command.target,
             signal,

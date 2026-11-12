@@ -7,13 +7,11 @@ import { unsupportedSessionCapabilities } from "../protocol/session-capabilities
 export class AcpAgentDefinition {
     readonly agentIdentity: ExecutableIdentity;
     readonly agentVersion: string;
-    readonly adapterVersion: string;
     readonly capabilities: SessionCapabilities;
     readonly command: string;
     readonly environment: Readonly<Record<string, string>>;
     readonly harness: string;
     readonly label: string;
-    readonly runtimeExecutables: readonly ExecutableIdentity[];
 
     constructor(
         harness: string,
@@ -23,18 +21,14 @@ export class AcpAgentDefinition {
         agentVersion = "",
         agentIdentity: ExecutableIdentity = readExecutableIdentity(command),
         capabilities: SessionCapabilities = unsupportedSessionCapabilities(),
-        adapterVersion = agentVersion,
-        runtimeExecutables: readonly ExecutableIdentity[] = [agentIdentity],
     ) {
         this.agentIdentity = agentIdentity;
         this.agentVersion = agentVersion;
-        this.adapterVersion = adapterVersion;
         this.capabilities = Object.freeze({ ...capabilities });
         this.command = agentIdentity.realPath;
         this.environment = Object.freeze({ ...environment });
         this.harness = harness;
         this.label = label;
-        this.runtimeExecutables = Object.freeze([...new Set([agentIdentity, ...runtimeExecutables])]);
     }
 
     readonly withEnvironment = (environment: Readonly<Record<string, string>>): AcpAgentDefinition =>
@@ -46,7 +40,5 @@ export class AcpAgentDefinition {
             this.agentVersion,
             this.agentIdentity,
             this.capabilities,
-            this.adapterVersion,
-            this.runtimeExecutables,
         );
 }

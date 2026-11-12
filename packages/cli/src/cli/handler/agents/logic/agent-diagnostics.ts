@@ -7,14 +7,12 @@ import {
 import { writeExistingFile } from "../../../../storage/files/output-file.ts";
 
 class AvailableAgentDiagnostic {
-    readonly adapterVersion: string;
     readonly agentVersion: string;
     readonly harness: string;
     readonly label: string;
     readonly status = "ready";
 
     constructor(discovery: AvailableAgent) {
-        this.adapterVersion = discovery.agent.adapterVersion;
         this.agentVersion = discovery.agent.agentVersion;
         this.harness = discovery.specification.harness;
         this.label = discovery.specification.label;
@@ -105,11 +103,7 @@ export function formatAgentDiagnostics(inventory: LocalAgentInventory, json: boo
     const lines: string[] = [];
     for (const available of diagnostics.available) {
         lines.push(
-            humanLine(
-                available.label,
-                available.status,
-                `${available.agentVersion}   ${available.adapterVersion}${detectionSuffix(available)}`,
-            ),
+            humanLine(available.label, available.status, `${available.agentVersion}${detectionSuffix(available)}`),
         );
     }
     for (const unavailable of diagnostics.unavailable) {

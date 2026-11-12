@@ -22,7 +22,6 @@ import {
 import { listen, port } from "@morty-build/relay-test-support/websocket";
 import { type WebSocket, WebSocketServer } from "ws";
 import { collectLocalDaemonLogs } from "../../../src/cli/handler/logs/logic/collect-local-logs.ts";
-import { resolveMaxAcpProcesses } from "../../../src/daemon/config.ts";
 import { sendLocalRequest } from "../../../src/daemon/control/local-client.ts";
 import { decodeLifecycleResponse } from "../../../src/daemon/control/protocol.ts";
 import { openMortyInstallation } from "../../../src/daemon/pairing/pair-local-computer.ts";
@@ -255,8 +254,10 @@ async function withDaemonConnection(
                           new RuntimeLocalContext(
                               directory,
                               { ...process.env, ...environment },
-                              resolveMaxAcpProcesses(cliEnvironment),
+                              // A scenario that needs process retirement shrinks the retained process budget.
+                              Number(environment["MORTY_TEST_MAX_ACP_PROCESSES"] ?? "1000"),
                           ),
+                          async (agent) => agent,
                       );
                   })()
                 : null;

@@ -1,5 +1,5 @@
-import type { CatalogAgent } from "../../agent/catalog.ts";
 import { type RuntimeConfig, withRuntimeEnvironment } from "../config.ts";
+import { discoverRuntimeAgentInventory } from "./discover-agent-catalog.ts";
 import { publishAgentCatalog } from "./publish-agent-catalog.ts";
 
 /**
@@ -7,16 +7,25 @@ import { publishAgentCatalog } from "./publish-agent-catalog.ts";
  * started become available without restarting it. The transition and publication commit together; a failed
  * publication keeps the previous catalog.
  */
-export async function refreshAgentCatalog(
-    config: RuntimeConfig,
-    discover: (signal: AbortSignal) => Promise<readonly CatalogAgent[]>,
-    signal: AbortSignal,
-) {
-    const readyAgents = await discover(signal);
+export async function refreshAgentCatalog(config: RuntimeConfig, signal: AbortSignal) {
+    const readyAgents = (await discoverConfiguredAgents(config, signal)).readyAgents();
     signal.throwIfAborted();
     return await config.catalog.replaceAndPublish(
         () => readyAgents.map((agent) => withRuntimeEnvironment(agent, config.localContext.agentLaunchEnvironment)),
         (publishSignal) => publishAgentCatalog(config, publishSignal),
         signal,
+    );
+}
+
+/** Discovers the local Agents a Runtime launches, with the workspace and environment it was configured with. */
+export async function discoverConfiguredAgents(config: RuntimeConfig, signal: AbortSignal) {
+    return await discoverRuntimeAgentInventory(
+        {
+            defaultWorkspace: config.defaultWorkspace,
+            dataDirectory: config.localContext.stateDirectory,
+            environment: config.localContext.agentLaunchEnvironment,
+            signal,
+        },
+        config.computerId,
     );
 }

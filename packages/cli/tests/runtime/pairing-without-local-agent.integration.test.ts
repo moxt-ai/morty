@@ -144,9 +144,9 @@ describe("pairing a computer without a local Agent", () => {
         const relay = await createPairingRelay();
 
         try {
-            const { MortyRuntimeEngine } = await import("../../src/engine/runtime/engine.ts");
-            const engine = new MortyRuntimeEngine({
-                engineDataDir: stateDirectory,
+            const { TestComputerHost } = await import("../support/computer-host.ts");
+            const engine = new TestComputerHost({
+                dataDirectory: stateDirectory,
                 agentLaunchEnvironment: agentlessEnvironment(stateDirectory),
             });
 
@@ -185,9 +185,9 @@ describe("pairing a computer without a local Agent", () => {
         const environment = agentlessEnvironment(stateDirectory);
 
         try {
-            const { MortyRuntimeEngine } = await import("../../src/engine/runtime/engine.ts");
-            const engine = new MortyRuntimeEngine({
-                engineDataDir: stateDirectory,
+            const { TestComputerHost } = await import("../support/computer-host.ts");
+            const engine = new TestComputerHost({
+                dataDirectory: stateDirectory,
                 agentLaunchEnvironment: environment,
             });
             const paired = await engine.pair(

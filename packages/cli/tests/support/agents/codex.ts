@@ -100,7 +100,6 @@ export class CodexFixture implements AsyncDisposable {
             CODEX_HOME: codexHome,
             DEFAULT_AUTH_REQUEST: JSON.stringify({ methodId: "api-key" }),
             HOME: directory,
-            INITIAL_AGENT_MODE: "agent-full-access",
             MORTY_CLAUDE_PATH: missing,
             MORTY_CODEX_PATH: executable,
             MORTY_PI_PATH: missing,

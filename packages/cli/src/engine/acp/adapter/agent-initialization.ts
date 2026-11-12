@@ -10,13 +10,13 @@ export class RetryableAcpInitializationError extends AcpExecutionError {
 }
 
 export async function validateAgentRuntime(
-    agent: Pick<AcpAgentDefinition, "runtimeExecutables">,
+    agent: Pick<AcpAgentDefinition, "agentIdentity">,
     signal: AbortSignal,
 ): Promise<void> {
     signal.throwIfAborted();
-    const unchanged = await Promise.all(agent.runtimeExecutables.map((identity) => revalidateExecutable(identity)));
+    const unchanged = await revalidateExecutable(agent.agentIdentity);
     signal.throwIfAborted();
-    if (unchanged.some((result) => !result)) {
+    if (!unchanged) {
         throw new AcpExecutionError(
             "The local Agent runtime changed; restart Morty before starting a new conversation",
             {},
