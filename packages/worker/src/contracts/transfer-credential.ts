@@ -5,7 +5,7 @@ const secret = v.pipe(v.string(), v.regex(/^[A-Za-z0-9_-]{43}$/u));
 const credentialKind = v.picklist(["morty_transfer_v1"]);
 const credential = v.tuple([credentialKind, computerId, secret]);
 
-export function readProjectCredential(value: unknown) {
+export function readTransferCredential(value: unknown) {
     if (typeof value !== "string") {
         return null;
     }

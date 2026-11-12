@@ -1,7 +1,10 @@
 import type { SessionAccessGrant, SessionAccessHolder } from "@morty-build/client/protocol";
 import { ComputerManagementError } from "../../../../contracts/computer-management.ts";
+import {
+    type ComputerAccess,
+    ComputerAuthenticationError,
+} from "../../../../contracts/relay/computer-authentication.ts";
 import { validateIdentifier } from "../../../../contracts/relay/pairing.ts";
-import { type ComputerAccess, ProjectAuthenticationError } from "../../../../contracts/relay/project-authentication.ts";
 import type { ComputerRelayStore } from "../storage/computer-relay-store.ts";
 import type { DurableComputerAccount } from "../storage/durable-computer-account.ts";
 import type { IdentityStorage } from "../storage/identity-storage.ts";
@@ -45,9 +48,9 @@ export class ComputerAccessService {
         return active ? await this.#store.readActiveGeneration(signal) : null;
     };
 
-    readonly authorizeProject = async (computerId: string, signal: AbortSignal): Promise<ComputerAccess> => {
+    readonly authorizeComputer = async (computerId: string, signal: AbortSignal): Promise<ComputerAccess> => {
         if (!(await this.isActive(computerId, signal))) {
-            throw new ProjectAuthenticationError("project_access_denied", "The computer is unavailable");
+            throw new ComputerAuthenticationError("computer_access_denied", "The computer is unavailable");
         }
         return { computerId };
     };
@@ -72,11 +75,11 @@ export class ComputerAccessService {
         signal: AbortSignal,
     ): Promise<ComputerAccess> => {
         const [access, generation] = await Promise.all([
-            this.authorizeProject(computerId, signal),
+            this.authorizeComputer(computerId, signal),
             this.currentSessionGeneration(computerId, grant.holder, signal),
         ]);
         if (generation !== grant.generation) {
-            throw new ProjectAuthenticationError("credential_revoked", "The Session credential has been revoked");
+            throw new ComputerAuthenticationError("credential_revoked", "The Session credential has been revoked");
         }
         return access;
     };
@@ -90,7 +93,7 @@ export class ComputerAccessService {
             await this.authorizeSession(computerId, grant, signal);
             return true;
         } catch (cause) {
-            if (cause instanceof ProjectAuthenticationError) {
+            if (cause instanceof ComputerAuthenticationError) {
                 return false;
             }
             throw cause;

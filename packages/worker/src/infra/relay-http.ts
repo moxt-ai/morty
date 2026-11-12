@@ -45,7 +45,7 @@ export async function parseJsonBody(request: Request): Promise<Readonly<Record<s
 export function bearerToken(request: Request): string {
     const authorization = request.headers.get("authorization") ?? "";
     if (!authorization.startsWith("Bearer ")) {
-        throw new PairingDirectoryError("unauthorized", "A project bearer token is required");
+        throw new PairingDirectoryError("unauthorized", "A bearer token is required");
     }
     return authorization.slice("Bearer ".length);
 }

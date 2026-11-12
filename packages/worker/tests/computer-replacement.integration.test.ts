@@ -80,7 +80,7 @@ test("Given a revoked successor local credential, When the previous Computer ret
     const original = await fixture.createAnonymousUser();
     const replace = () =>
         worker.fetch(
-            projectRequest(original.computerId, "/management/computer/replacement", original.token, "POST"),
+            computerRequest(original.computerId, "/management/computer/replacement", original.token, "POST"),
             fixture.environment(),
         );
     const response = await replace();
@@ -89,7 +89,7 @@ test("Given a revoked successor local credential, When the previous Computer ret
     expect(
         (
             await worker.fetch(
-                projectRequest(replacement.computerId, "/identity/v1/local-credential", replacement.token, "DELETE"),
+                computerRequest(replacement.computerId, "/identity/v1/local-credential", replacement.token, "DELETE"),
                 fixture.environment(),
             )
         ).status,
@@ -100,14 +100,14 @@ test("Given a revoked successor local credential, When the previous Computer ret
     expect(
         (
             await worker.fetch(
-                projectRequest(replacement.computerId, "/session", replacement.token),
+                computerRequest(replacement.computerId, "/session", replacement.token),
                 fixture.environment(),
             )
         ).status,
     ).toBe(401);
 });
 
-function projectRequest(computerId: string, path: string, token: string, method = "GET", body?: object): Request {
+function computerRequest(computerId: string, path: string, token: string, method = "GET", body?: object): Request {
     return new Request(`${APP_ORIGIN}/morty/api/computers/${computerId}${path}`, {
         method,
         headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
@@ -119,7 +119,7 @@ test("Given a completed replacement, When the saved Computer retries after a Wor
     const original = await fixture.createAnonymousUser();
     const replace = () =>
         worker.fetch(
-            projectRequest(original.computerId, "/management/computer/replacement", original.token, "POST"),
+            computerRequest(original.computerId, "/management/computer/replacement", original.token, "POST"),
             fixture.environment(),
         );
     const response = await replace();
@@ -134,13 +134,13 @@ test("Given a completed replacement, When the saved Computer retries after a Wor
     expect(completed.token).toBe(issued.token);
     expect(completed.computerId).toBe(issued.computerId);
     expect(
-        (await worker.fetch(projectRequest(completed.computerId, "/session", completed.token), fixture.environment()))
+        (await worker.fetch(computerRequest(completed.computerId, "/session", completed.token), fixture.environment()))
             .status,
     ).toBe(200);
     expect(
         (
             await worker.fetch(
-                projectRequest(completed.computerId, "/management/computer/pairing-state", completed.token),
+                computerRequest(completed.computerId, "/management/computer/pairing-state", completed.token),
                 fixture.environment(),
             )
         ).status,
@@ -149,7 +149,7 @@ test("Given a completed replacement, When the saved Computer retries after a Wor
 
 async function share(computerId: string, token: string): Promise<string> {
     const response = await worker.fetch(
-        projectRequest(computerId, "/identity/transfers", token, "POST", { operationId: crypto.randomUUID() }),
+        computerRequest(computerId, "/identity/transfers", token, "POST", { operationId: crypto.randomUUID() }),
         fixture.environment(),
     );
     expect(response.status).toBe(201);
@@ -167,7 +167,7 @@ async function redeem(code: string): Promise<Response> {
     );
 }
 
-test("Given access shared from a saved Computer, When its Project is replaced, Then nothing shared before opens the previous Project and the local identity can still repeat the replacement", async () => {
+test("Given access shared from a saved Computer, When it is replaced, Then nothing shared before opens the previous Computer and the local identity can still repeat the replacement", async () => {
     const original = await fixture.createAnonymousUser();
     const redeemed = await redeem(await share(original.computerId, original.token));
     expect(redeemed.status).toBe(200);
@@ -176,7 +176,7 @@ test("Given access shared from a saved Computer, When its Project is replaced, T
 
     const replace = async () =>
         await worker.fetch(
-            projectRequest(original.computerId, "/management/computer/replacement", original.token, "POST"),
+            computerRequest(original.computerId, "/management/computer/replacement", original.token, "POST"),
             fixture.environment(),
         );
     const response = await replace();
@@ -184,7 +184,7 @@ test("Given access shared from a saved Computer, When its Project is replaced, T
     const replacement = v.parse(replacementAccess, await response.json());
 
     expect(
-        (await worker.fetch(projectRequest(original.computerId, "/session", browser), fixture.environment())).status,
+        (await worker.fetch(computerRequest(original.computerId, "/session", browser), fixture.environment())).status,
     ).toBe(401);
     expect((await redeem(unredeemed)).status).toBe(410);
     // A reply the local identity never received can be asked for again.
@@ -193,24 +193,24 @@ test("Given access shared from a saved Computer, When its Project is replaced, T
     expect(v.parse(replacementSchema, await retry.json()).computerId).toBe(replacement.computerId);
 });
 
-test("Given a browser that opened a shared link, When it asks to replace the Project, Then only the computer's own identity may", async () => {
+test("Given a browser that opened a shared link, When it asks to replace the Computer, Then only the computer's own identity may", async () => {
     const original = await fixture.createAnonymousUser();
     const redeemed = await redeem(await share(original.computerId, original.token));
     const browser = v.parse(v.object({ computerToken: v.string() }), await redeemed.json()).computerToken;
 
     const response = await worker.fetch(
-        projectRequest(original.computerId, "/management/computer/replacement", browser, "POST"),
+        computerRequest(original.computerId, "/management/computer/replacement", browser, "POST"),
         fixture.environment(),
     );
 
     expect(response.status).toBe(403);
     expect(
-        (await worker.fetch(projectRequest(original.computerId, "/session", original.token), fixture.environment()))
+        (await worker.fetch(computerRequest(original.computerId, "/session", original.token), fixture.environment()))
             .status,
     ).toBe(200);
 });
 
-test("Given an unauthenticated request, When a Project replacement is requested, Then it is rejected", async () => {
+test("Given an unauthenticated request, When a Computer replacement is requested, Then it is rejected", async () => {
     const identity = await fixture.createAnonymousUser();
     const response = await worker.fetch(
         new Request(`${APP_ORIGIN}/morty/api/computers/${identity.computerId}/management/computer/replacement`, {

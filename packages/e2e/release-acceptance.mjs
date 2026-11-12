@@ -117,7 +117,7 @@ try {
             identity = JSON.parse(await readFile(join(state, "config.json"), "utf8")).identity;
             receipt.computerId = identity.computer_id;
             await writeFile(
-                join(output, `${label}-owned-project.json`),
+                join(output, `${label}-owned-computer.json`),
                 `${JSON.stringify({ computerId: identity.computer_id, origin })}\n`,
             );
         } catch {

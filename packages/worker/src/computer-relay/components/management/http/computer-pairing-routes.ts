@@ -15,7 +15,7 @@ import type {
     RelayRouteMiddleware,
 } from "../../../http/environment.ts";
 
-export function createProjectComputerPairingRoutes(
+export function createComputerPairingRoutes(
     [timeout, target, initialize]: RelayRouteMiddleware,
     [runtimeTimeout, runtimeTarget, initializeRuntime]: RelayRouteMiddleware,
 ) {

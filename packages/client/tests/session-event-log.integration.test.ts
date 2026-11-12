@@ -91,7 +91,7 @@ describe("Session Event Log V2 SDK", () => {
                 },
             },
             endpoint: `http://127.0.0.1:${address.port}`,
-            computerId: "project-1",
+            computerId: "computer-1",
         });
         const signal = new AbortController().signal;
 
@@ -117,7 +117,7 @@ describe("Session Event Log V2 SDK", () => {
         expect(received).toEqual([
             {
                 method: "GET",
-                path: "/morty/api/v1/computers/project-1/harnesses/claude/sessions/source-session/events-v2?limit=500",
+                path: "/morty/api/v1/computers/computer-1/harnesses/claude/sessions/source-session/events-v2?limit=500",
             },
         ]);
     });

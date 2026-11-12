@@ -50,7 +50,7 @@ export class ComputerServices {
         const validatedComputerId = v.parse(relayIdentifier, computerId);
         const bound: unknown = await this.#storage.get("computer-id");
         if (bound === undefined) {
-            throw new ManagementError("PROJECT_NOT_FOUND", "The Morty computer does not exist.", 404);
+            throw new ManagementError("COMPUTER_NOT_FOUND", "The Morty computer does not exist.", 404);
         }
         if (!this.#owns(validatedComputerId) || bound !== validatedComputerId) {
             throw new Error("Durable Object computer identity does not match the request.");
@@ -62,7 +62,7 @@ export class ComputerServices {
         signal.throwIfAborted();
         const parsed = v.parse(computerBootstrap, input);
         if (!(await this.#account.isActive(parsed.computer.computerId, signal))) {
-            throw new ManagementError("PROJECT_NOT_FOUND", "The Morty computer does not exist.", 404);
+            throw new ManagementError("COMPUTER_NOT_FOUND", "The Morty computer does not exist.", 404);
         }
         await this.#bindComputer(parsed.computer.computerId);
         const dependencies = await this.#application(parsed.computer.computerId, env, signal);
@@ -115,7 +115,7 @@ export class ComputerServices {
         signal: AbortSignal,
     ): Promise<ApplicationContext> => {
         if (!(await this.#account.isActive(computerId, signal))) {
-            throw new ManagementError("PROJECT_NOT_FOUND", "The Morty computer does not exist.", 404);
+            throw new ManagementError("COMPUTER_NOT_FOUND", "The Morty computer does not exist.", 404);
         }
         return createApplicationDependencies({
             bindings: env,

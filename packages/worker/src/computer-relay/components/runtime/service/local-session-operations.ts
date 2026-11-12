@@ -134,7 +134,7 @@ export function createLocalSessionOperations(cx: RuntimeContext, computerId: str
             }).response;
         },
         requestControl,
-        readProjectSessionFile: async (
+        readSessionFile: async (
             requestedComputerId: string,
             command: FileReadCommand,
             signal: AbortSignal,
@@ -150,7 +150,7 @@ export function createLocalSessionOperations(cx: RuntimeContext, computerId: str
                 throw cause;
             }
         },
-        writeProjectSessionContent: async (
+        writeSessionContent: async (
             requestedComputerId: string,
             command: ContentWriteCommand,
             body: ReadableStream<Uint8Array>,

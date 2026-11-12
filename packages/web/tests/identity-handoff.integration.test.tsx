@@ -21,7 +21,7 @@ async function clickDesktopEndRemoteAccess(app: TestApp) {
     await app.user.click(await app.queryElementByTestId(dataTestId.endRemoteAccess));
 }
 
-test("Given a stored identity for the active project, When the user shares access, Then a copyable transfer link and QR code appear", {
+test("Given a stored identity for the active Computer, When the user shares access, Then a copyable transfer link and QR code appear", {
     timeout: 30_000,
 }, async () => {
     const app = await createTestApp({ connectAgent: true, page: { kind: "bootstrap", identity: true } });

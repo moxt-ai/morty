@@ -17,15 +17,15 @@ export class PairingService {
         this.#pairings = cx.services.pairings;
     }
 
-    readonly createProjectComputerPairing = (
+    readonly createComputerPairing = (
         computerId: string,
         pairingKey: string,
         idempotencyKey: string,
         signal: AbortSignal,
-    ) => this.#pairings.createProjectComputerPairing(computerId, pairingKey, idempotencyKey, signal);
+    ) => this.#pairings.createComputerPairing(computerId, pairingKey, idempotencyKey, signal);
 
-    readonly listProjectComputers = async (computerId: string, signal: AbortSignal) => {
-        const channels = await this.#pairings.listProjectComputers(computerId, signal);
+    readonly listComputers = async (computerId: string, signal: AbortSignal) => {
+        const channels = await this.#pairings.listComputers(computerId, signal);
         return await Promise.all(
             channels.map(
                 async (channel) =>
@@ -35,23 +35,20 @@ export class PairingService {
     };
 
     readonly getComputerAgents = async (computerId: string, signal: AbortSignal) => {
-        const channels = await this.#pairings.listProjectComputers(computerId, signal);
+        const channels = await this.#pairings.listComputers(computerId, signal);
         const channel = channels.find((candidate) => candidate.computerId === computerId);
         if (channel === undefined) {
             // A revoked Computer is not listed; saying so lets it be paired again instead of waiting for it.
-            if (await this.#pairings.isProjectComputerRevoked(computerId, signal)) {
+            if (await this.#pairings.isComputerRevoked(computerId, signal)) {
                 throw new PairingDirectoryError("computer_revoked", "The Computer has been revoked");
             }
-            throw new PairingDirectoryError(
-                "computer_access_denied",
-                "The project credential cannot access this Computer",
-            );
+            throw new PairingDirectoryError("computer_access_denied", "This credential cannot access this Computer");
         }
         return new ComputerSummary(channel, await this.#runtime.readStatus(channel.computerId, signal));
     };
 
-    readonly readProjectComputerPairing = (computerId: string, signal: AbortSignal) =>
-        this.#pairings.readProjectComputerPairing(computerId, signal);
+    readonly readComputerPairing = (computerId: string, signal: AbortSignal) =>
+        this.#pairings.readComputerPairing(computerId, signal);
 
     readonly redeemComputerPairing: PairingDirectoryService["redeemComputerPairing"] = async (
         computerId,

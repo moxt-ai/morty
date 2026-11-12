@@ -1,5 +1,5 @@
+import type { ComputerLocationHint } from "../computer-location.ts";
 import { ComputerManagementError } from "../computer-management.ts";
-import type { ProjectLocationHint } from "../project-location.ts";
 
 export class RelayAuthenticationConfiguration {
     readonly allowedOrigins: ReadonlySet<string>;
@@ -12,7 +12,7 @@ export class RelayAuthenticationConfiguration {
 }
 
 export interface ComputerManagementPlacement {
-    readonly locationHint: ProjectLocationHint;
+    readonly locationHint: ComputerLocationHint;
 }
 
 function validOrigin(value: string): boolean {

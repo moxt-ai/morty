@@ -78,7 +78,7 @@ test("Given desktop Codex owns a conversation, When I open it in Morty and queue
             signal,
         });
         const token = text(identity["computerToken"], "Computer token");
-        const computerId = text(identity["computerId"], "project ID");
+        const computerId = text(identity["computerId"], "computer ID");
 
         const chat = new ChatApi(stack.chatOrigin, signal);
         // biome-ignore lint/correctness/useHookAtTopLevel: ChatApi authentication is not a React hook.

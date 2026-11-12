@@ -1,5 +1,5 @@
+import type { ComputerLocationHint } from "./computer-location.ts";
 import { ComputerManagementError } from "./computer-management.ts";
-import type { ProjectLocationHint } from "./project-location.ts";
 import type { ComputerManagementPlacement } from "./relay/computer-management.ts";
 
 const placements: ReadonlyMap<string, ComputerManagementPlacement> = new Map([
@@ -10,7 +10,7 @@ const placements: ReadonlyMap<string, ComputerManagementPlacement> = new Map([
 ]);
 
 /** A fixed creation reference recovers its computer; a new reference always allocates another one. */
-export async function accountComputerId(key: string, locationHint: ProjectLocationHint): Promise<string> {
+export async function accountComputerId(key: string, locationHint: ComputerLocationHint): Promise<string> {
     const digest = new Uint8Array(
         await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify(["morty-computer-v1", key]))),
     );

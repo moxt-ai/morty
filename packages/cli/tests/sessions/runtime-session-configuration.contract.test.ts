@@ -6,8 +6,8 @@ it("Given two clients holding one configuration revision, When they edit concurr
     const cancellation = new AbortController();
     await using relay = await startTestRelay();
     try {
-        const project = await relay.createOwner();
-        const runtime = await relay.connectAgent(project.computerId);
+        const owner = await relay.createOwner();
+        const runtime = await relay.connectAgent(owner.computerId);
         const ready = await runtime.createSession(
             {
                 harness: "claude",
