@@ -197,7 +197,6 @@ export function DevicesDialog({
     };
     return (
         <Dialog
-            variant="devicesAccess"
             description="Who can use your computer from Morty, and for how long."
             onClose={close}
             title="Devices with access"

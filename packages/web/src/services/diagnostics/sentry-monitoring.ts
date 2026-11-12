@@ -1,11 +1,4 @@
-import {
-    type BrowserOptions,
-    breadcrumbsIntegration,
-    browserTracingIntegration,
-    type Event,
-    getClient,
-    init,
-} from "@sentry/react";
+import { breadcrumbsIntegration, browserTracingIntegration, type Event, getClient, init } from "@sentry/react";
 import { browserDiagnosticsSnapshot } from "./browser-diagnostics.ts";
 
 const lastErrors = new WeakMap<NonNullable<ReturnType<typeof getClient>>, string>();
@@ -63,12 +56,9 @@ export function initializeBrowserMonitoring(configuration: {
     readonly dsn: string;
     readonly environment: string;
     readonly release: string;
-    readonly transport?: BrowserOptions["transport"];
-    readonly tracesSampleRate?: number;
 }) {
     const client = init({
         dsn: configuration.dsn,
-        ...(configuration.transport === undefined ? {} : { transport: configuration.transport }),
         initialScope: { tags: { component: "web" } },
         environment: configuration.environment,
         release: configuration.release,
@@ -93,7 +83,7 @@ export function initializeBrowserMonitoring(configuration: {
                 beforeStartSpan: (options) => ({ ...options, name: window.location.pathname }),
             }),
         ],
-        tracesSampleRate: configuration.tracesSampleRate ?? (configuration.environment === "production" ? 0.1 : 1),
+        tracesSampleRate: configuration.environment === "production" ? 0.1 : 1,
         tracePropagationTargets: [],
         beforeBreadcrumb: (breadcrumb) => {
             if (!["fetch", "xhr", "navigation"].includes(breadcrumb.category ?? "")) {

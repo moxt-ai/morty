@@ -13,7 +13,7 @@ import {
     type HtmlPreviewDocument,
     type HtmlPreviewFailure,
 } from "../../services/chat/html-preview-document.ts";
-import { downloadLocalFile, type LocalFileDownload } from "../../services/chat/local-file-download.ts";
+import { downloadLocalFile } from "../../services/chat/local-file-download.ts";
 
 const TEXT_MIME = /^(?:text\/|application\/(?:json|xml|javascript|x-httpd-php|x-sh|x-yaml))(?:;|$)/u;
 const TEXT_EXTENSIONS = new Set([
@@ -111,18 +111,7 @@ interface FilePreviewStore {
 interface LocalFileResult {
     readonly bytes: Uint8Array;
     readonly mediaType: string;
-    readonly modifiedAt: string;
     readonly name: string;
-}
-
-export interface FilePreviewPort {
-    readonly download: (file: LocalFileDownload) => void;
-    readonly read: (path: string, signal: AbortSignal) => Promise<LocalFileResult>;
-    readonly allowsSidePanel: typeof filePreviewAllowsSidePanel;
-    readonly observeLayout: typeof observeFilePreviewLayout;
-    readonly attachPanel: typeof attachFilePreviewPanel;
-    readonly attachHtml: typeof attachHtmlPreview;
-    readonly createImage: typeof createFilePreviewImage;
 }
 
 function desktopSize(layout: FilePreviewLayout): "side-panel" | "expanded" {
@@ -180,10 +169,8 @@ function readFailure(cause: unknown, timedOut: boolean, path: string): Extract<F
     };
 }
 
-function createFilePreviewStore(
-    port: FilePreviewPort,
-    decoder: TextDecoder = new TextDecoder("utf-8", { fatal: true }),
-) {
+export function createBrowserFilePreviewStore(read: (path: string, signal: AbortSignal) => Promise<LocalFileResult>) {
+    const decoder = new TextDecoder("utf-8", { fatal: true });
     let active: AbortController | null = null;
     // The preview owns these resources. Refs only announce DOM availability;
     // transitions also release content before React detaches the previous view.
@@ -200,7 +187,7 @@ function createFilePreviewStore(
     const layoutFollowers = new Set<(layout: FilePreviewStore["layout"]) => void>();
     const store = createStore<FilePreviewStore>()((set, get) => ({
         state: { kind: "closed" },
-        layout: previewLayout(port.allowsSidePanel(), "side-panel"),
+        layout: previewLayout(filePreviewAllowsSidePanel(), "side-panel"),
         close: () => {
             active?.abort();
             active = null;
@@ -222,12 +209,12 @@ function createFilePreviewStore(
         },
         onPanelAttach: (node) => {
             releasePanel?.();
-            const panel = port.attachPanel(node);
+            const panel = attachFilePreviewPanel(node);
             const followLayout = (layout: FilePreviewStore["layout"]): void => {
                 panel.show(panelMode(layout));
             };
             layoutFollowers.add(followLayout);
-            const stopLayout = port.observeLayout((sidePanel) => {
+            const stopLayout = observeFilePreviewLayout((sidePanel) => {
                 set({ layout: previewLayout(sidePanel, desktopSize(get().layout)) });
                 for (const follow of layoutFollowers) {
                     follow(get().layout);
@@ -252,7 +239,7 @@ function createFilePreviewStore(
             if (state.kind !== "html" || state.view.kind !== "preview") {
                 return () => {};
             }
-            const stop = port.attachHtml(frame, state.view.document, reportHtmlFailure);
+            const stop = attachHtmlPreview(frame, state.view.document, reportHtmlFailure);
             const release = () => {
                 if (releaseHtml !== release) {
                     return;
@@ -318,13 +305,13 @@ function createFilePreviewStore(
             const operationSignal = AbortSignal.any([signal, controller.signal, timeoutSignal]);
             set({ state: { kind: "loading", path } });
             try {
-                const file = await port.read(path, operationSignal);
+                const file = await read(path, operationSignal);
                 operationSignal.throwIfAborted();
                 if (active !== controller) {
                     return;
                 }
                 if (isDisplayableImageType(file.mediaType)) {
-                    const image = port.createImage(file.bytes, file.mediaType);
+                    const image = createFilePreviewImage(file.bytes, file.mediaType);
                     releaseImage = image.dispose;
                     set({
                         state: {
@@ -358,7 +345,7 @@ function createFilePreviewStore(
                         return;
                     } catch {}
                 }
-                port.download(file);
+                downloadLocalFile(file);
                 get().close();
             } catch (cause) {
                 if (controller.signal.aborted) {
@@ -376,16 +363,4 @@ function createFilePreviewStore(
         },
     }));
     return store;
-}
-
-export function createBrowserFilePreviewStore(read: FilePreviewPort["read"]) {
-    return createFilePreviewStore({
-        download: downloadLocalFile,
-        read,
-        allowsSidePanel: filePreviewAllowsSidePanel,
-        observeLayout: observeFilePreviewLayout,
-        attachPanel: attachFilePreviewPanel,
-        attachHtml: attachHtmlPreview,
-        createImage: createFilePreviewImage,
-    });
 }

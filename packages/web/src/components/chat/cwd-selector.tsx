@@ -230,7 +230,6 @@ export function CwdSelector({
             </Popover.Root>
             {browser.kind !== "closed" && (
                 <Dialog
-                    variant="workingDirectory"
                     description="Browse folders on your local computer or enter an absolute folder path."
                     onClose={viewModel.closeCwd}
                     title="Choose working directory"

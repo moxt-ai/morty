@@ -108,9 +108,6 @@ export function BotChatComposer({
     onStop,
     onSubmit,
     outputState,
-    messageLabel = "Message",
-    placeholder = "Ask me anything",
-    submitLabel = "Send message",
     submitDisabled,
     stopDisabled = false,
 }: {
@@ -144,9 +141,6 @@ export function BotChatComposer({
     readonly onStop: () => void;
     readonly onSubmit: () => void;
     readonly outputState: "idle" | "sending" | "running" | "stopping";
-    readonly messageLabel?: string;
-    readonly placeholder?: string;
-    readonly submitLabel?: string;
     /** The owner's rule refuses a submission now, including while attachments are still being read. */
     readonly submitDisabled: boolean;
     readonly stopDisabled?: boolean;
@@ -244,14 +238,14 @@ export function BotChatComposer({
                     >
                         <Textarea
                             aria-describedby="chat-composer-keyboard-hint"
-                            aria-label={messageLabel}
+                            aria-label="Message"
                             className="mb-2 min-h-[56px] w-full resize-none overflow-hidden px-4 pt-0 pb-1 text-14 placeholder:text-14 sm:min-h-[64px]"
                             data-testid={dataTestId.messageComposer}
                             disabled={disabled}
                             onChange={(event) => onDraftChange(event.target.value)}
                             onKeyDown={handleKeyDown}
                             onPaste={handlePaste}
-                            placeholder={placeholder}
+                            placeholder="Ask me anything"
                             ref={attachTextarea}
                             value={draft}
                         />
@@ -309,7 +303,7 @@ export function BotChatComposer({
                                     : outputState === "stopping"
                                       ? "Stopping agent output"
                                       : submitAction
-                                        ? submitLabel
+                                        ? "Send message"
                                         : "Stop agent output"
                             }
                             className={composerActionButtonClassName}

@@ -961,7 +961,7 @@ export function ConversationSidebar({
                                         )}
                                         {sharingStore !== null && (
                                             <Dialog
-                                                variant="identitySharing"
+                                                size="medium"
                                                 title="Continue on another device"
                                                 description="Scan the code or open the link on the device you want to use."
                                                 onClose={dialogs.getState().closeSharing}
@@ -971,7 +971,6 @@ export function ConversationSidebar({
                                         )}
                                         {diagnostic.state.kind !== "closed" && (
                                             <Dialog
-                                                variant="networkLatency"
                                                 title="Network latency"
                                                 headerAction={
                                                     <Button
@@ -1047,7 +1046,6 @@ export function ConversationSidebar({
                                             access.state.kind === "ending" ||
                                             access.state.kind === "failed") && (
                                             <Dialog
-                                                variant="endAccess"
                                                 busy={access.state.kind === "loading" || access.state.kind === "ending"}
                                                 title="End current access?"
                                                 description={

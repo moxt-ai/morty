@@ -13,7 +13,7 @@ import {
 import {
     type StoredAccessWriter,
     storedToken,
-    storedTokenForProject,
+    storedTokenForComputer,
     withStoredAccessLock,
 } from "./remembered-computers.ts";
 
@@ -26,7 +26,7 @@ const identitySchema = v.pipe(v.object(identityFields), v.readonly());
  * name one. A code that was already redeemed in this browser still names its
  * Computer, which is what lets a dead link fall back to the access it issued.
  */
-export function transferCodeProject(code: string): string | null {
+export function transferCodeComputer(code: string): string | null {
     const parts = code.split(".");
     return parts.length === 3 && parts[0] === "morty_transfer_v1" ? (parts[1] ?? null) : null;
 }
@@ -246,8 +246,8 @@ export class AnonymousIdentityApi {
         signal: AbortSignal,
         access: StoredAccessWriter,
     ): Promise<AnonymousIdentity> => {
-        const computerId = transferCodeProject(code);
-        const replaces = computerId === null ? null : storedTokenForProject(computerId);
+        const computerId = transferCodeComputer(code);
+        const replaces = computerId === null ? null : storedTokenForComputer(computerId);
         const redemptionKey = transferRedemptionKey(code);
         const identity = v.parse(
             identitySchema,

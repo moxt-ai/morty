@@ -40,12 +40,7 @@ function routeFailureMessage(error: Error): string {
 function RouteFailureContent({ error, onRetry }: { readonly error: Error; readonly onRetry: () => void }) {
     const copy = describePageFailure(routeFailureMessage(error), "Something went wrong");
     return (
-        <SetupCardShell
-            cardClassName="pb-10"
-            cardLeading={<SetupCardFailureIcon />}
-            showPageHeader
-            titleId="route-failure-title"
-        >
+        <SetupCardShell cardClassName="pb-10" cardLeading={<SetupCardFailureIcon />} titleId="route-failure-title">
             <div className="min-w-0" role="alert">
                 <SetupCardTitle className="[overflow-wrap:anywhere]" id="route-failure-title">
                     {copy.title}

@@ -7,7 +7,7 @@ import {
     type AnonymousIdentity,
     AnonymousIdentityApi,
     IdentityApiError,
-    transferCodeProject,
+    transferCodeComputer,
 } from "@/services/identity/anonymous-identity-api";
 import { encodeIdentityScope, hasIdentityScope, readIdentityScope } from "@/services/identity/identity-scope-url";
 import { computerKey, rememberedComputers, replacedToken, storedToken } from "@/services/identity/remembered-computers";
@@ -259,7 +259,7 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
                     // to its Computer. Validate only the explicit scope, or a remembered
                     // scope for this exact Computer when the old link has no scope.
                     if (cause instanceof IdentityApiError && cause.code === "TRANSFER_UNAVAILABLE") {
-                        const computerId = transferCodeProject(state.code);
+                        const computerId = transferCodeComputer(state.code);
                         const explicit = readIdentityScope();
                         const scopes = hasIdentityScope()
                             ? explicit === null

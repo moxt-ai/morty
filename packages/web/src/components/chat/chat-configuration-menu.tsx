@@ -22,17 +22,14 @@ import { MobileSheetTitle } from "./mobile-sheet-title.tsx";
 
 interface ChatConfigurationSelectControl {
     readonly disabled: boolean;
-    readonly harnessLockedLabel?: string | undefined;
     readonly id: string;
     readonly kind: "select";
     readonly label: string;
     readonly locked?: boolean | undefined;
     readonly onValueChange: (value: string) => void;
     readonly options: readonly {
-        readonly harness?: string;
         readonly installed?: boolean;
         readonly label: string;
-        readonly tabLabel?: string;
         readonly value: string;
     }[];
     readonly searchable?: boolean;
@@ -70,7 +67,6 @@ function HarnessSelect({
             >
                 {harness.options.map((option) => {
                     const installed = option.installed !== false;
-                    const label = option.tabLabel ?? option.label;
                     const selected = option.value === harness.value;
                     return (
                         // biome-ignore lint/a11y/useSemanticElements: harness cards use button styling inside a radiogroup.
@@ -95,16 +91,11 @@ function HarnessSelect({
                                 }
                             }}
                             role="radio"
-                            title={installed ? label : `${label} (not installed)`}
+                            title={installed ? option.label : `${option.label} (not installed)`}
                             type="button"
                         >
-                            <HarnessMark
-                                harness={option.harness ?? option.value}
-                                appearance="line"
-                                label={option.label}
-                                testId={dataTestId.harnessMark}
-                            />
-                            <span className="min-w-0 break-words">{label}</span>
+                            <HarnessMark harness={option.value} label={option.label} testId={dataTestId.harnessMark} />
+                            <span className="min-w-0 break-words">{option.label}</span>
                         </button>
                     );
                 })}
@@ -686,8 +677,7 @@ export function ChatConfigurationMenu({
         >
             {selectedHarness !== undefined && (
                 <HarnessMark
-                    harness={selectedHarness.harness ?? selectedHarness.value}
-                    appearance="line"
+                    harness={selectedHarness.value}
                     label={selectedHarness.label}
                     testId={dataTestId.harnessTriggerMark}
                 />
@@ -780,23 +770,14 @@ export function ChatConfigurationMenu({
                         <Tooltip.Provider delayDuration={150}>
                             <Tooltip.Root>
                                 <Tooltip.Trigger asChild>
-                                    <h3
-                                        className="flex min-w-0 items-center gap-2 text-14 font-medium text-copy-secondary"
-                                        data-testid={dataTestId.agentHarness(selectedHarness.value)}
-                                    >
-                                        <HarnessMark
-                                            harness={selectedHarness.harness ?? selectedHarness.value}
-                                            appearance="line"
-                                            label={selectedHarness.label}
-                                        />
-                                        <span className="min-w-0 truncate">
-                                            {selectedHarness.tabLabel ?? selectedHarness.label}
-                                        </span>
+                                    <h3 className="flex min-w-0 items-center gap-2 text-14 font-medium text-copy-secondary">
+                                        <HarnessMark harness={selectedHarness.value} label={selectedHarness.label} />
+                                        <span className="min-w-0 truncate">{selectedHarness.label}</span>
                                     </h3>
                                 </Tooltip.Trigger>
                                 <Tooltip.Portal>
                                     <MortyTooltipContent className="max-w-60 leading-5" side="top" sideOffset={6}>
-                                        {harness.harnessLockedLabel ?? selectedHarness.label}
+                                        The harness cannot be changed for an existing session.
                                         <Tooltip.Arrow className="fill-foreground" />
                                     </MortyTooltipContent>
                                 </Tooltip.Portal>

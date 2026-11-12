@@ -81,7 +81,7 @@ export function draftHarnessSelection(settings: DraftSettingsState, configuratio
             : settings.kind === "ready" || settings.kind === "refreshing"
               ? settings.selectedAgent.harness
               : null;
-    return { options, value: options.find((option) => option.harness === harness)?.value ?? "" };
+    return { options, value: options.find((option) => option.value === harness)?.value ?? "" };
 }
 
 export function draftConfiguration(settings: DraftSettingsState): ChatDraftConfiguration | null {
@@ -702,7 +702,7 @@ export const createDraftControlsStore = (
                 // The Computer's Agents can change while the draft is open; choose among those it offers now.
                 const configuration = computerConfiguration();
                 const agent = (configuration === null ? [] : nativeSessionAgentTabs(configuration.computer)).find(
-                    (item) => item.installed && item.value === value,
+                    (item) => item.installed && item.harness === value,
                 );
                 if (agent === undefined) {
                     return;

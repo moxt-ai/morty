@@ -5,7 +5,7 @@ import { createContext, type ReactNode, useCallback, useContext, useRef, useStat
 export interface ToastMessage {
     readonly description?: string | undefined;
     readonly title: string;
-    readonly variant?: "success" | "error" | undefined;
+    readonly variant: "success" | "error";
 }
 
 type ToastState =

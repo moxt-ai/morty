@@ -32,7 +32,6 @@ export function SessionAgentTabs({
         readonly harness: string;
         readonly installed?: boolean;
         readonly label: string;
-        readonly value: string;
     }[];
     readonly className?: string;
     /** When false, inactive tabs stay at full opacity (e.g. while the directory is refreshing). */
@@ -45,7 +44,7 @@ export function SessionAgentTabs({
         <Tabs.Root className={className} onValueChange={onValueChange} value={value}>
             <Tabs.List aria-label="Session agent" className={sessionAgentTabsListClassName}>
                 {agents.map((agent) => {
-                    const optionValue = agent.value;
+                    const optionValue = agent.harness;
                     const installed = agent.installed !== false;
                     return (
                         <Tabs.Trigger
@@ -62,7 +61,6 @@ export function SessionAgentTabs({
                         >
                             <HarnessMark
                                 harness={agent.harness}
-                                appearance="line"
                                 className="max-sm:size-5 max-sm:[&>svg]:size-[13px]"
                                 label={agent.label}
                                 testId={dataTestId.harnessMark}
