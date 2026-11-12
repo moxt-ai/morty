@@ -15,6 +15,5 @@ const platforms: ReadonlyMap<NodeJS.Platform, PlatformSupport> = new Map([
     ["win32", windowsPlatform],
 ]);
 
-export function platformSupportFor(platform: NodeJS.Platform): PlatformSupport {
-    return platforms.get(platform) ?? fallbackPlatform;
-}
+/** This host's platform operations. */
+export const hostPlatform: PlatformSupport = platforms.get(process.platform) ?? fallbackPlatform;

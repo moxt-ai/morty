@@ -1,8 +1,8 @@
 import type { CatalogAgent } from "../../src/engine/agent/catalog.ts";
-import { RuntimeAgentDependencies } from "../../src/engine/agent/runtime-agents.ts";
 import {
     type ComputerConnectionConfig,
     createRuntimeConfig,
+    RuntimeAgentDependencies,
     type RuntimeConfig,
     RuntimeLocalContext,
 } from "../../src/engine/runtime/config.ts";

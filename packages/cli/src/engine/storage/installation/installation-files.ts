@@ -94,7 +94,3 @@ export async function createInstallationFile(path: string, text: string): Promis
         await rm(temporaryPath, { force: true });
     }
 }
-
-export async function removeInstallationFile(path: string): Promise<void> {
-    await unlink(path);
-}

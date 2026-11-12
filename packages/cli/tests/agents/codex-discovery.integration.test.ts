@@ -66,7 +66,9 @@ test.skipIf(process.platform === "win32")(
             observer,
             store: new MemorySessionStore(),
             adapters: harnessAdapters,
-            onSessionStatusChanged: () => undefined,
+            onSessionClosed: () => undefined,
+            lastTurn: () => undefined,
+            settledTurns: () => [],
             contentExternalizer: new AcpContentExternalizer((sessionTarget, content, signal) =>
                 new UnretainedExternalContentStore().put({
                     bytes: content.bytes,

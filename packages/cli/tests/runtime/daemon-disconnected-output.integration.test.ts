@@ -243,6 +243,11 @@ class RelayPeer {
     };
 }
 
+function completions(events: readonly SessionLiveEvent[]): number {
+    return events.filter((event) => event.type === "lifecycle-metadata" && event.payload.kind === "prompt.completed")
+        .length;
+}
+
 function answer(events: readonly SessionLiveEvent[], sessionTarget: NativeSessionTarget): string {
     return events
         .filter((event) => sameNativeSession(event.target, sessionTarget))
@@ -279,19 +284,6 @@ async function startRuntime() {
     await listen(http);
     const timer = new ManualTimer();
     const producer = new StreamingAgent();
-    let executionCount = 0;
-    const settledWaiters = new Set<() => void>();
-    const onExecutionCountChange = (count: number): void => {
-        executionCount = count;
-        if (count === 0) {
-            for (const resolve of settledWaiters) {
-                resolve();
-            }
-            settledWaiters.clear();
-        }
-    };
-    const whenSettled = (): Promise<void> =>
-        executionCount === 0 ? Promise.resolve() : new Promise((resolve) => settledWaiters.add(resolve));
     const config = createRuntimeConfig(
         {
             computerId: "disconnected-output",
@@ -312,7 +304,7 @@ async function startRuntime() {
         async (agent) => agent,
     );
     let cancellation = new AbortController();
-    let runtime = runRuntime(config, cancellation.signal, timer, { onExecutionCountChange });
+    let runtime = runRuntime(config, cancellation.signal, timer);
     const nextPeer = (): Promise<RelayPeer> => {
         const peer = peers.shift();
         return peer === undefined ? new Promise((resolve) => waiters.push(resolve)) : Promise.resolve(peer);
@@ -320,7 +312,13 @@ async function startRuntime() {
     const initial = await nextPeer();
     await initial.barrier();
     return {
-        whenSettled,
+        /** Flushes batched output to `peer` until it has received `count` prompt completions. */
+        completions: async (peer: RelayPeer, count = 1): Promise<void> => {
+            while (completions(peer.events) < count) {
+                (await timer.next(100)).run();
+                await peer.barrier();
+            }
+        },
         initial,
         producer,
         timer,
@@ -364,7 +362,7 @@ async function startRuntime() {
             cancellation.abort();
             await runtime;
             cancellation = new AbortController();
-            runtime = runRuntime(config, cancellation.signal, timer, { onExecutionCountChange });
+            runtime = runRuntime(config, cancellation.signal, timer);
             const peer = await nextPeer();
             await peer.barrier();
             return peer;
@@ -522,7 +520,7 @@ test.each([
             break;
         }
         turn.finish();
-        await runtime.whenSettled();
+        await runtime.completions(runtime.initial);
         const nativeThought = runtime.initial.events.find(
             (event) => event.type === "acp" && event.payload.sessionUpdate === "agent_thought_chunk",
         );
@@ -579,9 +577,7 @@ test("Given oversized reasoning chunks, When the daemon streams them to the Rela
     await turn.writeThought(`prefix${"y".repeat(24 * 1024)}`);
     await turn.write(oversized);
     turn.finish();
-    await runtime.whenSettled();
-    (await runtime.timer.next(100)).run();
-    await runtime.initial.barrier();
+    await runtime.completions(runtime.initial);
     const thoughts = runtime.initial.events.flatMap((event) =>
         event.type === "acp" && event.payload.sessionUpdate === "agent_thought_chunk" ? [event.payload] : [],
     );
@@ -618,11 +614,11 @@ test.each([true, false])(
         }
         await turn.write("the final 161 characters remain available.");
         turn.finish();
-        await runtime.whenSettled();
         const reconnect = runtime.nextPeer();
         retry.run();
         const resumed = await reconnect;
         await resumed.barrier();
+        await runtime.completions(resumed);
         const events = [...runtime.initial.events, ...resumed.events];
         expect(answer(events, turn.sessionTarget)).toBe("Reply prefix; the final 161 characters remain available.");
         expect(new Set(events.map((event) => event.eventId)).size).toBe(events.length);
@@ -639,7 +635,7 @@ test("Given a daemon restarted with a retained outcome, When the Relay reconnect
     const turn = await runtime.prompt(runtime.initial, "restarted-session");
     await turn.write("Finished before the restart.");
     turn.finish();
-    await runtime.whenSettled();
+    await runtime.completions(runtime.initial);
 
     const connections = [await runtime.restart()];
     // Each reconnection first hands over what the previous connection left unsent.
@@ -677,11 +673,11 @@ test("Given concurrent Sessions produce an offline burst, When the Computer reco
     }
     first.finish();
     second.finish();
-    await runtime.whenSettled();
     const reconnect = runtime.nextPeer();
     retry.run();
     const resumed = await reconnect;
     await resumed.barrier();
+    await runtime.completions(resumed, 2);
     expect(answer(resumed.events, first.sessionTarget)).toBe(expected.join(""));
     expect(answer(resumed.events, second.sessionTarget)).toBe(large.repeat(3));
     expect(resumed.batches.length).toBeGreaterThan(1);
@@ -720,15 +716,7 @@ test("Given an outage exhausts the bounded output buffer, When the Relay reconne
     expect(resumed.batches.reduce((bytes, batch) => bytes + batch.bytes, 0)).toBeLessThanOrEqual(32 * 1024 * 1024);
     await turn.write("streaming continues after the outage");
     turn.finish();
-    await runtime.whenSettled();
-    do {
-        (await runtime.timer.next(100)).run();
-        await resumed.barrier();
-    } while (
-        !resumed.events.some(
-            (event) => event.type === "lifecycle-metadata" && event.payload.kind === "prompt.completed",
-        )
-    );
+    await runtime.completions(resumed);
     expect(answer(resumed.events, turn.sessionTarget)).toBe(`${offlineAnswer}streaming continues after the outage`);
     expect(
         resumed.events.filter(

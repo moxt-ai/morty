@@ -35,9 +35,9 @@ export class ControlledSetupRuntime implements SetupRuntime {
         void this.failure.catch(() => undefined);
     }
 
-    readonly computers: SetupRuntime["computers"] = async (_directory, signal) => {
+    readonly computer: SetupRuntime["computer"] = async (_directory, signal) => {
         signal.throwIfAborted();
-        return Array.from(this.#saved.values(), ({ computer_id }) => computer_id);
+        return Array.from(this.#saved.values(), ({ computer_id }) => computer_id).at(-1) ?? null;
     };
 
     readonly agents: SetupRuntime["agents"] = async (_directory, signal) => {

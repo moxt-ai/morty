@@ -128,15 +128,6 @@ export class CommandLedgerTable {
             .all()
             .map((row) => ledgerCommand(rowSchema.parse(row)));
 
-    /** The commands that have not settled. */
-    readonly unsettled = (): readonly string[] =>
-        this.#database.orm
-            .select({ commandId: command.commandId })
-            .from(command)
-            .where(inArray(command.fate, ["pending", "started"]))
-            .all()
-            .map((row) => row.commandId);
-
     /** Admits an unseen command after every other; an identifier the ledger already holds makes this fail. */
     readonly admit = (identity: CommandIdentity): void => {
         this.#database.transaction(() => this.#insertPending(identity));

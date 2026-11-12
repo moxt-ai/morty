@@ -20,7 +20,6 @@ import {
     encodeSessionOperationFailedEvent,
     encodeSessionPromptAcceptedEvent,
     encodeSessionRenamedEvent,
-    encodeSessionStatusChangedEvent,
     encodeSessionTurnStoppedEvent,
     MORTY_API_PREFIX,
     type NativeSessionTarget,
@@ -390,13 +389,6 @@ describe.sequential("Relay Session-only boundary", () => {
                 throw new Error("Expected history loading without a preceding Session query");
             }
 
-            daemon.send(
-                encodeSessionStatusChangedEvent({
-                    kind: "session.status.changed",
-                    target: nativeTarget(sessionId),
-                    status: { commandId: "command-1", kind: "working" },
-                }),
-            );
             const historyPage = JSON.stringify({
                 events: {
                     events: {

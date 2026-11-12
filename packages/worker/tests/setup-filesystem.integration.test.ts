@@ -208,7 +208,6 @@ test.each(["fresh", "unknown", "revoked"] as const)(
             expect(code, output).toBe(1);
             expect(output).toContain('"code":"MORTY_STATE_ROOT_INVALID"');
             expect(output).toContain("Rerun setup with MORTY_STATE_DIRECTORY set to the owning state root");
-            expect(output).not.toContain("RUNTIME_PREFLIGHT_FAILED");
             expect(output).not.toContain('"status":"identity_ready"');
             if (saved === null) {
                 await expect(readFile(join(state, "config.json"))).rejects.toMatchObject({ code: "ENOENT" });

@@ -117,12 +117,10 @@ export async function discoverAgent(
                 async () =>
                     await probeVersion(
                         agent,
-                        specification.agentVersionArguments,
                         context.environment,
                         context.defaultWorkspace,
                         context.signal,
                         specification.versionProbeTimeoutMilliseconds,
-                        specification.normalizeAgentVersion,
                     ),
             );
         } catch (error) {
@@ -155,7 +153,6 @@ export async function discoverAgent(
                 new AcpAgentDefinition(
                     specification.harness,
                     specification.label,
-                    agent.path,
                     launchEnvironment,
                     agentVersion,
                     agent.identity,

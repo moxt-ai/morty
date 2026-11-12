@@ -8,7 +8,6 @@ import {
     SESSION_EVENT_KIND,
     type SessionCloseNoticeEvent,
     type SessionLiveEvent,
-    type SessionStatusChangedEvent,
 } from "@morty-build/client/protocol";
 import { WebSocket } from "undici";
 import type { SessionEventSink } from "../../session/api/session-api.ts";
@@ -87,7 +86,6 @@ export class RuntimeSessionEventPublisher implements SessionEventSink {
         }
     };
 
-    readonly publishStatus = (event: SessionStatusChangedEvent): void => this.#send(event);
     readonly publishClosed = (event: SessionCloseNoticeEvent): void => {
         this.#awaitingFirstAnswer.delete(event.target);
         this.#send(event);

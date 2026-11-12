@@ -25,8 +25,6 @@ import type { ResolveAgent, SessionEventSink } from "./session-api.ts";
 /** What the session layer needs to wire itself: the runtime's identity, its agent source, and its sink. */
 export interface SessionLayerOptions {
     readonly processes: AgentProcessPool;
-    readonly onExecutionCountChange?: (count: number) => void;
-
     readonly computerId: string;
     readonly defaultWorkspace: string;
     readonly resolveAgent: ResolveAgent;
@@ -43,7 +41,7 @@ export function buildSessionLayer(options: SessionLayerOptions) {
     let events: CachedSessionEventStore;
     let operations: ExecutionReceipts;
     try {
-        operations = new ExecutionReceipts(new CommandLedgerTable(sessionDatabase), options.onExecutionCountChange);
+        operations = new ExecutionReceipts(new CommandLedgerTable(sessionDatabase));
         events = new CachedSessionEventStore(
             new SessionEventCacheTable(openSessionEventCacheDatabase(databases.events)),
             new SqliteSessionLiveEventPosition(new LiveEventPositionTable(sessionDatabase)),
@@ -67,7 +65,6 @@ export function buildSessionLayer(options: SessionLayerOptions) {
         },
         store: sessionStore,
         processes: options.processes,
-        onSessionStatusChanged: sink.publishStatus,
         onSessionClosed: sink.publishClosed,
         lastTurn: operations.lastTurn,
         settledTurns: operations.settledTurns,

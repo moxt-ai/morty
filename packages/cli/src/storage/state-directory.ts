@@ -1,22 +1,15 @@
 import { homedir } from "node:os";
 import { isAbsolute, join } from "node:path";
-import { z } from "zod";
-
-const stateRootSchema = z.string().brand<"StateRoot">();
-
-/** The Morty state root contains configuration, the default workspace, and the computer directory. */
-export type StateRoot = z.infer<typeof stateRootSchema>;
 
 class MortyPathError extends Error {
     readonly code = "morty_state_directory_invalid";
 }
 
-/** Each installation has one computer account and one local daemon. */
-export function readStateDirectory(environment: Readonly<NodeJS.ProcessEnv> = process.env): StateRoot {
-    return stateRootSchema.parse(stateDirectoryPath(environment));
-}
-
-function stateDirectoryPath(environment: Readonly<NodeJS.ProcessEnv>): string {
+/**
+ * The Morty state root, which contains configuration, the default workspace, and the computer directory. Each
+ * installation has one computer account and one local daemon.
+ */
+export function readStateDirectory(environment: Readonly<NodeJS.ProcessEnv> = process.env): string {
     const configured = environment["MORTY_STATE_DIRECTORY"]?.trim();
     if (configured) {
         if (!isAbsolute(configured)) {

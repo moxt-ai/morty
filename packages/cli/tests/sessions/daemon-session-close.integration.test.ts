@@ -9,13 +9,11 @@ import {
     methods,
     PROTOCOL_VERSION,
 } from "@agentclientprotocol/sdk/unstable";
-import { sameNativeSession } from "@morty-build/client/native-session";
 import {
     decodeMessageKind,
     decodeSessionArchivedEvent,
     decodeSessionCloseNoticeEvent,
     decodeSessionOperationFailedEvent,
-    decodeSessionStatusChangedEvent,
     encodeServiceToDaemonMessage,
     encodeSessionPromptCommand,
     SessionPromptDisposition,
@@ -26,7 +24,7 @@ import type { AgentTermination } from "../../src/engine/acp/agent/agent-lifecycl
 import type { AgentConnectionFactory } from "../support/agents/agent-connection.ts";
 import { ControlledAcpAgentSpecification } from "../support/agents/controlled-acp.ts";
 import { ControlledReadinessSpecification } from "../support/agents/controlled-readiness-specification.ts";
-import { withControlledDaemon as withRealDaemon } from "../support/agents/real-daemon.ts";
+import { nextPromptAcceptance, withControlledDaemon as withRealDaemon } from "../support/agents/real-daemon.ts";
 
 const fakeAgentPath = fileURLToPath(new URL("./fixtures/acp-peer.ts", import.meta.url));
 
@@ -161,20 +159,7 @@ test("Given an active Agent session holding an exclusive writer lock, When a pub
                         target: sessionTarget,
                     }),
                 );
-                for (;;) {
-                    const message = await peer.nextMessage();
-                    if (decodeMessageKind(message) !== "session.status.changed") {
-                        continue;
-                    }
-                    const event = decodeSessionStatusChangedEvent(message);
-                    if (
-                        sameNativeSession(event.target, sessionTarget) &&
-                        event.status.kind === "working" &&
-                        event.status.commandId === promptCommandId
-                    ) {
-                        break;
-                    }
-                }
+                await nextPromptAcceptance(peer, promptCommandId);
                 const archiveRequestId = crypto.randomUUID();
                 peer.send(
                     encodeServiceToDaemonMessage({

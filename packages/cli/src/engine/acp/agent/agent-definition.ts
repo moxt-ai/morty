@@ -1,7 +1,5 @@
 import type { SessionCapabilities } from "@morty-build/client/protocol";
 import type { ExecutableIdentity } from "../../util/process/executable.ts";
-import { readExecutableIdentity } from "../../util/process/local-executable.ts";
-import { unsupportedSessionCapabilities } from "../protocol/session-capabilities.ts";
 
 /** A verified local Agent. Its adapter owns how connections are established. */
 export class AcpAgentDefinition {
@@ -16,11 +14,10 @@ export class AcpAgentDefinition {
     constructor(
         harness: string,
         label: string,
-        command: string,
-        environment: Readonly<Record<string, string>> = {},
-        agentVersion = "",
-        agentIdentity: ExecutableIdentity = readExecutableIdentity(command),
-        capabilities: SessionCapabilities = unsupportedSessionCapabilities(),
+        environment: Readonly<Record<string, string>>,
+        agentVersion: string,
+        agentIdentity: ExecutableIdentity,
+        capabilities: SessionCapabilities,
     ) {
         this.agentIdentity = agentIdentity;
         this.agentVersion = agentVersion;
@@ -35,7 +32,6 @@ export class AcpAgentDefinition {
         new AcpAgentDefinition(
             this.harness,
             this.label,
-            this.command,
             environment,
             this.agentVersion,
             this.agentIdentity,

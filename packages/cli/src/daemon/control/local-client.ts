@@ -1,13 +1,11 @@
 import { createHash } from "node:crypto";
 import { createConnection, type Socket } from "node:net";
 import type { InstallationDirectory } from "../../engine/storage/installation/installation-files.ts";
-import { platformSupportFor } from "../../engine/util/platform/index.ts";
+import { hostPlatform as managerPlatform } from "../../engine/util/platform/index.ts";
 import { readOrCreateControlToken } from "../../storage/daemon/control-token.ts";
 
 export const CONTROL_TIMEOUT_MILLISECONDS = 130_000;
 const MAXIMUM_MESSAGE_BYTES = 64 * 1024;
-
-const managerPlatform = platformSupportFor(process.platform);
 
 export function controlSocketPath(stateDirectory: InstallationDirectory): string {
     const installationHash = createHash("sha256").update(stateDirectory).digest("hex").slice(0, 32);

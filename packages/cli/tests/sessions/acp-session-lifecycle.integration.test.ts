@@ -12,7 +12,10 @@ import { AcpContentExternalizer } from "../../src/engine/acp/content/content-ext
 import { acpSessionStoreMigrations } from "../../src/engine/generated/acp-session-store-migrations.ts";
 import { NullSessionObserver } from "../../src/engine/session/api/session-api.ts";
 import { SqliteSessionLiveEventPosition } from "../../src/engine/session/history/live-event-positions.ts";
-import { CachedSessionEventStore } from "../../src/engine/session/history/session-event-store.ts";
+import {
+    CachedSessionEventStore,
+    MemorySessionEventStore,
+} from "../../src/engine/session/history/session-event-store.ts";
 import { MemorySessionStore, SqliteSessionStore } from "../../src/engine/session/record/session-store.ts";
 import { AcpSessionTable } from "../../src/engine/storage/session/acp-session-table.ts";
 import { LiveEventPositionTable } from "../../src/engine/storage/session/live-event-position-table.ts";
@@ -21,9 +24,9 @@ import {
     openAcpSessionDatabase,
     openSessionEventCacheDatabase,
 } from "../../src/engine/storage/sqlite/local-databases.ts";
-import { readExecutableIdentity } from "../../src/engine/util/process/local-executable.ts";
 import { systemTimer } from "../../src/engine/util/timer.ts";
 import { acpAdapters } from "../support/acp-adapters.ts";
+import { readExecutableIdentity } from "../support/agent-definition.ts";
 import { createWritableAcpStream } from "../support/agents/acp-stream.ts";
 import { ControlledAcpConnection } from "../support/agents/controlled-acp-connection.ts";
 import { createControlledAgent } from "../support/agents/controlled-agent-definition.ts";
@@ -84,7 +87,9 @@ describe("ACP conversation sessions", () => {
             observer: new NullSessionObserver(),
             store: new MemorySessionStore(),
             adapters: acpAdapters,
-            onSessionStatusChanged: () => undefined,
+            onSessionClosed: () => undefined,
+            lastTurn: () => undefined,
+            settledTurns: () => [],
             contentExternalizer: new AcpContentExternalizer((sessionTarget, content, signal) =>
                 new UnretainedExternalContentStore().put({ ...content, target: sessionTarget, signal }),
             ),
@@ -143,7 +148,9 @@ describe("ACP conversation sessions", () => {
             observer: new NullSessionObserver(),
             store,
             adapters: acpAdapters,
-            onSessionStatusChanged: () => undefined,
+            onSessionClosed: () => undefined,
+            lastTurn: () => undefined,
+            settledTurns: () => [],
             contentExternalizer: new AcpContentExternalizer((sessionTarget, content, signal) =>
                 new UnretainedExternalContentStore().put({
                     bytes: content.bytes,
@@ -187,7 +194,9 @@ describe("ACP conversation sessions", () => {
                 observer: new NullSessionObserver(),
                 store,
                 adapters: acpAdapters,
-                onSessionStatusChanged: () => undefined,
+                onSessionClosed: () => undefined,
+                lastTurn: () => undefined,
+                settledTurns: () => [],
                 contentExternalizer: new AcpContentExternalizer((sessionTarget, content, signal) =>
                     new UnretainedExternalContentStore().put({
                         bytes: content.bytes,
@@ -676,7 +685,10 @@ describe("ACP conversation sessions", () => {
             legacyDatabase.close();
         }
 
-        const store = new SqliteSessionStore(new AcpSessionTable(openAcpSessionDatabase(databasePath)));
+        const store = new SqliteSessionStore(
+            new AcpSessionTable(openAcpSessionDatabase(databasePath)),
+            new MemorySessionEventStore(),
+        );
         store.close();
         const migratedDatabase = new DatabaseSync(databasePath, { readOnly: true });
         try {
@@ -710,12 +722,17 @@ describe("ACP conversation sessions", () => {
             process.execPath,
         );
         const signal = new AbortController().signal;
-        const firstStore = new SqliteSessionStore(new AcpSessionTable(openAcpSessionDatabase(databasePath)));
+        const firstStore = new SqliteSessionStore(
+            new AcpSessionTable(openAcpSessionDatabase(databasePath)),
+            new MemorySessionEventStore(),
+        );
         const firstRuntime = new SessionManager({
             observer: new NullSessionObserver(),
             store: firstStore,
             adapters: acpAdapters,
-            onSessionStatusChanged: () => undefined,
+            onSessionClosed: () => undefined,
+            lastTurn: () => undefined,
+            settledTurns: () => [],
             contentExternalizer: new AcpContentExternalizer((sessionTarget, content, signal) =>
                 new UnretainedExternalContentStore().put({
                     bytes: content.bytes,
@@ -751,12 +768,17 @@ describe("ACP conversation sessions", () => {
             firstStore.close();
         }
 
-        const restartedStore = new SqliteSessionStore(new AcpSessionTable(openAcpSessionDatabase(databasePath)));
+        const restartedStore = new SqliteSessionStore(
+            new AcpSessionTable(openAcpSessionDatabase(databasePath)),
+            new MemorySessionEventStore(),
+        );
         const restartedRuntime = new SessionManager({
             observer: new NullSessionObserver(),
             store: restartedStore,
             adapters: acpAdapters,
-            onSessionStatusChanged: () => undefined,
+            onSessionClosed: () => undefined,
+            lastTurn: () => undefined,
+            settledTurns: () => [],
             contentExternalizer: new AcpContentExternalizer((sessionTarget, content, signal) =>
                 new UnretainedExternalContentStore().put({
                     bytes: content.bytes,
@@ -814,7 +836,9 @@ child.once("exit", (code) => process.exit(code ?? 84));
                 observer,
                 store: new MemorySessionStore(),
                 adapters: acpAdapters,
-                onSessionStatusChanged: () => undefined,
+                onSessionClosed: () => undefined,
+                lastTurn: () => undefined,
+                settledTurns: () => [],
                 contentExternalizer: new AcpContentExternalizer((sessionTarget, content, signal) =>
                     new UnretainedExternalContentStore().put({
                         bytes: content.bytes,
@@ -829,7 +853,6 @@ child.once("exit", (code) => process.exit(code ?? 84));
                 maxProcesses: null,
             });
             const adapterIdentity = readExecutableIdentity(adapterPath);
-            const agentIdentity = readExecutableIdentity(process.execPath);
             const agent = createControlledAgent(
                 (options) =>
                     new ControlledAcpConnection(
@@ -846,7 +869,6 @@ child.once("exit", (code) => process.exit(code ?? 84));
                 process.execPath,
                 { MORTY_TEST_PI_PID_FILE: piPidPath },
                 "0.85.0",
-                agentIdentity,
             );
 
             try {
@@ -916,7 +938,9 @@ child.once("exit", (code) => process.exit(code ?? 84));
             observer,
             store: new MemorySessionStore(),
             adapters: acpAdapters,
-            onSessionStatusChanged: () => undefined,
+            onSessionClosed: () => undefined,
+            lastTurn: () => undefined,
+            settledTurns: () => [],
             contentExternalizer: new AcpContentExternalizer((sessionTarget, content, signal) =>
                 new UnretainedExternalContentStore().put({
                     bytes: content.bytes,
@@ -995,7 +1019,9 @@ child.once("exit", (code) => process.exit(code ?? 84));
             observer,
             store: new MemorySessionStore(),
             adapters: acpAdapters,
-            onSessionStatusChanged: () => undefined,
+            onSessionClosed: () => undefined,
+            lastTurn: () => undefined,
+            settledTurns: () => [],
             contentExternalizer: new AcpContentExternalizer((sessionTarget, content, signal) =>
                 new UnretainedExternalContentStore().put({
                     bytes: content.bytes,
@@ -1086,7 +1112,9 @@ child.once("exit", (code) => process.exit(code ?? 84));
             observer,
             store,
             adapters: acpAdapters,
-            onSessionStatusChanged: () => undefined,
+            onSessionClosed: () => undefined,
+            lastTurn: () => undefined,
+            settledTurns: () => [],
             contentExternalizer: new AcpContentExternalizer((sessionTarget, content, signal) =>
                 new UnretainedExternalContentStore().put({
                     bytes: content.bytes,
@@ -1197,7 +1225,9 @@ child.once("exit", (code) => process.exit(code ?? 84));
             observer: new NullSessionObserver(),
             store: new MemorySessionStore(),
             adapters: acpAdapters,
-            onSessionStatusChanged: () => undefined,
+            onSessionClosed: () => undefined,
+            lastTurn: () => undefined,
+            settledTurns: () => [],
             contentExternalizer: new AcpContentExternalizer((sessionTarget, content, signal) =>
                 new UnretainedExternalContentStore().put({
                     bytes: content.bytes,
@@ -1251,7 +1281,9 @@ child.once("exit", (code) => process.exit(code ?? 84));
             observer: new NullSessionObserver(),
             store: new MemorySessionStore(),
             adapters: acpAdapters,
-            onSessionStatusChanged: () => undefined,
+            onSessionClosed: () => undefined,
+            lastTurn: () => undefined,
+            settledTurns: () => [],
             contentExternalizer: new AcpContentExternalizer((sessionTarget, content, signal) =>
                 new UnretainedExternalContentStore().put({
                     bytes: content.bytes,
@@ -1299,7 +1331,9 @@ child.once("exit", (code) => process.exit(code ?? 84));
             observer: new NullSessionObserver(),
             store: new MemorySessionStore(),
             adapters: acpAdapters,
-            onSessionStatusChanged: () => undefined,
+            onSessionClosed: () => undefined,
+            lastTurn: () => undefined,
+            settledTurns: () => [],
             contentExternalizer: new AcpContentExternalizer((sessionTarget, content, signal) =>
                 new UnretainedExternalContentStore().put({
                     bytes: content.bytes,
@@ -1359,7 +1393,9 @@ child.once("exit", (code) => process.exit(code ?? 84));
             observer: new NullSessionObserver(),
             store: new MemorySessionStore(),
             adapters: acpAdapters,
-            onSessionStatusChanged: () => undefined,
+            onSessionClosed: () => undefined,
+            lastTurn: () => undefined,
+            settledTurns: () => [],
             contentExternalizer: new AcpContentExternalizer((sessionTarget, content, signal) =>
                 new UnretainedExternalContentStore().put({
                     bytes: content.bytes,
@@ -1421,7 +1457,9 @@ child.once("exit", (code) => process.exit(code ?? 84));
             observer,
             store: new MemorySessionStore(),
             adapters: acpAdapters,
-            onSessionStatusChanged: () => undefined,
+            onSessionClosed: () => undefined,
+            lastTurn: () => undefined,
+            settledTurns: () => [],
             contentExternalizer: new AcpContentExternalizer((sessionTarget, content, signal) =>
                 new UnretainedExternalContentStore().put({
                     bytes: content.bytes,
@@ -1542,7 +1580,9 @@ agent.once("exit", (code) => process.exit(code ?? 84));
             observer: new NullSessionObserver(),
             store: new MemorySessionStore(),
             adapters: acpAdapters,
-            onSessionStatusChanged: () => undefined,
+            onSessionClosed: () => undefined,
+            lastTurn: () => undefined,
+            settledTurns: () => [],
             contentExternalizer: new AcpContentExternalizer((sessionTarget, content, signal) =>
                 new UnretainedExternalContentStore().put({
                     bytes: content.bytes,

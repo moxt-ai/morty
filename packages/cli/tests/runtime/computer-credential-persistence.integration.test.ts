@@ -67,9 +67,6 @@ test("Given a running credential rotation, When the pairing is replaced concurre
         await expect(
             installation.setConnectionActivation(old.pairingGeneration, "stopped", signal),
         ).rejects.toMatchObject({ code: "connection_not_found" });
-        await expect(installation.removeConnection(old.pairingGeneration, signal)).rejects.toMatchObject({
-            code: "connection_not_found",
-        });
         expect(await installation.currentConnection(signal)).toEqual(replacement);
         expect((await current.held(signal)).current === replacementInput.computerCredential).toBe(true);
         if (rotation.status === "fulfilled") {

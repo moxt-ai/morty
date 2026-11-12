@@ -2,7 +2,6 @@ import type { SessionCapabilities } from "@morty-build/client/protocol";
 import type { ResolvedExecutable } from "../../util/process/executable.ts";
 import type { LocalAgentDiscoveryContext } from "../discovery/agent-discovery-context.ts";
 import type { AgentReadinessProbeParams } from "../discovery/agent-readiness.ts";
-import { normalizeVersionOutput } from "../discovery/version-output.ts";
 
 // A probe budget is the computer's worst-case allowance, not an optimistic guess. An Agent that is
 // installed and healthy must not be reclassified as missing just because a cold start, a first-run
@@ -25,8 +24,6 @@ export abstract class LocalAgentSpecification {
     readonly minimumSupportedAgentVersion: string = "0.0.0";
     readonly acpProbeTimeoutMilliseconds: number = ACP_PROBE_TIMEOUT_MILLISECONDS;
     readonly authenticationCommand = (): string => "";
-    readonly agentVersionArguments: readonly string[] = ["--version"];
-    readonly normalizeAgentVersion = normalizeVersionOutput;
     readonly versionProbeTimeoutMilliseconds: number = VERSION_PROBE_TIMEOUT_MILLISECONDS;
 
     readonly createLaunchEnvironment = async (

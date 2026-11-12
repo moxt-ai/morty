@@ -14,9 +14,9 @@ export function localSetupRuntime(entry: string): SetupRuntime {
         MORTY_STATE_DIRECTORY: directory,
     });
     return {
-        computers: async (directory, signal) => {
+        computer: async (directory, signal) => {
             const installation = await openMortyInstallation(signal, environment(directory));
-            return (await installation.listConnections(signal)).map((connection) => connection.computerId);
+            return (await installation.currentConnection(signal))?.computerId ?? null;
         },
         pair: async (directory, pairing, signal) => {
             const installation = await openMortyInstallation(signal, environment(directory));

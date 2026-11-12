@@ -2,9 +2,9 @@ import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, expect, it } from "vitest";
-import { AcpAgentDefinition } from "../../src/engine/acp/agent/agent-definition.ts";
 import { CodexAppServerClient } from "../../src/engine/acp/harness/codex/app-server-client.ts";
 import { stopProcessTree } from "../../src/engine/util/process/executable.ts";
+import { testAgentDefinition } from "../support/agent-definition.ts";
 import { imageFixture } from "../support/agents/image-fixture.ts";
 import { loadCodexHistory, previewCodexHistory } from "../support/codex-history-preview.ts";
 
@@ -139,7 +139,7 @@ it("Given Codex sends an individual protocol message above 32 MiB, When Morty re
 
 it("Given a non-Codex agent, When its history is requested through the Codex adapter, Then the adapter reports an agent mismatch rather than an executable change", async () => {
     const command = await historyAppServer();
-    const agent = new AcpAgentDefinition("claude", "Claude", command);
+    const agent = testAgentDefinition("claude", "Claude", command);
     await expect(previewCodexHistory(agent, process.cwd(), "saved-thread")).rejects.toMatchObject({
         code: "agent_adapter_mismatch",
     });
@@ -147,7 +147,7 @@ it("Given a non-Codex agent, When its history is requested through the Codex ada
 
 it("Given paginated Codex history exceeds 32 MiB across consumed responses, When Morty reads every page, Then the bounded history reader completes", async () => {
     const command = await historyAppServer();
-    const agent = new AcpAgentDefinition("codex", "Codex", command);
+    const agent = testAgentDefinition("codex", "Codex", command);
 
     const page = await previewCodexHistory(agent, process.cwd(), "large-history");
     expect(page.events).toHaveLength(4);
@@ -180,7 +180,7 @@ it.each([
             ...extra,
         ];
         const command = await historyAppServer(items);
-        const agent = new AcpAgentDefinition("codex", "Codex", command);
+        const agent = testAgentDefinition("codex", "Codex", command);
         const preview = await previewCodexHistory(agent, process.cwd(), "saved-thread");
         const opened = await loadCodexHistory(agent, process.cwd(), "saved-thread");
         const updates = (page: typeof preview) =>
@@ -229,7 +229,7 @@ it.each(["mcpToolCall", "dynamicToolCall"])(
             },
         ];
         const command = await historyAppServer(items);
-        const agent = new AcpAgentDefinition("codex", "Codex", command);
+        const agent = testAgentDefinition("codex", "Codex", command);
         const preview = await previewCodexHistory(agent, process.cwd(), "saved-thread");
         const opened = await loadCodexHistory(agent, process.cwd(), "saved-thread");
         for (const page of [preview, opened]) {
@@ -283,7 +283,7 @@ it("Given a saved Codex tool result exceeds the nesting limit, When it is previe
             },
         },
     ]);
-    const agent = new AcpAgentDefinition("codex", "Codex", command);
+    const agent = testAgentDefinition("codex", "Codex", command);
     const preview = await previewCodexHistory(agent, process.cwd(), "saved-thread");
     const opened = await loadCodexHistory(agent, process.cwd(), "saved-thread");
     for (const page of [preview, opened]) {
@@ -319,7 +319,7 @@ it("Given a saved failed Codex turn has no assistant answer, When it is previewe
         [{ id: "user", type: "userMessage", content: [{ type: "text", text: "Saved failed prompt" }] }],
         { message: "Native failure ".repeat(1_000) },
     );
-    const agent = new AcpAgentDefinition("codex", "Codex", command);
+    const agent = testAgentDefinition("codex", "Codex", command);
     const preview = await previewCodexHistory(agent, process.cwd(), "saved-thread");
     const opened = await loadCodexHistory(agent, process.cwd(), "saved-thread");
     const failures = (page: typeof preview) =>

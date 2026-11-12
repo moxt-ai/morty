@@ -4,7 +4,7 @@ import { isIdentifier, mortyApiUrl } from "@morty-build/client/protocol";
 import { fetch, type Response } from "undici";
 import type { CatalogAgent } from "../agent/catalog.ts";
 import { discoverLocalAgentInventory, type LocalAgentInventory } from "../agent/discovery/discover-local-agents.ts";
-import { RuntimeAgentDependencies } from "../agent/runtime-agents.ts";
+import { RuntimeAgentDependencies } from "../runtime/config.ts";
 import { ensureCanonicalDirectory } from "../storage/files/local-files.ts";
 import { environmentProxyDispatcher } from "../util/network/environment-proxy.ts";
 import { isRecord } from "../util/value-utils.ts";
@@ -13,7 +13,7 @@ import { publishAgentCatalog } from "./catalog/publish-agent-catalog.ts";
 import { discoverConfiguredAgents } from "./catalog/refresh-agent-catalog.ts";
 import { createCatalogAgentResolver } from "./catalog/resolve-catalog-agent.ts";
 import { createRuntimeConfig, type RuntimeConfig, RuntimeLocalContext } from "./config.ts";
-import type { VerifiedComputerConnection } from "./connection/computer-connection.ts";
+import type { SavedComputerConnection } from "./connection/computer-connection.ts";
 import type { ComputerCredentials } from "./connection/computer-credentials.ts";
 import { readRelayOrigin } from "./connection/relay-origin.ts";
 import type { RuntimeInstallationStore } from "./connection/runtime-installation-store.ts";
@@ -189,7 +189,7 @@ async function claimPairing(
 }
 
 function buildSavedRuntimeConfig(
-    connection: VerifiedComputerConnection,
+    connection: SavedComputerConnection,
     credentials: ComputerCredentials,
     defaultWorkspace: string,
     inventory: LocalAgentInventory,
@@ -221,7 +221,7 @@ async function pairComputer(
     options: PairCommandOptions,
     signal: AbortSignal,
     environment: Readonly<NodeJS.ProcessEnv>,
-): Promise<VerifiedComputerConnection> {
+): Promise<SavedComputerConnection> {
     const localContext = new RuntimeLocalContext(installation.stateDirectory, environment);
     const defaultWorkspace = await resolveDefaultWorkspace(options.workspace);
     const inventory = await discoverLocalAgentInventory({
@@ -248,7 +248,7 @@ export async function pairComputerConnection(
     options: MortyComputerPairingOptions,
     signal: AbortSignal,
     environment: Readonly<NodeJS.ProcessEnv>,
-): Promise<VerifiedComputerConnection> {
+): Promise<SavedComputerConnection> {
     return await pairComputer(
         installation,
         {
@@ -264,7 +264,7 @@ export async function pairComputerConnection(
 
 export async function prepareComputerConnection(
     installation: RuntimeInstallationStore,
-    connection: VerifiedComputerConnection,
+    connection: SavedComputerConnection,
     signal: AbortSignal,
     environment: Readonly<NodeJS.ProcessEnv>,
 ): Promise<RuntimeConfig> {

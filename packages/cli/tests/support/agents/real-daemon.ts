@@ -12,12 +12,15 @@ import {
     decodeMessageKind,
     decodeNativeSessionResult,
     decodeSessionEventEnvelope,
+    decodeSessionPromptAcceptedEvent,
     decodeSessionReadyEvent,
     encodeComputerLivenessReadyEvent,
     encodeNativeSessionCommand,
     encodeSessionCreateCommand,
+    isPromptTerminal,
     MORTY_API_PREFIX,
     type NativeSessionTarget,
+    SESSION_EVENT_KIND,
 } from "@morty-build/client/protocol";
 import { listen, port } from "@morty-build/relay-test-support/websocket";
 import { type WebSocket, WebSocketServer } from "ws";
@@ -28,14 +31,18 @@ import { openMortyInstallation } from "../../../src/daemon/pairing/pair-local-co
 import { harnessAdapters } from "../../../src/engine/acp/adapter/registry.ts";
 import type { AdapterResolver } from "../../../src/engine/acp/native-history/preview-contract.ts";
 import { discoverLocalAgentInventory } from "../../../src/engine/agent/discovery/discover-local-agents.ts";
-import { RuntimeAgentDependencies } from "../../../src/engine/agent/runtime-agents.ts";
 import type { LocalAgentSpecification } from "../../../src/engine/agent/specification/agent-specification.ts";
-import { createRuntimeConfig, RuntimeLocalContext } from "../../../src/engine/runtime/config.ts";
+import {
+    createRuntimeConfig,
+    RuntimeAgentDependencies,
+    RuntimeLocalContext,
+} from "../../../src/engine/runtime/config.ts";
 import {
     HEARTBEAT_ACK_TIMEOUT_MILLISECONDS,
     HEARTBEAT_INTERVAL_MILLISECONDS,
 } from "../../../src/engine/runtime/relay/liveness.ts";
 import { runRuntime } from "../../../src/engine/runtime/run.ts";
+import { AgentProcessPool } from "../../../src/engine/session/process/agent-process-pool.ts";
 import { systemTimer, type Timer } from "../../../src/engine/util/timer.ts";
 import { acpAdapters } from "../acp-adapters.ts";
 import { memoryComputerCredentials } from "../computer-credentials.ts";
@@ -251,12 +258,7 @@ async function withDaemonConnection(
                               relayUrl,
                           },
                           new RuntimeAgentDependencies([agent], adapters),
-                          new RuntimeLocalContext(
-                              directory,
-                              { ...process.env, ...environment },
-                              // A scenario that needs process retirement shrinks the retained process budget.
-                              Number(environment["MORTY_TEST_MAX_ACP_PROCESSES"] ?? "1000"),
-                          ),
+                          new RuntimeLocalContext(directory, { ...process.env, ...environment }),
                           async (agent) => agent,
                       );
                   })()
@@ -278,7 +280,13 @@ async function withDaemonConnection(
                 await cli(["start"]);
             } else {
                 execution = new AbortController();
-                runtime = runRuntime(config, AbortSignal.any([signal, execution.signal]), runtimeTimer);
+                runtime = runRuntime(config, AbortSignal.any([signal, execution.signal]), runtimeTimer, {
+                    // A scenario that needs process retirement shrinks the retained process budget.
+                    processes: new AgentProcessPool(
+                        Number(environment["MORTY_TEST_MAX_ACP_PROCESSES"] ?? "1000"),
+                        runtimeTimer,
+                    ),
+                });
                 void runtime.catch((error: unknown) => {
                     connected.reject(error);
                     waiter?.reject(error);
@@ -393,6 +401,41 @@ async function withDaemonConnection(
                 await new Promise<void>((resolve) => relay.close(() => resolve()));
             }
             await rm(directory, { force: true, maxRetries: 5, recursive: true, retryDelay: 100 });
+        }
+    }
+}
+
+/** Waits for the Computer's answer to prompt `commandId`: it was queued, began executing, or settled at once. */
+export async function nextPromptAcceptance(peer: DaemonConnectionPeer, commandId: string) {
+    for (;;) {
+        const message = await peer.nextMessage();
+        if (decodeMessageKind(message) === "session.operation.failed") {
+            throw new Error(message);
+        }
+        if (decodeMessageKind(message) === "session.prompt.accepted") {
+            const accepted = decodeSessionPromptAcceptedEvent(message);
+            if (accepted.requestId === commandId) {
+                return accepted;
+            }
+        }
+    }
+}
+
+/** Waits for the lifecycle event that settles prompt `commandId`; the Session is idle again once it arrives. */
+export async function nextPromptSettlement(peer: DaemonConnectionPeer, commandId: string) {
+    for (;;) {
+        const message = await peer.nextMessage();
+        if (decodeMessageKind(message) !== SESSION_EVENT_KIND) {
+            continue;
+        }
+        for (const event of decodeSessionEventEnvelope(message).events) {
+            if (
+                event.type === "lifecycle-metadata" &&
+                isPromptTerminal(event.payload) &&
+                event.payload.commandId === commandId
+            ) {
+                return event.payload;
+            }
         }
     }
 }

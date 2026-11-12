@@ -228,7 +228,12 @@ export class ClaudeAdapter implements Adapter {
             case "injected":
                 return response;
             case "startedNewTurn":
-                return response;
+                // Requesting `promptRequired` excludes this outcome; an Agent that still reports it broke the contract.
+                throw new AcpExecutionError(
+                    "ACP agent returned an invalid steering response",
+                    {},
+                    "acp_invalid_steering_response",
+                );
             case "promptRequired":
                 throw new AcpExecutionError(
                     "The target turn finished before steering could be injected",

@@ -5,16 +5,19 @@ import { join } from "node:path";
 import { sameNativeSession } from "@morty-build/client/native-session";
 import {
     decodeMessageKind,
-    decodeSessionStatusChangedEvent,
     decodeSessionsQueriedEvent,
     encodeSessionPromptCommand,
     encodeSessionQueryCommand,
-    SESSION_STATUS_CHANGED_KIND,
     type SessionStatus,
 } from "@morty-build/client/protocol";
 import { expect, test } from "vitest";
 import { ControlledAcpAgentSpecification } from "../support/agents/controlled-acp.ts";
-import { prepareNewRealSession, type RealDaemonPeer, withControlledDaemon } from "../support/agents/real-daemon.ts";
+import {
+    nextPromptSettlement,
+    prepareNewRealSession,
+    type RealDaemonPeer,
+    withControlledDaemon,
+} from "../support/agents/real-daemon.ts";
 import { writeControlledAcpExecutable } from "../support/controlled-acp-executable.ts";
 
 const submit = (peer: RealDaemonPeer, sessionTarget: RealDaemonPeer["target"], commandId: string, prompt: string) =>
@@ -28,20 +31,6 @@ const submit = (peer: RealDaemonPeer, sessionTarget: RealDaemonPeer["target"], c
             target: sessionTarget,
         }),
     );
-
-/** The next idle status the Computer publishes for the Session. */
-async function nextIdle(peer: RealDaemonPeer, sessionTarget: RealDaemonPeer["target"]): Promise<SessionStatus> {
-    for (;;) {
-        const message = await peer.nextMessage();
-        if (decodeMessageKind(message) !== SESSION_STATUS_CHANGED_KIND) {
-            continue;
-        }
-        const changed = decodeSessionStatusChangedEvent(message);
-        if (sameNativeSession(changed.target, sessionTarget) && changed.status.kind === "idle") {
-            return changed.status;
-        }
-    }
-}
 
 async function queriedStatus(
     peer: RealDaemonPeer,
@@ -72,14 +61,17 @@ test("Given a Session whose last turn failed, When a client that did not watch i
                 const sessionTarget = await prepareNewRealSession(peer, "controlled-acp");
                 submit(peer, sessionTarget, failed, "fail with model unavailable");
                 const failure = { code: "acp_agent_error", commandId: failed, message: expect.any(String) };
-                expect(await nextIdle(peer, sessionTarget)).toEqual({ kind: "idle", failedTurn: failure });
+                await nextPromptSettlement(peer, failed);
+                expect(await queriedStatus(peer, sessionTarget)).toEqual({ kind: "idle", failedTurn: failure });
 
                 // A client that connects later, here after a restart, reads the same failure.
                 await peer.restart();
                 expect(await queriedStatus(peer, sessionTarget)).toEqual({ kind: "idle", failedTurn: failure });
 
-                submit(peer, sessionTarget, randomUUID(), "The request completes");
-                expect(await nextIdle(peer, sessionTarget)).toEqual({ kind: "idle" });
+                const completed = randomUUID();
+                submit(peer, sessionTarget, completed, "The request completes");
+                await nextPromptSettlement(peer, completed);
+                expect(await queriedStatus(peer, sessionTarget)).toEqual({ kind: "idle" });
             },
         );
     } finally {

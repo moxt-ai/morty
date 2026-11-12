@@ -257,9 +257,6 @@ export class AcpExecutionConnections {
             if (outcome === "injected") {
                 return typeof messageId === "string" && messageId.length > 0 ? { outcome, messageId } : { outcome };
             }
-            if (outcome === "startedNewTurn") {
-                return { outcome };
-            }
             if (outcome === "promptRequired") {
                 throw new AcpExecutionError(
                     "The target turn finished before steering could be injected",
