@@ -1,1 +1,0 @@
-ALTER TABLE `platform_projects` DROP COLUMN `session_access_revoked_through`;
