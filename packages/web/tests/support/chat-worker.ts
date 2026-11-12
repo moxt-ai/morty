@@ -63,7 +63,6 @@ export async function createChatWorkerEnvironment(
         const connect = async (agents: readonly ControlledAgent[], sessionIds?: ReadonlySet<string>) => {
             const runtime = await cloud.connectAgent(identity.computerId, identity.token, agents, sessionIds);
             const setup = await request(`chat/computers/${identity.computerId}/setup`, {
-                computerId: runtime.computerId,
                 harness: agents[0]?.harness ?? "codex",
             });
             if (setup.status !== 202) {

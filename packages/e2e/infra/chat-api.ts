@@ -84,7 +84,7 @@ export class ChatApi {
         });
     }
 
-    async readPairedAgent(_computerId: string, harness: string) {
+    async readPairedAgent(harness: string) {
         const paired = await this.#request(`/morty/api/management/pairing`);
         if (
             paired["status"] !== "paired" ||
@@ -93,13 +93,12 @@ export class ChatApi {
         ) {
             throw new Error(`The paired Computer does not expose ${harness}`);
         }
-        return { computerId: text(paired["computerId"], "computerId") };
     }
 
-    async bindAgent(computerId: string, harness: string) {
+    async bindAgent(harness: string) {
         const identity = this.#requireIdentity();
         await this.#request(`/morty/api/chat/computers/${encodeURIComponent(identity.computerId)}/setup`, {
-            body: { computerId, harness: harness },
+            body: { harness },
         });
     }
 

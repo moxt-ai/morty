@@ -7,10 +7,6 @@ import {
 
 export type NativeSessionAgent = ChatAgentSelection & { readonly installed: boolean; readonly value: string };
 
-export function harnessValue(computerId: string, harness: string): string {
-    return `${computerId}:${harness}`;
-}
-
 const PI_HARNESS: Identifier = decodeIdentifier("pi");
 
 /** Computer harness tabs: connected agents plus Pi when it is not on the Computer. */
@@ -19,24 +15,18 @@ export function nativeSessionAgentTabs(computer: ChatComputer): readonly NativeS
     const installed = connected.map((agent) => ({
         ...agent,
         installed: true as const,
-        value: harnessValue(agent.computerId, agent.harness),
+        value: agent.harness,
     }));
     if (connected.length === 0 || connected.some((agent) => agent.harness === PI_HARNESS)) {
-        return installed;
-    }
-    const anchor = connected.at(0);
-    if (anchor === undefined) {
         return installed;
     }
     return [
         ...installed,
         {
-            computerId: anchor.computerId,
-            computerName: anchor.computerName,
             harness: PI_HARNESS,
             label: "Pi",
             installed: false,
-            value: harnessValue(anchor.computerId, PI_HARNESS),
+            value: PI_HARNESS,
         },
     ];
 }
@@ -73,7 +63,7 @@ export function sessionHarnessSelection(computer: ChatComputer | null, harness: 
         installed: false,
         label: harness,
         tabLabel: harness,
-        value: harnessValue(computer?.computerId ?? "", harness),
+        value: harness,
     };
     return { options: [...options, fallback], value: fallback.value };
 }

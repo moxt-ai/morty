@@ -109,8 +109,8 @@ test("Given desktop Codex owns a conversation, When I open it in Morty and queue
         });
         void running.catch(ready.reject);
         await Promise.race([ready.promise, running]);
-        const pairedAgent = await chat.readPairedAgent(text(pairing["computerId"], "pairing ID"), "codex");
-        await chat.bindAgent(pairedAgent.computerId, "codex");
+        await chat.readPairedAgent("codex");
+        await chat.bindAgent("codex");
         // The harness owns the browser so a failure keeps its trace, page and browser events.
         const browser = await { chromium, firefox, webkit }[browserName].launch({ headless: true });
         const page = await (async () => {
