@@ -13,12 +13,11 @@ import {
 } from "@morty-build/client/protocol";
 import { ComputerStatus } from "../../../../contracts/relay/computer-status.ts";
 import { PairingDirectoryError } from "../../../../contracts/relay/pairing.ts";
-import { ComputerScope } from "../../../../contracts/relay/session.ts";
 import { logger } from "../../../../infra/logger.ts";
 import type { ComputerConnectionIdentity } from "../entity/computer-connection.ts";
 import type { ComputerCredentialService } from "./computer-credential-service.ts";
 import { ComputerMessageScheduler, ComputerMessageSchedulerCapacityError } from "./computer-message-scheduler.ts";
-import type { ComputerRelayActor, RelayPeers, RelaySocket } from "./computer-relay-actor.ts";
+import type { ComputerOperationSocket, ComputerRelayActor, RelayPeers, RelaySocket } from "./computer-relay-actor.ts";
 import type { DaemonConnectionService } from "./daemon-connection-service.ts";
 
 const DAEMON_ATTACHMENT_TIMEOUT_MILLISECONDS = 30_000;
@@ -45,13 +44,6 @@ export type ComputerSocketIdentity =
           readonly computerId: string;
 
           readonly sessionFilter: NativeSessionTarget;
-      }
-    | {
-          readonly role: "host";
-          readonly nativeRequestId?: string;
-          readonly sessionFilter?: NativeSessionTarget;
-
-          readonly computerId: string;
       }
     | {
           readonly role: "daemon" | "replaced-daemon";
@@ -83,7 +75,7 @@ interface RuntimeContext {
     readonly services: {
         readonly connections: DaemonConnectionService;
         readonly credentials: ComputerCredentialService;
-        readonly relay: (scope: ComputerScope) => ComputerRelayActor;
+        readonly relay: (computerId: string) => ComputerRelayActor;
     };
     readonly gateways: {
         readonly peers: ComputerPeers;
@@ -97,10 +89,7 @@ export type ComputerAdmission =
     | { readonly kind: "revoked" }
     | { readonly kind: "accepted"; readonly response: Response };
 
-export type ComputerConnectionOperations = Pick<
-    ComputerService,
-    "acceptDaemon" | "acceptHost" | "revokeComputer" | "readStatus"
->;
+export type ComputerConnectionOperations = Pick<ComputerService, "acceptDaemon" | "revokeComputer" | "readStatus">;
 
 type DaemonSocketIdentity = Extract<ComputerSocketIdentity, { readonly role: "daemon" | "replaced-daemon" }> & {
     readonly role: "daemon";
@@ -116,7 +105,7 @@ export class ComputerService {
     }>();
     #acceptTail: Promise<void> = Promise.resolve();
     readonly #accepting = new Set<{
-        readonly scope: ComputerScope;
+        readonly computerId: string;
         readonly controller: AbortController;
     }>();
 
@@ -124,16 +113,16 @@ export class ComputerService {
         this.#cx = cx;
     }
 
-    readonly readStatus = async (scope: ComputerScope, signal: AbortSignal): Promise<ComputerStatus> => {
+    readonly readStatus = async (computerId: string, signal: AbortSignal): Promise<ComputerStatus> => {
         signal.throwIfAborted();
         await this.expireSilentDaemons();
         signal.throwIfAborted();
-        return new ComputerStatus(this.isOnline(scope.computerId));
+        return new ComputerStatus(this.isOnline(computerId));
     };
 
-    readonly acceptDaemon = (scope: ComputerScope, signal: AbortSignal) =>
-        this.admit(scope, signal, (admission, generation) => {
-            const operation = this.#acceptTail.then(() => this.acceptDaemonSocket(scope, admission, generation));
+    readonly acceptDaemon = (computerId: string, signal: AbortSignal) =>
+        this.admit(computerId, signal, (admission, generation) => {
+            const operation = this.#acceptTail.then(() => this.acceptDaemonSocket(computerId, admission, generation));
             this.#acceptTail = operation.then(
                 () => undefined,
                 () => undefined,
@@ -148,15 +137,15 @@ export class ComputerService {
      * accept without awaiting, so a later notification finds the accepted socket and closes it.
      */
     private readonly admit = async <T>(
-        scope: ComputerScope,
+        computerId: string,
         signal: AbortSignal,
         accept: (admission: AbortSignal, generation: number) => Promise<T>,
     ): Promise<T | { readonly kind: "revoked" }> => {
-        const pending = { scope, controller: new AbortController() };
+        const pending = { computerId, controller: new AbortController() };
         this.#accepting.add(pending);
         try {
             const admission = AbortSignal.any([signal, pending.controller.signal]);
-            const runtime = { computerId: scope.computerId };
+            const runtime = { computerId };
             const generation = await this.#cx.services.credentials.activeGeneration(runtime, admission);
             if (generation === null) {
                 return { kind: "revoked" };
@@ -174,7 +163,7 @@ export class ComputerService {
     };
 
     private readonly acceptDaemonSocket = (
-        scope: ComputerScope,
+        computerId: string,
         signal: AbortSignal,
         generation: number,
     ): ComputerAdmission => {
@@ -194,26 +183,26 @@ export class ComputerService {
             .sockets()
             .filter(({ identity, socket }) => identity.role === "daemon" && socket.isOpen());
         for (const attachment of this.#attachments) {
-            if (attachment.identity.computerId === scope.computerId) {
+            if (attachment.identity.computerId === computerId) {
                 attachment.controller.abort(new DOMException("Computer connection replaced", "AbortError"));
             }
         }
         for (const { socket } of previous) {
             socket.replaceDaemon();
         }
-        const connection = this.#cx.services.connections.next(scope.computerId);
+        const connection = this.#cx.services.connections.next(computerId);
         const identity: DaemonSocketIdentity = { ...connection, role: "daemon" };
         const accepted = this.#cx.gateways.peers.accept(identity);
         this.#cx.services.connections.connected(connection, generation, Date.now());
         logger.info({ ...identity, event: "computer_websocket_accepted" }, "Computer WebSocket accepted");
-        this.deferDaemonAttachment(identity, accepted.socket, scope, previous.length > 0);
+        this.deferDaemonAttachment(identity, accepted.socket, computerId, previous.length > 0);
         return { kind: "accepted", response: accepted.response };
     };
 
     private readonly deferDaemonAttachment = (
         identity: DaemonSocketIdentity,
         socket: ComputerSocket,
-        scope: ComputerScope,
+        computerId: string,
         replaced: boolean,
     ): void => {
         const attachment = { controller: new AbortController(), identity };
@@ -228,7 +217,7 @@ export class ComputerService {
         const signal = AbortSignal.any([attachment.controller.signal, timeout.signal]);
         const operation = (async () => {
             try {
-                await this.attachDaemon(scope, replaced, signal);
+                await this.attachDaemon(computerId, replaced, signal);
                 signal.throwIfAborted();
                 if (!this.#cx.services.connections.isCurrent(identity)) {
                     return;
@@ -253,71 +242,51 @@ export class ComputerService {
         this.#cx.utilities.waitUntil(operation);
     };
 
-    readonly acceptHost = (
-        identity: Extract<ComputerSocketIdentity, { readonly role: "host" }>,
-        signal: AbortSignal,
-    ): Promise<ComputerAdmission> => {
-        const scope = new ComputerScope(identity.computerId);
-        return this.admit(scope, signal, async (admission): Promise<ComputerAdmission> => {
-            admission.throwIfAborted();
-            const accepted = this.#cx.gateways.peers.accept(identity);
-            await this.attachHost(scope, accepted.socket, signal);
-            return { kind: "accepted", response: accepted.response };
-        });
-    };
-
-    readonly revokeComputer = async (scope: ComputerScope, signal: AbortSignal): Promise<void> => {
+    readonly revokeComputer = async (computerId: string, signal: AbortSignal): Promise<void> => {
         signal.throwIfAborted();
         // The Project's Computer authority committed the revocation before notifying; acceptance and every
         // daemon message read that authority, so this notification only cleans up promptly. Its one fallible
         // step runs first, so a failed notification leaves this Relay unchanged for the caller to retry.
         // A delayed disconnect must not close the daemon that claimed a fresh authorization.
-        if ((await this.#cx.services.credentials.activeGeneration({ computerId: scope.computerId }, signal)) !== null) {
+        if ((await this.#cx.services.credentials.activeGeneration({ computerId }, signal)) !== null) {
             return;
         }
         const latest = this.#cx.services.connections.latest();
-        const connected = latest?.kind === "connected" && latest.computerId === scope.computerId;
+        const connected = latest?.kind === "connected" && latest.computerId === computerId;
         if (connected) {
             this.#cx.services.connections.disconnected(latest, Date.now());
         }
         for (const accepting of this.#accepting) {
-            if (accepting.scope.computerId === scope.computerId) {
+            if (accepting.computerId === computerId) {
                 accepting.controller.abort(new DOMException("Computer revoked", "AbortError"));
             }
         }
         for (const attachment of this.#attachments) {
-            if (attachment.identity.computerId === scope.computerId) {
+            if (attachment.identity.computerId === computerId) {
                 attachment.controller.abort(new DOMException("Computer revoked", "AbortError"));
             }
         }
         for (const { identity, socket } of this.#cx.gateways.peers.sockets()) {
-            if (identity.computerId !== scope.computerId) {
+            if (identity.computerId !== computerId) {
                 continue;
             }
             if (identity.role === "daemon") {
                 socket.close(1008, "Computer revoked");
-            } else if (identity.role === "viewer" || identity.role === "host") {
+            } else if (identity.role === "viewer") {
                 socket.close(1008, "Computer revoked");
             }
         }
         if (connected) {
-            this.notifyOffline(scope.computerId);
+            this.notifyOffline(computerId);
         }
     };
 
     /**
-     * Closes the host connections and live Session views whose credential no longer authorizes them. A host's own
-     * messages are authorized as they arrive, but nothing the Computer sends to a quiet host or to a view is, so the
-     * Relay runs this as soon as access to the computer ends, and periodically while either is connected.
+     * Closes live Session views whose credential no longer authorizes them. The Relay checks as soon as access
+     * to the computer ends, and periodically while views remain connected.
      */
     readonly reauthorizeConnections = async (signal: AbortSignal): Promise<void> => {
         for (const { identity, socket } of this.#cx.gateways.peers.sockets()) {
-            if (
-                identity.role === "host" &&
-                (await this.#cx.services.credentials.authorizeHostMessage(identity, signal)) === "revoked"
-            ) {
-                socket.close(1008, "Channel access revoked");
-            }
             if (
                 identity.role === "viewer" &&
                 (await this.#cx.services.credentials.authorizeViewer(identity, signal)) === "revoked"
@@ -337,18 +306,15 @@ export class ComputerService {
         return current !== null && current.computerId === computerId && this.#cx.gateways.peers.daemons().length > 0;
     };
 
-    readonly attachDaemon = async (scope: ComputerScope, replaced: boolean, signal: AbortSignal): Promise<void> => {
-        const relay = this.relay(scope);
+    readonly attachDaemon = async (computerId: string, replaced: boolean, signal: AbortSignal): Promise<void> => {
+        const relay = this.relay(computerId);
         await relay.attachDaemon(replaced, signal);
     };
 
-    readonly attachHost = (scope: ComputerScope, socket: RelaySocket, signal: AbortSignal) =>
-        this.relay(scope).attachHost(socket, signal);
-
-    /** The public HTTP handler already authorized this operation; no host credential is involved. */
+    /** The public HTTP handler already authorized this local operation. */
     readonly receiveOperation = async (
-        scope: ComputerScope,
-        socket: RelaySocket,
+        computerId: string,
+        socket: ComputerOperationSocket,
         message: unknown,
         signal: AbortSignal,
     ): Promise<void> => {
@@ -363,14 +329,14 @@ export class ComputerService {
                         peer.isOpen() &&
                         this.#cx.services.connections.isCurrent(identity),
                 );
-            if (daemon !== undefined && daemon.identity.computerId !== scope.computerId) {
+            if (daemon !== undefined && daemon.identity.computerId !== computerId) {
                 throw new PairingDirectoryError("computer_access_denied", "The selected Computer is unavailable");
             }
-            const relay = this.relay(scope);
+            const relay = this.relay(computerId);
             if (typeof message === "string") {
-                await relay.receiveHostMessage(socket, message, signal);
+                await relay.receiveOperationMessage(socket, message, signal);
             } else {
-                relay.receiveHostChunk(socket, message);
+                relay.receiveOperationChunk(socket, message);
             }
         } finally {
             await this.detachDaemons(silent);
@@ -384,26 +350,11 @@ export class ComputerService {
         signal: AbortSignal,
     ): Promise<void> => {
         signal.throwIfAborted();
-        const scope = new ComputerScope(identity.computerId);
-        if (identity.role === "host" || identity.role === "viewer") {
-            // Closing first makes this command see the Computer as offline and fail at once; detaching
-            // afterwards releases commands already sent into the silent connection.
+        const computerId = identity.computerId;
+        if (identity.role === "viewer") {
             const silentDaemons = this.closeSilentDaemons();
             try {
-                if (identity.role === "viewer") {
-                    socket.close(1008, "A live subscription cannot send commands");
-                    return;
-                }
-                if ((await this.#cx.services.credentials.authorizeHostMessage(identity, signal)) === "revoked") {
-                    socket.close(1008, "Channel access revoked");
-                    return;
-                }
-                const relay = this.relay(scope);
-                if (typeof message !== "string") {
-                    relay.receiveHostChunk(socket, message);
-                    return;
-                }
-                await relay.receiveHostMessage(socket, message, signal);
+                socket.close(1008, "A live subscription cannot send commands");
                 return;
             } finally {
                 await this.detachDaemons(silentDaemons);
@@ -416,7 +367,7 @@ export class ComputerService {
                     if (!(await this.authorizeDaemonMessage(identity, socket, signal))) {
                         return;
                     }
-                    this.relay(scope).receiveDaemonChunk(socket, message);
+                    this.relay(computerId).receiveDaemonChunk(socket, message);
                 });
             } catch (error) {
                 signal.throwIfAborted();
@@ -436,7 +387,7 @@ export class ComputerService {
             daemonMessage = decodeDaemonToRelayMessage(message);
         } catch {
             // Reject this frame without disconnecting unrelated Sessions.
-            this.relay(scope).recordSkipped("invalid_daemon_message");
+            this.relay(computerId).recordSkipped("invalid_daemon_message");
             return;
         }
         const lanes = daemonMessage === null ? ["runtime"] : this.daemonMessageLanes(daemonMessage);
@@ -446,7 +397,7 @@ export class ComputerService {
                 if (!(await this.authorizeDaemonMessage(identity, socket, signal))) {
                     return;
                 }
-                const relay = this.relay(scope);
+                const relay = this.relay(computerId);
                 await relay.receiveDaemonMessage(socket, daemonMessage, signal, message);
             });
         } catch (error) {
@@ -529,11 +480,11 @@ export class ComputerService {
         return ["runtime"];
     };
 
-    private readonly relay = (scope: ComputerScope): ComputerRelayActor => {
+    private readonly relay = (computerId: string): ComputerRelayActor => {
         if (this.#channel === undefined) {
-            this.#channel = { computerId: scope.computerId, actor: this.#cx.services.relay(scope) };
+            this.#channel = { computerId, actor: this.#cx.services.relay(computerId) };
         }
-        if (this.#channel.computerId !== scope.computerId) {
+        if (this.#channel.computerId !== computerId) {
             throw new PairingDirectoryError("computer_access_denied", "The selected Computer is unavailable");
         }
         return this.#channel.actor;
@@ -564,7 +515,7 @@ export class ComputerService {
             return;
         }
         this.#cx.services.connections.disconnected(identity, Date.now());
-        await this.relay(new ComputerScope(identity.computerId)).detachDaemon(socket, signal);
+        await this.relay(identity.computerId).detachDaemon(socket, signal);
     };
 
     private readonly closeSilentDaemons = (): readonly ComputerPeer[] => {
@@ -625,13 +576,9 @@ export class ComputerService {
     };
 
     private readonly notifyOffline = (computerId: string): void => {
-        for (const host of [
-            ...this.#cx.gateways.peers.hosts(),
-            ...this.#cx.gateways.peers.operations().map(({ socket }) => socket),
-            ...this.#cx.gateways.peers.nativeRequests().map(({ socket }) => socket),
-        ]) {
-            if (host.isOpen()) {
-                host.send(encodeComputerStatusEvent({ kind: COMPUTER_STATUS_KIND, computerId, online: false }));
+        for (const { socket } of this.#cx.gateways.peers.operations()) {
+            if (socket.isOpen()) {
+                socket.send(encodeComputerStatusEvent({ kind: COMPUTER_STATUS_KIND, computerId, online: false }));
             }
         }
     };

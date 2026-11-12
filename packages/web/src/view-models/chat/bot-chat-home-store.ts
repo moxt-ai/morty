@@ -251,7 +251,6 @@ type ReturnedFirstMessage = Pick<QueuedDraftMessage, "attachments" | "commandId"
 export const createBotChatHomeStore = (
     requests: Pick<
         BotChatApi,
-        | "access"
         | "conversationSession"
         | "createConversation"
         | "managedSession"

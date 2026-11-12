@@ -16,7 +16,7 @@ import { truncate } from "../../util/value-utils.ts";
 import type { BackgroundActivity, PromptDelegationStage } from "../agent/agent-lifecycle.ts";
 import { normalizeSessionConfigurationUpdate } from "../protocol/session-configuration.ts";
 
-export type NativeSessionInfoChange =
+type NativeSessionInfoChange =
     | { readonly kind: "title"; readonly value: string }
     | { readonly kind: "updated-at"; readonly value: string };
 
@@ -106,7 +106,7 @@ export function nativeSessionEvent(update: SessionUpdate, value: unknown = updat
 }
 
 /** Promote harness metadata onto the protocol fields consumed by Morty. */
-export function withMortyFields(update: SessionUpdate, eventUpdate: unknown): unknown {
+function withMortyFields(update: SessionUpdate, eventUpdate: unknown): unknown {
     if (typeof eventUpdate !== "object" || eventUpdate === null) {
         return eventUpdate;
     }

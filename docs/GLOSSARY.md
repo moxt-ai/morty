@@ -136,10 +136,6 @@ Native Sessions are discovered through the selected Agent's capabilities. Their
 availability, identity, history completeness, and ability to resume or fork remain
 authoritative at the Agent boundary.
 
-“Non-native Session” is not a separate protocol type. In contributor discussions,
-the intended contrast is usually a **Morty Session** created or managed by Morty
-versus a **Native Session** owned by the Agent.
-
 ### Native Session entry
 
 A discovery result describing one Agent-owned conversation in a particular

@@ -29,7 +29,7 @@ conversation and setup journeys.
 
 Morty Web, Worker, and browser suites run the production daemon through the real
 Morty WebSocket endpoint. Tests inject a stateful controlled ACP harness through
-the daemon's Agent dependency argument; the single Worker, SDKs, daemon behavior,
+the daemon's Agent dependency argument; the single Worker, internal clients, daemon behavior,
 and transports remain real. Each fixture owns pairing and cleanup of the
 resources it creates.
 
@@ -56,8 +56,8 @@ compatibility with a vendor Agent.
 
 A released Moxt/Mobius installation must remain usable while Morty starts, stops,
 updates, and is removed; verify the converse as well. This verifies independent
-product ownership. Verify current installation, pairing and authorization through
-the complete product boundary, including rejection of invalid credentials.
+installation and operation; Morty never inherits Moxt state or modifies Agent-owned
+history.
 
 Exercise interrupted installation and update through the supported installation
 boundary. Verify local IPC authentication, resolved-path ownership, and rejected

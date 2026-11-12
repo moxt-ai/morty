@@ -59,7 +59,7 @@ test("Given an existing Project and Computer, When Morty moves to another origin
             const environment = fixture.environment();
             const session = await worker.fetch(accountRequest(identity.token, identity.computerId), environment);
             expect(session.status).toBe(200);
-            expect(await session.json()).toMatchObject({ userId: identity.userId });
+            expect(await session.json()).toMatchObject({ computerId: identity.computerId });
             const currentBot = await worker.fetch(
                 new Request(`${projectUrl}/computer/pairing-state`, { headers }),
                 environment,
@@ -90,13 +90,13 @@ test("Given an existing Project and Computer, When Morty moves to another origin
             );
             expect(replaced.status).toBe(201);
             const replacement = v.parse(
-                v.object({ userId: v.string(), computerId: v.string(), token: v.string() }),
+                v.object({ computerId: v.string(), computerToken: v.string() }),
                 await replaced.json(),
             );
-            expect(replacement.userId).toBe(identity.userId);
             expect(replacement.computerId).not.toBe(identity.computerId);
             expect(
-                (await worker.fetch(accountRequest(replacement.token, replacement.computerId), environment)).status,
+                (await worker.fetch(accountRequest(replacement.computerToken, replacement.computerId), environment))
+                    .status,
             ).toBe(200);
         } finally {
             await relocated.close();

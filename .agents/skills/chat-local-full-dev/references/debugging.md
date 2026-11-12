@@ -66,7 +66,7 @@ use `node scripts/local-dev.cjs remove --state-dir <stateDir> --keep-state`;
 
 | Symptom | Likely cause | Check |
 | --- | --- | --- |
-| Agent Runtime reconnect loop, close code 1008 `Invalid protocol message` | The running Runtime and local relay use different release contracts | Rebuild the checkout CLI and start a fresh isolated stack through `scripts/local-dev`; check `morty status` |
+| Agent Runtime reconnect loop, close code 1008 `Invalid protocol message` | The running Runtime and local relay use different release contracts | Rebuild the checkout CLI and start a fresh isolated stack through `node scripts/local-dev.cjs prepare web-server --background`; check `morty status` |
 | Relay exits after `Can't call WebSocket send() after close()` | A replaced or closing daemon socket received a send | Correlate `chatLog` and Runtime diagnostics; fix the relay boundary |
 | Validation failure (400) | The request does not match the current schema | Read the typed error and validation issue path |
 | A missing Session or conversation | Wrong computer or local state directory | Compare the requested identity with the stack record |

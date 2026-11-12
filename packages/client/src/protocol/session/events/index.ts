@@ -676,8 +676,6 @@ export const encodeSessionEvent = (value: SessionEvent): string => encode(value,
 export const decodeSessionLiveEvent = (value: unknown): SessionLiveEvent => decode(value, sessionLiveEventSchema);
 export const decodeSessionWireEnvelope = (value: unknown): SessionWireEnvelope =>
     decode(value, sessionWireEnvelopeSchema);
-export const encodeSessionWireEnvelope = (value: SessionWireEnvelope): string =>
-    encode(value, sessionWireEnvelopeSchema);
 export const decodeKnownSessionLiveEventBatch = (value: unknown): SessionLiveEventBatch =>
     decode(
         decodedEntries(inputValue(value), sessionLiveEventSchema, SESSION_EVENT_BATCH_MAX_SIZE),

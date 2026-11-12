@@ -104,11 +104,9 @@ export {
     decodeSessionConfigureCommand,
     encodeSessionConfigReadCommand,
     encodeSessionConfigReadResult,
-    encodeSessionConfigUpdatedEvent,
     encodeSessionConfigureCommand,
     SESSION_CONFIG_READ_KIND,
     SESSION_CONFIG_READ_RESULT_KIND,
-    SESSION_CONFIG_UPDATED_KIND,
     SESSION_CONFIGURE_KIND,
 } from "./session/configuration/index.ts";
 
@@ -123,7 +121,6 @@ export {
     encodeSessionRenameCommand,
     encodeSessionRenamedEvent,
     SESSION_RENAME_KIND,
-    SESSION_RENAMED_KIND,
 } from "./session/configuration/title.ts";
 
 export type {
@@ -160,7 +157,6 @@ export {
     decodeSessionLiveEvent,
     encodeSessionEvent,
     encodeSessionEventEnvelope,
-    encodeSessionWireEnvelope,
     isPromptTerminal,
     promptCompletion,
     SESSION_EVENT_BATCH_MAX_SIZE,
@@ -274,10 +270,8 @@ export {
     decodeSessionStatusChangedEvent,
     decodeSessionsListedEvent,
     decodeSessionsQueriedEvent,
-    encodeSessionArchivedEvent,
     encodeSessionCloseCommand,
     encodeSessionClosedEvent,
-    encodeSessionCloseNoticeEvent,
     encodeSessionCreateCommand,
     encodeSessionInfoUpdatedEvent,
     encodeSessionListCommand,

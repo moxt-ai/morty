@@ -1,8 +1,7 @@
 import type { VerifiedComputerAccess } from "../../../../contracts/relay/pairing.ts";
 import { PairingDirectoryError, validateIdentifier } from "../../../../contracts/relay/pairing.ts";
 import type { ComputerIdentityCredential } from "../../../../contracts/relay/pairing-identity.ts";
-import type { ProjectStorageContext } from "../../../../contracts/relay/project-storage-context.ts";
-import type { ComputerManagementStorageDirectory } from "../../../../directory/service/computer-management-storage-directory.ts";
+import type { ComputerManagementService } from "../../../../directory/service/computer-management-service.ts";
 import { DatabaseError } from "../../../../infra/sql-database.ts";
 import type { ComputerRelayStore } from "../storage/computer-relay-store.ts";
 
@@ -18,31 +17,20 @@ function unmatchedCredential(credential: ComputerIdentityCredential): PairingDir
 export class ComputerIdentityService {
     readonly #computerId: string;
     readonly #store: ComputerRelayStore;
-    readonly #projects: Pick<ComputerManagementStorageDirectory, "resolve">;
-    constructor(
-        computerId: string,
-        store: ComputerRelayStore,
-        projects: Pick<ComputerManagementStorageDirectory, "resolve">,
-    ) {
+    readonly #accounts: Pick<ComputerManagementService, "isActive">;
+    constructor(computerId: string, store: ComputerRelayStore, accounts: Pick<ComputerManagementService, "isActive">) {
         this.#computerId = computerId;
         this.#store = store;
-        this.#projects = projects;
+        this.#accounts = accounts;
     }
 
-    readonly authenticateProject = async (
-        credential: ComputerIdentityCredential,
-        signal: AbortSignal,
-    ): Promise<ProjectStorageContext> => {
-        const identity = await this.authenticate(credential, signal);
-        const project = await this.#projects.resolve(identity.computerId, signal);
+    readonly authenticate = async (credential: ComputerIdentityCredential, signal: AbortSignal): Promise<void> => {
+        const identity = await this.#readIdentity(credential, signal);
+        const active = await this.#accounts.isActive(identity.computerId, signal);
         signal.throwIfAborted();
-        if (project === null) {
+        if (!active) {
             throw unmatchedCredential(credential);
         }
-        if (project.computerId !== this.#computerId) {
-            throw new PairingDirectoryError("directory_unavailable", "Workspace storage is unavailable");
-        }
-        return project;
     };
 
     /**
@@ -72,12 +60,12 @@ export class ComputerIdentityService {
                     return rotation satisfies never;
             }
             const computerId = validateIdentifier(rotation.computer.computer_id, "computer_id");
-            const project = await this.#projects.resolve(computerId, signal);
+            const active = await this.#accounts.isActive(computerId, signal);
             signal.throwIfAborted();
-            if (project === null) {
+            if (!active) {
                 throw new PairingDirectoryError("unauthorized", "A valid Computer credential is required");
             }
-            if (computerId !== this.#computerId || project.computerId !== this.#computerId) {
+            if (computerId !== this.#computerId) {
                 throw new PairingDirectoryError("directory_unavailable", "Computer storage is unavailable");
             }
             return {
@@ -98,7 +86,7 @@ export class ComputerIdentityService {
         }
     };
 
-    private readonly authenticate = async (credential: ComputerIdentityCredential, signal: AbortSignal) => {
+    readonly #readIdentity = async (credential: ComputerIdentityCredential, signal: AbortSignal) => {
         signal.throwIfAborted();
         try {
             const rows = await this.#store.findCredential(credential, signal);

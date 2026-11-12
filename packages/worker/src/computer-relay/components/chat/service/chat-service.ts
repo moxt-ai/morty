@@ -3,8 +3,8 @@ import type { NativeSessionTarget, SessionAccessHolder } from "@morty-build/clie
 import { ComputerManagementError } from "../../../../contracts/computer-management.ts";
 import { computerRevoked } from "../../../../contracts/computer-pairing.ts";
 import type { SessionOperationQueue } from "../../../../contracts/session-operation-queue.ts";
+import type { ComputerIdentity } from "../../management/entity/computer-identity.ts";
 import type { LocalComputerService } from "../../management/service/local-computer-service.ts";
-import type { IdentityStorage } from "../../management/storage/identity-storage.ts";
 
 const OPENED_SESSION_CREDENTIAL_SECONDS = 900;
 /** The most Sessions one Session list read returns: the Computer's own bound. */
@@ -26,7 +26,6 @@ function sessionCredentialLifetime(usualSeconds: number, accessExpiresAt: number
 }
 
 export type ChatScope = {
-    readonly userId: string;
     /** When the requesting access ends, if it does; the Session credentials it obtains end no later. */
     readonly accessExpiresAt: number | null;
     /** Whose access the request carries; the Session credentials it obtains last only while that access holds. */
@@ -66,7 +65,7 @@ type AgentSetupInput = {
 async function chatOperationId(scope: ChatScope, key: string): Promise<string> {
     const digest = await crypto.subtle.digest(
         "SHA-256",
-        new TextEncoder().encode(JSON.stringify([scope.computerId, scope.userId, "create", key])),
+        new TextEncoder().encode(JSON.stringify([scope.computerId, "create", key])),
     );
     return `create_${[...new Uint8Array(digest)].map((byte) => byte.toString(16).padStart(2, "0")).join("")}`;
 }
@@ -90,35 +89,35 @@ function notInRecentSessions(): never {
  * holds is the scope's.
  */
 export class ChatService {
-    readonly #identities: IdentityStorage;
+    readonly #computerId: string;
     readonly #relay: LocalComputerService;
     readonly #sessionOperations: SessionOperationQueue;
 
     constructor(cx: {
         readonly sessionOperations: SessionOperationQueue;
         readonly services: { readonly computers: LocalComputerService };
-        readonly storages: { readonly identities: IdentityStorage };
+        readonly identity: ComputerIdentity;
     }) {
-        this.#identities = cx.storages.identities;
+        this.#computerId = cx.identity.computerId;
         this.#relay = cx.services.computers;
         this.#sessionOperations = cx.sessionOperations;
     }
 
     readonly authorize = async (
         requester: {
-            readonly userId: string;
+            readonly computerId: string;
             readonly accessExpiresAt: number | null;
             readonly holder: SessionAccessHolder;
         },
         computerId: string,
         signal: AbortSignal,
     ): Promise<ChatScope> => {
-        const { userId, accessExpiresAt, holder } = requester;
-        const ownsProject = await this.#identities.ownsProject(userId, computerId, signal);
-        if (!ownsProject) {
+        const { accessExpiresAt, holder } = requester;
+        signal.throwIfAborted();
+        if (requester.computerId !== computerId || this.#computerId !== computerId) {
             throw new ComputerManagementError("NOT_FOUND", "Your Morty data was not found.", 404);
         }
-        return { userId, accessExpiresAt, holder, computerId, signal };
+        return { accessExpiresAt, holder, computerId, signal };
     };
 
     readonly computerConfiguration = async (scope: ChatScope) => {
@@ -433,11 +432,8 @@ export class ChatService {
         input: NativePreviewInput,
     ) => {
         await this.#requireNativeSessionComputer(scope, requestedComputerId);
-        // Operation identity belongs to this user and Computer, even when they share a Relay Project.
-        const scopedOperationId = await scopedNativeForkOperationId(
-            scope.computerId,
-            `${scope.userId}\u0000fork\u0000${operationId}`,
-        );
+        // Operation identity belongs to this Computer, regardless of which browser requests it.
+        const scopedOperationId = await scopedNativeForkOperationId(scope.computerId, `fork\u0000${operationId}`);
         return await this.#relay.forkNativeSession(scope.computerId, scopedOperationId, input, scope.signal);
     };
 

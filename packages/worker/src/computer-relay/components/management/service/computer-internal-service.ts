@@ -1,10 +1,8 @@
 import * as v from "valibot";
+import type { ComputerAccounts } from "../../../../contracts/computer-accounts.ts";
 import { ComputerManagementError } from "../../../../contracts/computer-management.ts";
-import {
-    computerAccessRequestSchema,
-    computerAuditRequestSchema,
-    computerRevocationRequestSchema,
-} from "../../../../contracts/computer-relay-http.ts";
+import { computerAccessRequestSchema, computerAuditRequestSchema } from "../../../../contracts/computer-relay-http.ts";
+import { ProjectRowSchema } from "../../../../contracts/relay/relay-records.ts";
 import type { ComputerManagementStore } from "../storage/computer-management-store.ts";
 
 function decode<TSchema extends v.GenericSchema>(schema: TSchema, input: unknown): v.InferOutput<TSchema> {
@@ -21,13 +19,23 @@ function decode<TSchema extends v.GenericSchema>(schema: TSchema, input: unknown
 export class ComputerInternalService {
     readonly #computerId: string;
     readonly #store: ComputerManagementStore;
+    readonly #accounts: ComputerAccounts;
 
-    constructor(computerId: string, store: ComputerManagementStore) {
+    constructor(computerId: string, store: ComputerManagementStore, accounts: ComputerAccounts) {
         this.#computerId = computerId;
         this.#store = store;
+        this.#accounts = accounts;
     }
 
     readonly readActiveGeneration = (signal: AbortSignal) => this.#store.readActiveGeneration(this.#computerId, signal);
+
+    readonly readAccount = (signal: AbortSignal) => this.#accounts.readActiveComputerScope(this.#computerId, signal);
+
+    readonly createAccount = (input: unknown, signal: AbortSignal) => {
+        const project = decode(ProjectRowSchema, input);
+        this.#authorize(project.computer_id);
+        return this.#accounts.createComputerAccount(project, signal);
+    };
 
     readonly holdsAccess = (input: unknown, signal: AbortSignal) =>
         this.#store.holdsAccess(decode(computerAccessRequestSchema, input), signal);
@@ -36,14 +44,6 @@ export class ComputerInternalService {
         const audit = decode(computerAuditRequestSchema, input);
         this.#authorize(audit.computerId);
         await this.#store.recordAudit(audit, signal);
-    };
-
-    readonly listComputers = (signal: AbortSignal) => this.#store.listComputers(signal);
-
-    readonly revokeComputer = async (input: unknown, signal: AbortSignal): Promise<void> => {
-        const revocation = decode(computerRevocationRequestSchema, input);
-        this.#authorize(revocation.computerId);
-        await this.#store.revokeComputer(revocation, signal);
     };
 
     readonly #authorize = (computerId: string): void => {

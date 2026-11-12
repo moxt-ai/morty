@@ -25,17 +25,19 @@ The local execution boundary is the only authority allowed to approve local side
 
 ## Independent product
 
-Morty is one product. The cloud Relay is an internal Morty service. Conversation
-history belongs to the connected Machine and Agent storage; Morty keeps no cloud
+Morty is one product. Relay is an internal responsibility of the Morty Worker,
+not a public developer platform or a separately deployed service. Conversation
+history belongs to the connected Computer and Agent storage; Morty keeps no cloud
 copy. Production and isolated local development are the supported environments.
 Device access, recovery, pairing and service authorization remain enforced at
-their owning boundaries.
+their owning boundaries. Removing an authentication surface never authorizes
+anonymous access to privileged operations.
 
 Morty and Moxt have independent package publication, installation, state,
 credentials, process control and update lifecycles. Verify non-interference with
 a real released Moxt/Mobius installation. Production uses Morty-owned resources
 and credentials. Local development must work without production secrets or remote
-test environments and must never fall back to Moxt services.
+test environments and must never inherit Moxt state or fall back to Moxt services.
 
 Preserve production business records, retained snapshots, Agent-owned history and
 immutable database migrations. Retained historical data does not require an active

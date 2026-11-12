@@ -60,10 +60,9 @@ export class SessionExecutionState {
      * Places the prompt in arrival order. An appended prompt behind an earlier turn that owns an execution enters the
      * queue as it arrives, so the queue and its announcements follow arrival order whatever its preparation awaits.
      */
-    readonly start = (command: SessionPromptCommand, attemptId: string, onQueued: () => void): ActiveRuntimeTurn => {
+    readonly start = (command: SessionPromptCommand, onQueued: () => void): ActiveRuntimeTurn => {
         const turn = new ActiveRuntimeTurn(
             command,
-            attemptId,
             () => this.#operations.hasStarted(command.commandId, this.#sessionTarget),
             () => this.#operations.startedAt(command.commandId, this.#sessionTarget),
             () => this.#executes(this.#sessionTarget, command.commandId),

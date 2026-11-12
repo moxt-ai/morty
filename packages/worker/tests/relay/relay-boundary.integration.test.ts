@@ -7,28 +7,19 @@ import {
     COMPUTER_SUCCESSOR_CREDENTIAL_HEADER,
     computerCredentialSuccessor,
     decodeContentChunkFrame,
-    decodeDaemonToServiceMessage,
     decodeServiceToDaemonMessage,
     decodeSessionAccessCredential,
-    decodeSessionEventEnvelope,
-    decodeSessionPromptCommand,
     encodeContentAvailableEvent,
     encodeContentChunkFrame,
     encodeContentReadyEvent,
     encodeFileBeginEvent,
-    encodeNativeSessionRequest,
     encodeNativeSessionResult,
-    encodeSessionArchivedEvent,
-    encodeSessionClosedEvent,
     encodeSessionConfigReadResult,
-    encodeSessionConfigUpdatedEvent,
-    encodeSessionConfigureCommand,
     encodeSessionEventEnvelope,
     encodeSessionHistoryPageLoaded,
     encodeSessionInfoUpdatedEvent,
     encodeSessionOperationFailedEvent,
     encodeSessionPromptAcceptedEvent,
-    encodeSessionPromptCommand,
     encodeSessionRenamedEvent,
     encodeSessionStatusChangedEvent,
     encodeSessionTurnStoppedEvent,
@@ -38,10 +29,9 @@ import {
 } from "@morty-build/client/protocol";
 import { afterAll, afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { createTestMortyRelayApp } from "../../../relay-test-support/src/app.ts";
-import { requestTestComputerControl, revokeTestComputer } from "../../../relay-test-support/src/backend-fixture.ts";
+import { DurableComputerAccount } from "../../src/computer-relay/components/management/storage/durable-computer-account.ts";
 import { DaemonWebSocketRoutes } from "../../src/computer-relay/components/runtime/daemon-websocket-routes.ts";
 import { createRuntimeContext } from "../../src/computer-relay/components/runtime/runtime-context.ts";
-import { SessionControl } from "../../src/computer-relay/components/runtime/service/session-control.ts";
 import { createRelayDurableObjectContext } from "../../src/computer-relay/composition/relay-durable-object-context.ts";
 import { ComputerRelay as RelayComputerRelay } from "../../src/computer-relay/computer-relay.ts";
 import { DurableObjectDatabase } from "../../src/computer-relay/infra/durable-object-database.ts";
@@ -49,7 +39,7 @@ import { RelayAuthenticationConfiguration } from "../../src/contracts/relay/comp
 import type { RelayBindings } from "../../src/contracts/relay-bindings.ts";
 import { browserOperationHeaders, closeBrowserSocket, requestBrowserOperation } from "./browser-session.ts";
 import { computerBackend, createOwner, issueSession, ownerRequest } from "./owner-fixture.ts";
-import { computerManagementStore } from "./registered-computer.ts";
+import { computerManagementStore, revokeTestComputer } from "./registered-computer.ts";
 
 const nativeTarget = (sessionId: string): NativeSessionTarget => ({ harness: "codex", sessionId });
 
@@ -126,7 +116,6 @@ class DaemonCredential {
 
 function bindings(): RelayBindings {
     return {
-        RELAY_DIRECTORY_DATABASE: env.RELAY_DIRECTORY_DATABASE,
         COMPUTER_RELAY: env.COMPUTER_RELAY,
         MORTY_SESSION_SIGNING_SECRET: env.MORTY_SESSION_SIGNING_SECRET,
     };
@@ -290,7 +279,7 @@ describe.sequential("Relay Session-only boundary", () => {
         expect(await response.json()).toMatchObject({ error: { code: "not_found" } });
     });
 
-    it("Given a linked Codex Computer with required empty installation metadata, When Chat imports, forks, configures and prompts Sessions across Relay hibernation, Then results, answers and connection status arrive without cloud Session storage", async () => {
+    it("Given a linked Computer, When browser subscriptions and history cross Relay hibernation, Then events stay lossless and replies stay correlated without cloud Session storage", async () => {
         vi.setSystemTime(new Date("2030-01-01T00:00:00.000Z"));
         const worker = createTestMortyRelayApp(new RelayAuthenticationConfiguration());
         const environment = bindings();
@@ -338,348 +327,11 @@ describe.sequential("Relay Session-only boundary", () => {
             throw new Error("Expected a daemon socket");
         }
         const daemon = daemonResponse.webSocket;
-        const host = await backend.openHost(new AbortController().signal);
         const daemonMessages = new SocketMessages(daemon);
-        const hostMessages = new SocketMessages(host);
         daemon.accept();
-        host.accept();
         try {
             expect(decodeServiceToDaemonMessage(await daemonMessages.next()).kind).toBe("computer.liveness.ready");
-            expect(JSON.parse(await hostMessages.next())).toMatchObject({ kind: "computer.status", online: true });
-            const closeResponse = requestTestComputerControl(
-                env,
-                computerId,
-                { kind: "session.close", requestId: crypto.randomUUID(), target: nativeTarget("session-to-close") },
-                AbortSignal.timeout(10000),
-            );
-            const closeCommand = decodeServiceToDaemonMessage(await daemonMessages.next());
-            expect(closeCommand).toMatchObject({
-                kind: "session.close",
-                target: nativeTarget("session-to-close"),
-            });
-            if (closeCommand.kind !== "session.close") {
-                throw new Error("Expected a Session close command");
-            }
-            expect(decodeServiceToDaemonMessage(await hostMessages.next())).toMatchObject(closeCommand);
-            daemon.send(
-                encodeSessionClosedEvent({
-                    kind: "session.closed",
-                    requestId: closeCommand.requestId,
-                    target: nativeTarget("session-to-close"),
-                }),
-            );
-            expect(decodeDaemonToServiceMessage(await hostMessages.next())).toMatchObject({
-                kind: "session.closed",
-                requestId: closeCommand.requestId,
-                target: nativeTarget("session-to-close"),
-            });
-            expect(await closeResponse).toEqual({
-                kind: "session.closed",
-                requestId: closeCommand.requestId,
-                target: nativeTarget("session-to-close"),
-            });
-            const archiveResponse = requestTestComputerControl(
-                env,
-                computerId,
-                { kind: "session.archive", requestId: crypto.randomUUID(), target: nativeTarget("session-to-close") },
-                AbortSignal.timeout(10000),
-            );
-            const archiveCommand = decodeServiceToDaemonMessage(await daemonMessages.next());
-            if (archiveCommand.kind !== "session.archive") {
-                throw new Error("Expected a Session archive command");
-            }
-            expect(archiveCommand.target).toEqual(nativeTarget("session-to-close"));
-            expect(decodeServiceToDaemonMessage(await hostMessages.next())).toMatchObject(archiveCommand);
-            const archived = {
-                kind: "session.archived",
-                requestId: archiveCommand.requestId,
-                target: nativeTarget("session-to-close"),
-            } as const;
-            daemon.send(encodeSessionArchivedEvent(archived));
-            expect(decodeDaemonToServiceMessage(await hostMessages.next())).toEqual(archived);
-            expect(await archiveResponse).toEqual(archived);
-            // Native HTTP probes use request-reply connections, while this viewer keeps its live subscription.
-            for (const outcome of ["idle", "busy"] as const) {
-                const activeTurnResponse = new SessionControl(
-                    (command) => requestTestComputerControl(env, computerId, command, AbortSignal.timeout(10000)),
-                    nativeTarget(sessionId),
-                ).activeTurn();
-                const query = decodeServiceToDaemonMessage(await daemonMessages.next());
-                if (query.kind !== "native.session.request" || query.action !== "active-turn") {
-                    throw new Error("Expected the HTTP active Turn query to reach the daemon");
-                }
-                expect(decodeServiceToDaemonMessage(await hostMessages.next())).toMatchObject(query);
-                const reply =
-                    outcome === "idle"
-                        ? encodeNativeSessionResult({
-                              kind: "native.session.result",
-                              action: "active-turn",
-                              requestId: query.requestId,
-                              target: nativeTarget(sessionId),
-                              turn: null,
-                              queued: [],
-                              queuedCancellation: "before-start",
-                              executionPosition: { sessionGenerationId: "session-generation-1", throughPosition: "0" },
-                              interactionState: null,
-                          })
-                        : encodeSessionOperationFailedEvent({
-                              kind: "session.operation.failed",
-                              requestId: query.requestId,
-                              target: nativeTarget(sessionId),
-                              code: "native_session_busy",
-                              message: "Another native session operation is running",
-                          });
-                daemon.send(reply);
-                expect(JSON.parse(await hostMessages.next())).toMatchObject({ requestId: query.requestId });
-                if (outcome === "idle") {
-                    expect(await activeTurnResponse).toMatchObject({ action: "active-turn", turn: null, queued: [] });
-                } else {
-                    await expect(activeTurnResponse).rejects.toMatchObject({ code: "native_session_busy" });
-                }
-            }
-            // A Host can multiplex discovery, but routing must remain bounded and reject overload explicitly.
-            const discoveryRequests = Array.from({ length: 4 }, (_, index) => ({
-                kind: "agent.settings.discover",
-                harness: "a".repeat(128),
-                requestId: `settings-${index}`.padEnd(128, "r"),
-            }));
-            const hostClosed = Promise.withResolvers<{ readonly kind: "host.closed"; readonly code: number }>();
-            host.addEventListener("close", (event) => hostClosed.resolve({ kind: "host.closed", code: event.code }), {
-                once: true,
-            });
-            for (const request of discoveryRequests) {
-                host.send(JSON.stringify(request));
-                expect(decodeServiceToDaemonMessage(await daemonMessages.next())).toMatchObject(request);
-            }
-            host.send(
-                JSON.stringify({
-                    kind: "agent.settings.discover",
-                    harness: "a".repeat(128),
-                    requestId: "settings-overflow",
-                }),
-            );
-            host.send(JSON.stringify({ kind: "computer.ping", requestId: "settings-capacity-barrier" }));
-            expect(decodeServiceToDaemonMessage(await daemonMessages.next())).toMatchObject({
-                kind: "computer.ping",
-                requestId: "settings-capacity-barrier",
-            });
-            expect(
-                await Promise.race([hostMessages.next().then((message) => JSON.parse(message)), hostClosed.promise]),
-            ).toMatchObject({
-                kind: "agent.settings.discovery.failed",
-                requestId: "settings-overflow",
-                code: "agent_settings_discovery_busy",
-            });
-            expect(decodeServiceToDaemonMessage(await hostMessages.next()).kind).toBe("computer.ping");
-            for (const request of discoveryRequests) {
-                daemon.send(
-                    JSON.stringify({
-                        kind: "agent.settings.discovery.failed",
-                        requestId: request.requestId,
-                        code: "probe_failed",
-                        message: "Controlled discovery failure",
-                    }),
-                );
-                expect(JSON.parse(await hostMessages.next())).toMatchObject({
-                    kind: "agent.settings.discovery.failed",
-                    requestId: request.requestId,
-                });
-            }
-            // Native imports and forks share this Computer transport with configuration and live output.
-            const closed = Promise.withResolvers<{ readonly kind: "closed"; readonly code: number }>();
-            daemon.addEventListener("close", (event) => closed.resolve({ kind: "closed", code: event.code }), {
-                once: true,
-            });
-            for (const action of ["import", "fork"] as const) {
-                const requestId = `native-${action}-request`;
-                const directory = action === "fork" ? `root-${"d".repeat(2000)}` : "root";
-                host.send(
-                    encodeNativeSessionRequest({
-                        action,
-                        harness: "codex",
-                        directory,
-                        sessionId: "native-entry",
-                        kind: "native.session.request",
-                        requestId,
-                    }),
-                );
-                expect(decodeServiceToDaemonMessage(await daemonMessages.next()).kind).toBe("native.session.request");
-                expect(decodeServiceToDaemonMessage(await hostMessages.next()).kind).toBe("native.session.request");
-            }
-            host.send(
-                JSON.stringify({
-                    kind: "agent.settings.discover",
-                    harness: "codex",
-                    requestId: "settings-before-wake",
-                }),
-            );
-            expect(decodeServiceToDaemonMessage(await daemonMessages.next())).toMatchObject({
-                kind: "agent.settings.discover",
-                requestId: "settings-before-wake",
-            });
-            host.send(
-                JSON.stringify({
-                    kind: "agent.settings.discover",
-                    harness: "codex",
-                    requestId: "settings-before-wake",
-                }),
-            );
-            host.send(JSON.stringify({ kind: "computer.ping", requestId: "settings-duplicate-barrier" }));
-            expect(decodeServiceToDaemonMessage(await daemonMessages.next())).toMatchObject({
-                kind: "computer.ping",
-                requestId: "settings-duplicate-barrier",
-            });
-            expect(decodeServiceToDaemonMessage(await hostMessages.next()).kind).toBe("computer.ping");
-            await evictDurableObject(environment.COMPUTER_RELAY.getByName(computerId), { webSockets: "hibernate" });
-            for (const action of ["import", "fork"] as const) {
-                const requestId = `native-${action}-request`;
-                const directory = action === "fork" ? `root-${"d".repeat(2000)}` : "root";
-                const sessionTarget = nativeTarget(
-                    action === "import" ? "original-native-session" : "forked-native-session",
-                );
-                const capabilities = readyAgents[0]?.capabilities;
-                if (capabilities === undefined) {
-                    throw new Error("Expected the connected Agent capabilities");
-                }
-                const result = encodeNativeSessionResult({
-                    action,
-                    kind: "native.session.result",
-                    requestId,
-                    target: sessionTarget,
-                    title: "Imported native session",
-                    ready: {
-                        harness: "codex",
-                        agentName: "Codex",
-                        agentVersion: "1.0.0",
-                        capabilities,
-                        commands: [],
-                        configOptions: [],
-                        configurationRevision: "revision-1",
-                        directory: directory,
-                        directoryLabel: "Workspace",
-                        kind: "session.ready",
-                        requestId,
-                        restored: true,
-                        target: sessionTarget,
-                    },
-                });
-                daemon.send(result);
-                const received = await Promise.race([
-                    hostMessages.next().then((message) => decodeDaemonToServiceMessage(message)),
-                    closed.promise,
-                ]);
-                expect(received).toMatchObject({
-                    kind: "native.session.result",
-                    action,
-                    requestId,
-                    target: sessionTarget,
-                });
-                expect(daemon.readyState).toBe(WebSocket.OPEN);
-                // The caller owns operation expiry and duplicate handling.
-                vi.setSystemTime(new Date("2030-01-01T00:06:00.000Z"));
-                daemon.send(result);
-                expect(decodeDaemonToServiceMessage(await hostMessages.next())).toMatchObject({
-                    kind: "native.session.result",
-                    action,
-                    requestId,
-                    target: sessionTarget,
-                });
-                expect(daemon.readyState).toBe(WebSocket.OPEN);
-            }
-            vi.setSystemTime(new Date("2030-01-01T00:00:00.000Z"));
-
-            vi.setSystemTime(new Date("2030-01-01T00:03:00.000Z"));
-            daemon.send(
-                JSON.stringify({
-                    kind: "agent.settings.discovery.failed",
-                    requestId: "settings-before-wake",
-                    code: "probe_failed",
-                    message: "Controlled discovery failure",
-                }),
-            );
-            // Computer and Session lanes can overtake each other. Keep this barrier
-            // on the settings response's Computer lane to detect a dropped route.
-            const settingsBarrier = { kind: "computer.pong", requestId: "settings-response-barrier" };
-            daemon.send(JSON.stringify(settingsBarrier));
-            expect(JSON.parse(await hostMessages.next())).toMatchObject({
-                kind: "agent.settings.discovery.failed",
-                requestId: "settings-before-wake",
-                code: "probe_failed",
-            });
-            expect(JSON.parse(await hostMessages.next())).toEqual(settingsBarrier);
-            vi.setSystemTime(new Date("2030-01-01T00:00:00.000Z"));
-            // Unknown Computer output keeps its explicit Session route and payload.
-            daemon.send(
-                JSON.stringify({ kind: "session.future.changed", target: nativeTarget(sessionId), value: "future" }),
-            );
-            expect(JSON.parse(await hostMessages.next())).toEqual({
-                kind: "session.future.changed",
-                target: nativeTarget(sessionId),
-                value: "future",
-            });
-            // Unknown client commands still cannot bypass Relay authorization.
-            host.send(
-                JSON.stringify({ kind: "session.future.request", target: nativeTarget(sessionId), value: "future" }),
-            );
-            host.send(
-                encodeSessionConfigureCommand({
-                    booleanValue: false,
-                    configId: "model",
-                    expectedConfigurationRevision: "configuration-revision",
-                    kind: "session.configure",
-                    requestId: "local-config-request",
-                    target: nativeTarget(sessionId),
-                    value: "model-deepseek-v4.1-flash",
-                    valueType: "select",
-                }),
-            );
-            expect(decodeServiceToDaemonMessage(await daemonMessages.next()).kind).toBe("session.configure");
-            expect(decodeServiceToDaemonMessage(await hostMessages.next()).kind).toBe("session.configure");
-            daemon.send(
-                encodeSessionConfigUpdatedEvent({
-                    configOptions: [],
-                    configurationRevision: "revision-1",
-                    kind: "session.config.updated",
-                    requestId: "local-config-request",
-                    target: nativeTarget(sessionId),
-                }),
-            );
-            expect(decodeDaemonToServiceMessage(await hostMessages.next())).toEqual({
-                configOptions: [],
-                configurationRevision: "revision-1",
-                kind: "session.config.updated",
-                requestId: "local-config-request",
-                target: nativeTarget(sessionId),
-            });
-            host.send(
-                encodeSessionPromptCommand({
-                    commandId: "local-codex-command",
-                    disposition: "append",
-                    attachments: [],
-                    kind: "session.prompt",
-                    prompt: "show the local answer",
-                    target: nativeTarget(sessionId),
-                }),
-            );
-            const prompt = decodeServiceToDaemonMessage(await daemonMessages.next());
-            expect(prompt.kind).toBe("session.prompt");
-            if (prompt.kind !== "session.prompt") {
-                throw new Error("Expected the prompt to reach the local Computer");
-            }
-            expect(decodeSessionPromptCommand(JSON.stringify(prompt)).prompt).toBe("show the local answer");
             const answer = liveEvent(nativeTarget(sessionId), "local answer");
-            daemon.send(answer);
-            const received = decodeSessionEventEnvelope(await hostMessages.next());
-            expect(JSON.stringify(received.events.map((event) => event.payload))).toContain("local answer");
-            expect(received).not.toHaveProperty("cursor");
-            expect(received).not.toHaveProperty("sequence");
-            // Relay broadcasts the original V2 identity unchanged, including duplicate frames.
-            daemon.send(answer);
-            expect(
-                JSON.stringify(
-                    decodeSessionEventEnvelope(await hostMessages.next()).events.map((event) => event.payload),
-                ),
-            ).toContain("local answer");
 
             const browserAccess = await issueSession(computerId, nativeTarget(sessionId));
             const v2Response = await worker.fetch(
@@ -730,7 +382,6 @@ describe.sequential("Relay Session-only boundary", () => {
             };
             const secondRawEvent = { ...rawEvent, eventId: "event-v2-2", position: "2" };
             daemon.send(encodeSessionEventEnvelope({ events: [rawEvent, secondRawEvent], kind: "session.event.v2" }));
-            expect(JSON.parse(await hostMessages.next())).toMatchObject({ kind: "session.event.v2" });
             expect(JSON.parse(text(record(JSON.parse(await v2Messages.next())), "data"))).toEqual([
                 rawEvent,
                 secondRawEvent,
@@ -746,7 +397,6 @@ describe.sequential("Relay Session-only boundary", () => {
                 },
             };
             daemon.send(JSON.stringify({ kind: "session.event.v2", events: [futureEvent] }));
-            expect(JSON.parse(await hostMessages.next())).toEqual({ kind: "session.event.v2", events: [futureEvent] });
             expect(JSON.parse(text(record(JSON.parse(await v2Messages.next())), "data"))).toEqual([futureEvent]);
             const historyResponse = requestBrowserOperation(
                 (request) => worker.fetch(request, environment),
@@ -767,11 +417,6 @@ describe.sequential("Relay Session-only boundary", () => {
                     status: { commandId: "command-1", kind: "working" },
                 }),
             );
-            expect(decodeDaemonToServiceMessage(await hostMessages.next())).toEqual({
-                kind: "session.status.changed",
-                target: nativeTarget(sessionId),
-                status: { commandId: "command-1", kind: "working" },
-            });
             daemon.send(
                 encodeSessionInfoUpdatedEvent({
                     kind: "session.info.updated",
@@ -780,13 +425,6 @@ describe.sequential("Relay Session-only boundary", () => {
                     updatedAt: "2026-09-18T00:01:00.000Z",
                 }),
             );
-            expect(decodeDaemonToServiceMessage(await hostMessages.next())).toEqual({
-                kind: "session.info.updated",
-                computerId,
-                target: nativeTarget(sessionId),
-                title: "Renamed session",
-                updatedAt: "2026-09-18T00:01:00.000Z",
-            });
             const historyPage = JSON.stringify({
                 events: {
                     events: {
@@ -841,11 +479,6 @@ describe.sequential("Relay Session-only boundary", () => {
                     target: nativeTarget(sessionId),
                 }),
             );
-            expect(decodeDaemonToServiceMessage(await hostMessages.next())).toMatchObject({
-                code: "session_closed",
-                kind: "session.operation.failed",
-                requestId: closedHistoryLoad.requestId,
-            });
             expect(await responseJson(await closedHistoryResponse, 409)).toEqual({
                 error: { code: "session_closed", message: "The Session is closed" },
             });
@@ -916,11 +549,6 @@ describe.sequential("Relay Session-only boundary", () => {
                 status: 400,
             });
             daemon.send(answer);
-            expect(
-                JSON.stringify(
-                    decodeSessionEventEnvelope(await hostMessages.next()).events.map((event) => event.payload),
-                ),
-            ).toContain("local answer");
             expect(JSON.parse(await transportMessages.next())).toMatchObject({
                 data: expect.stringContaining("local answer"),
                 eventId: "",
@@ -937,69 +565,6 @@ describe.sequential("Relay Session-only boundary", () => {
             otherBrowser.send('{"kind":"ping"}');
             expect(await otherMessages.next()).toBe('{"kind":"pong"}');
             await closeBrowserSocket(otherBrowser, new AbortController().signal);
-            host.send(
-                JSON.stringify({
-                    kind: "agent.settings.discover",
-                    harness: "codex",
-                    requestId: "settings-before-disconnect",
-                }),
-            );
-            expect(decodeServiceToDaemonMessage(await daemonMessages.next())).toMatchObject({
-                kind: "agent.settings.discover",
-                requestId: "settings-before-disconnect",
-            });
-            await evictDurableObject(environment.COMPUTER_RELAY.getByName(computerId), { webSockets: "hibernate" });
-            daemon.close(1000, "Reconnect Computer");
-            expect(JSON.parse(await hostMessages.next())).toMatchObject({
-                kind: "agent.settings.discovery.failed",
-                requestId: "settings-before-disconnect",
-                code: "computer_offline",
-            });
-            expect(JSON.parse(await hostMessages.next())).toMatchObject({ kind: "computer.status", online: false });
-            const reconnectResponse = await daemonCredential.connect((request) => worker.fetch(request, environment));
-            expect(reconnectResponse.status).toBe(101);
-            if (reconnectResponse.webSocket === null) {
-                throw new Error("Expected the reconnected Computer socket");
-            }
-            const reconnected = reconnectResponse.webSocket;
-            const reconnectMessages = new SocketMessages(reconnected);
-            reconnected.accept();
-            expect(decodeServiceToDaemonMessage(await reconnectMessages.next()).kind).toBe("computer.liveness.ready");
-            expect(JSON.parse(await hostMessages.next())).toMatchObject({ kind: "computer.status", online: true });
-            host.send(
-                JSON.stringify({
-                    kind: "agent.settings.discover",
-                    harness: "codex",
-                    requestId: "settings-before-replacement",
-                }),
-            );
-            expect(decodeServiceToDaemonMessage(await reconnectMessages.next())).toMatchObject({
-                kind: "agent.settings.discover",
-                requestId: "settings-before-replacement",
-            });
-            await evictDurableObject(environment.COMPUTER_RELAY.getByName(computerId), { webSockets: "hibernate" });
-            const replacementResponse = await daemonCredential.connect((request) => worker.fetch(request, environment));
-            expect(replacementResponse.status).toBe(101);
-            if (replacementResponse.webSocket === null) {
-                throw new Error("Expected the replacement Computer socket");
-            }
-            const replacement = replacementResponse.webSocket;
-            const replacementMessages = new SocketMessages(replacement);
-            replacement.accept();
-            try {
-                expect(decodeServiceToDaemonMessage(await replacementMessages.next()).kind).toBe(
-                    "computer.liveness.ready",
-                );
-                expect(JSON.parse(await hostMessages.next())).toMatchObject({
-                    kind: "agent.settings.discovery.failed",
-                    requestId: "settings-before-replacement",
-                    code: "computer_offline",
-                });
-                expect(JSON.parse(await hostMessages.next())).toMatchObject({ kind: "computer.status", online: true });
-            } finally {
-                replacement.close(1000, "Test complete");
-            }
-            expect(JSON.parse(await hostMessages.next())).toMatchObject({ kind: "computer.status", online: false });
             await runInDurableObject(environment.COMPUTER_RELAY.getByName(computerId), async (_instance, state) => {
                 const sessionTables = [
                     ...state.storage.sql.exec<{ name: string }>(
@@ -1010,7 +575,6 @@ describe.sequential("Relay Session-only boundary", () => {
             });
         } finally {
             daemon.close(1000, "Test complete");
-            host.close(1000, "Test complete");
         }
     }, 180_000);
 
@@ -1380,7 +944,8 @@ it.each(["text", "binary"])(
             runInDurableObject(env.COMPUTER_RELAY.getByName(runtime.computerId), async (_instance, state) => {
                 const pending: Promise<void>[] = [];
                 const database = new DurableObjectDatabase(state.storage);
-                const context = createRelayDurableObjectContext(state, bindings(), {
+                const context = createRelayDurableObjectContext(state, {
+                    accounts: new DurableComputerAccount(state.storage),
                     database,
                     storeFor: (computerId) => computerManagementStore(computerId, state.storage),
                 });

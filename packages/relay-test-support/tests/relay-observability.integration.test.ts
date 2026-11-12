@@ -1,7 +1,6 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname } from "node:path";
 import { fileURLToPath } from "node:url";
-import { readD1Migrations } from "@cloudflare/vitest-plugin";
 import {
     COMPUTER_HEARTBEAT_ACK_MESSAGE,
     COMPUTER_HEARTBEAT_MESSAGE,
@@ -46,7 +45,6 @@ beforeAll(async () => {
                 COMPUTER_RELAY: { className: "ComputerRelay", useSQLite: true },
                 UNAVAILABLE_COMPUTER: { className: "UnavailableComputer", useSQLite: true },
             },
-            d1Databases: ["RELAY_DIRECTORY_DATABASE"],
             compatibilityFlags: ["nodejs_compat"],
             ratelimits: { ANONYMOUS_CREATION_LIMITER: { namespace_id: "103001", simple: { limit: 1000, period: 60 } } },
             bindings: {
@@ -63,13 +61,6 @@ beforeAll(async () => {
         }),
     );
     await runtime.ready;
-    const bindings = await runtime.getBindings<{ RELAY_DIRECTORY_DATABASE: D1Database }>();
-    const directory = fileURLToPath(new URL("../../worker/migrations/d1", import.meta.url));
-    for (const migration of await readD1Migrations(directory)) {
-        await bindings.RELAY_DIRECTORY_DATABASE.batch(
-            migration.queries.map((sql) => bindings.RELAY_DIRECTORY_DATABASE.prepare(sql)),
-        );
-    }
 });
 
 afterAll(async () => {
@@ -115,7 +106,7 @@ async function api(
 
 async function provisionComputer() {
     const owner = await api(
-        "/identity/anonymous-users",
+        "/computers",
         {
             method: "POST",
             body: JSON.stringify({
@@ -124,7 +115,7 @@ async function provisionComputer() {
         },
         201,
     );
-    return { computerId: text(owner, "computerId"), appCredential: text(owner, "token") };
+    return { computerId: text(owner, "computerId"), appCredential: text(owner, "computerToken") };
 }
 
 async function pairComputer() {
@@ -154,13 +145,35 @@ async function pairComputer() {
     return { computerId, pairing, claimed };
 }
 
-let loggingComputer: Promise<{ readonly computerId: string }> | undefined;
+let loggingComputer:
+    | Promise<{
+          readonly computerId: string;
+          readonly connect: () => ReturnType<Miniflare["dispatchFetch"]>;
+      }>
+    | undefined;
 
-/** Internal Computer Relay scenarios enter after public pairing registered the computer. */
+/** Logging scenarios connect through the same pairing and credential rotation boundary as the Runtime. */
 function registeredLoggingComputer() {
-    loggingComputer ??= pairComputer().then(({ computerId }) => ({
-        computerId,
-    }));
+    loggingComputer ??= pairComputer().then(({ computerId, claimed }) => {
+        let credential = text(claimed, "computerCredential");
+        return {
+            computerId,
+            connect: async () => {
+                const successor = computerCredentialSuccessor(credential);
+                const response = await runtime.dispatchFetch("https://relay.test/morty/api/v1/computers/connect", {
+                    headers: {
+                        Upgrade: "websocket",
+                        authorization: `Bearer ${credential}`,
+                        [COMPUTER_SUCCESSOR_CREDENTIAL_HEADER]: successor,
+                    },
+                });
+                if (response.status === 101) {
+                    credential = successor;
+                }
+                return response;
+            },
+        };
+    });
     return loggingComputer;
 }
 
@@ -295,52 +308,10 @@ it("identifies a Computer Relay overload through the public HTTP API", async () 
     );
 });
 
-// @no-uc: Performance; short-lived Host/control sockets must not add routine lifecycle logs.
-it("keeps ordinary Host closes quiet after the real relay close callback completes", async () => {
-    const { computerId } = await registeredLoggingComputer();
-    const response = await runtime.dispatchFetch(`https://relay.test/computers/${computerId}/host`, {
-        headers: {
-            Upgrade: "websocket",
-            "x-morty-computer-id": computerId,
-            "x-morty-host-credential-id": "ctl_HOST_CREDENTIAL_CANARY",
-        },
-    });
-    expect(response.status).toBe(101);
-    const socket = response.webSocket;
-    if (socket === null) {
-        throw new Error("Expected a Host WebSocket");
-    }
-    const status = new Promise((resolve) =>
-        socket.addEventListener("message", (event) => resolve(event.data), { once: true }),
-    );
-    socket.accept();
-    try {
-        expect(JSON.parse(String(await status))).toMatchObject({ kind: "computer.status" });
-        const start = logs.length;
-        socket.close(1000, "Control request complete");
-        await expect
-            .poll(() => logs.slice(start).find((log) => log["event"] === "test_websocket_close_completed"))
-            .toBeDefined();
-        expect(logs.slice(start).filter((log) => String(log["event"]).startsWith("computer_websocket_"))).toHaveLength(
-            0,
-        );
-        expect(JSON.stringify(logs.slice(start))).not.toContain("HOST_CREDENTIAL_CANARY");
-    } finally {
-        if (socket.readyState === 1) {
-            socket.close(1000, "Test cleanup");
-        }
-    }
-});
-
 async function daemon() {
-    const { computerId } = await registeredLoggingComputer();
+    const { connect } = await registeredLoggingComputer();
     const start = logs.length;
-    const response = await runtime.dispatchFetch(`https://relay.test/computers/${computerId}/daemon`, {
-        headers: {
-            Upgrade: "websocket",
-            "x-morty-computer-id": computerId,
-        },
-    });
+    const response = await connect();
     expect(response.status).toBe(101);
     const socket = response.webSocket;
     if (socket === null) {

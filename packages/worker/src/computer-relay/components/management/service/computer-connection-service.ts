@@ -50,7 +50,7 @@ export class ComputerConnectionService {
             },
             "A retired Computer credential was presented; the Computer was revoked",
         );
-        await this.#runtime.revokeComputer(rotation.access, signal);
+        await this.#runtime.revokeComputer(rotation.access.computerId, signal);
         return { kind: "revoked" };
     };
 }

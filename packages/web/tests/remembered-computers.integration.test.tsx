@@ -47,14 +47,12 @@ test("Given two remembered computers, When I return and then switch, Then the la
     const firstSession = await startConversation(first, "Work on computer A");
     const firstScope = encodeIdentityScope({
         computerId: first.identity.computerId,
-        userId: first.userId,
     });
     await first.close();
     const second = await createTestApp({ connectAgent: true });
     const secondSession = await startConversation(second, "Work on computer B");
     const secondScope = encodeIdentityScope({
         computerId: second.identity.computerId,
-        userId: second.userId,
     });
     window.location.href = `${second.origin}/chat`;
     const returned = await second.reload();
@@ -578,7 +576,6 @@ test("Given a computer I keep using, When ten more computers are saved in this b
         const shared = await createTestApp({ page: { kind: "share" } });
         const scope = encodeIdentityScope({
             computerId: shared.identity.computerId,
-            userId: shared.userId,
         });
         await shared.waitForView(() => expect(new URL(window.location.href).searchParams.get("identity")).toBe(scope));
         // The redeemed link replaces the page, which then opens that computer and asks to connect its agent.
@@ -626,7 +623,6 @@ test("Given a computer whose remembered conversation was closed elsewhere, When 
     const closedSession = await startConversation(first, "Closed on another device");
     const firstScope = encodeIdentityScope({
         computerId: first.identity.computerId,
-        userId: first.userId,
     });
     const signal = AbortSignal.timeout(10_000);
     const archived = await first.transport.fetch(
@@ -692,7 +688,6 @@ test("Given a switch to a computer whose remembered conversation is gone, When o
     );
     const firstScope = encodeIdentityScope({
         computerId: first.identity.computerId,
-        userId: first.userId,
     });
     const firstLink = await second.waitForView(() => {
         const item = getAllByRole(document.body, "menuitemradio").find(

@@ -22,6 +22,8 @@ the particular breaking change. Follow the engineering rules and
 [CODE_REVIEW.md](CODE_REVIEW.md). For a changed external contract, include the
 affected peers, both mixed-version verification results, and rollout/recovery
 consequences in the PR; cite the explicit instruction for any intentional break.
+An explicitly authorized Morty contract change does not authorize changes to
+Moxt or deletion of Agent-owned data.
 
 - Write issue titles and descriptions in English.
 - Write pull request titles and descriptions in English.

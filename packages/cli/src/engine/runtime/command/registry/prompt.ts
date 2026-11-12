@@ -104,7 +104,7 @@ export const sessionPromptCommand: RuntimeCommand = {
             });
         };
         // A prompt behind a running turn enters the queue as it arrives, so the queue follows arrival order.
-        const turn = context.sessionTurns.start(message, receipt.attemptId, () => {
+        const turn = context.sessionTurns.start(message, () => {
             queueChanged();
             accepted("queued");
         });

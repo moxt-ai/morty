@@ -8,14 +8,6 @@
         "MORTY_ALLOWED_ORIGINS": "[\"*\"]",
         "MORTY_SESSION_SIGNING_SECRET": "local-development-only-session-signing-secret"
     },
-    "d1_databases": [
-        {
-            "binding": "RELAY_DIRECTORY_DATABASE",
-            "database_name": "morty-local-e2e-directory",
-            "database_id": "00000000-0000-0000-0000-000000000102",
-            "migrations_dir": "../../worker/migrations/d1"
-        }
-    ],
     "ratelimits": [
         { "name": "ANONYMOUS_CREATION_LIMITER", "namespace_id": "103004", "simple": { "limit": 1000, "period": 60 } }
     ],
