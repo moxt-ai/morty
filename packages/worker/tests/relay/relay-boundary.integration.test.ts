@@ -262,7 +262,7 @@ describe.sequential("Relay Session-only boundary", () => {
         expect(response.headers.get("access-control-allow-headers")).not.toContain("x-morty-oidc-provider");
     });
 
-    it("Given a Session route the Relay no longer serves, When an app requests pending interactions, Then the Relay answers with a typed JSON not_found error", async () => {
+    it("Given an unregistered Session HTTP route, When an app requests pending interactions, Then the Worker answers with its standard JSON NOT_FOUND error", async () => {
         const worker = createTestMortyRelayApp(new RelayAuthenticationConfiguration());
         const computerId = "prj_ap_01_abcdefghijklmnopqrstuvwx";
 
@@ -276,7 +276,7 @@ describe.sequential("Relay Session-only boundary", () => {
 
         expect(response.status).toBe(404);
         expect(response.headers.get("content-type")).toContain("application/json");
-        expect(await response.json()).toMatchObject({ error: { code: "not_found" } });
+        expect(await response.json()).toMatchObject({ error: { code: "NOT_FOUND" } });
     });
 
     it("Given a linked Computer, When browser subscriptions and history cross Relay hibernation, Then events stay lossless and replies stay correlated without cloud Session storage", async () => {

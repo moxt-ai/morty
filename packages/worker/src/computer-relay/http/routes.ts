@@ -4,7 +4,6 @@ import { Hono, type MiddlewareHandler } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import * as v from "valibot";
 import { COMPUTER_INTERNAL_PREFIX } from "../../contracts/computer-relay-http.ts";
-import { ManagementError } from "../../contracts/management-error.ts";
 import { validateIdentifier } from "../../contracts/relay/pairing.ts";
 import { readJsonBody } from "../../http/body-parser.ts";
 import { computerFromPath, computerFromRuntimeCredential } from "../../http/computer-target.ts";
@@ -195,12 +194,8 @@ function createApplicationRoutes(ctx: ComputerRouteContext) {
         context.set("application", await ctx.services.browser.forComputer(computerId, ctx.bindings, deadline.signal));
         await next();
     };
-    const timeout = requestTimeoutMiddleware<ManagementHttpEnvironment>(30_000);
     return new Hono<ManagementHttpEnvironment>()
         .onError(errorHandler<ManagementHttpEnvironment>(() => logger))
-        .post("/morty/api/computers/:computerId/identity/transfers/redeem", timeout, () => {
-            throw new ManagementError("NOT_FOUND", "Not found.", 404);
-        })
         .route("/morty/api/chat/computers/:computerId", createChatApplication(initialize))
         .route("/morty/api/computers/:computerId", createManagementApplication(initialize))
         .route("/morty/api", createTransferRedemptionRoutes(initialize));
