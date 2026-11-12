@@ -104,6 +104,52 @@ test("Given Morty access from a finished setup, When the user reopens Morty in a
     expect(window.sessionStorage.getItem("morty.anonymous-credential.v2")).toBeNull();
 });
 
+test("Given a stored identity, When the user shares access with an AI agent, Then copyable instructions name the agent API document and a link the agent can redeem as documented", {
+    timeout: 30_000,
+}, async () => {
+    const app = await createTestApp({ connectAgent: true, page: { kind: "bootstrap", identity: true } });
+    await app.user.click(await app.queryElementByTestId(dataTestId.shareIdentity));
+    const dialog = getByRole(document.body, "dialog", { name: "Continue on another device" });
+    await app.waitForView(() => getByRole(dialog, "button", { name: "Copy link" }));
+    await app.user.click(getByRole(dialog, "combobox", { name: "Share with" }));
+    await app.user.click(getByRole(document.body, "option", { name: "An AI agent" }));
+
+    const handoff = await app.queryElementByTestId(dataTestId.agentHandoff);
+    expect(queryByRole(dialog, "img", { name: "Continue on another device QR code" })).toBeNull();
+    expect(handoff.textContent).toContain("Works for one device until");
+    await app.user.click(getByRole(handoff, "button", { name: "Copy instructions" }));
+    const instructions = await navigator.clipboard.readText();
+    expect(instructions).toContain(`${app.origin}/agent-api.md`);
+    const link = instructions.split("\n").find((line) => line.startsWith(`${app.origin}/continue`));
+    if (link === undefined) {
+        throw new Error("The agent instructions must contain the continue link.");
+    }
+
+    const guide = await app.transport.fetch(new Request(new URL("/agent-api.md", app.origin)));
+    expect(guide.status).toBe(200);
+    expect(await guide.text()).toContain(`${app.origin}/agent-api/openapi.json`);
+    const redeemed = await app.transport.fetch(
+        new Request(new URL("/morty/api/identity/transfers/redeem", app.origin), {
+            method: "POST",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+                code: new URLSearchParams(new URL(link).hash.slice(1)).get("code"),
+                redemptionKey: "A".repeat(43),
+                device: "Test agent",
+            }),
+            signal: AbortSignal.timeout(15_000),
+        }),
+    );
+    expect(redeemed.status).toBe(200);
+    expect(await redeemed.json()).toEqual({ computerToken: expect.any(String), computerId: expect.any(String) });
+
+    // Switching back shows the same link to a person; choosing a recipient never issues another link.
+    await app.user.click(getByRole(dialog, "combobox", { name: "Share with" }));
+    await app.user.click(getByRole(document.body, "option", { name: "A person" }));
+    await app.user.click(await app.waitForView(() => getByRole(dialog, "button", { name: "Copy link" })));
+    expect(await navigator.clipboard.readText()).toBe(link);
+});
+
 test("Given shared Morty access, When the user continues on another device, Then the visible entry opens sharing with its scope and expiry before the link", {
     timeout: 30_000,
 }, async () => {

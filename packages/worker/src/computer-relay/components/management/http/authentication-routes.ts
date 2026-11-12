@@ -1,6 +1,8 @@
 import { Hono, type MiddlewareHandler } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import * as v from "valibot";
+import { transferRedemptionInput } from "../../../../contracts/agent-api/identity-requests.ts";
+import { documented, identityResponse } from "../../../../contracts/agent-api/responses.ts";
 import {
     credentialRevocationPaths,
     defaultDeviceAccessDuration,
@@ -27,18 +29,6 @@ const shareInput = v.pipe(
         accessDuration: v.optional(v.picklist(deviceAccessDurations)),
         /** A link this access shared that no one opened yet; it stops working once the new one is issued. */
         replaces: v.optional(v.pipe(v.string(), v.maxLength(512))),
-    }),
-    v.readonly(),
-);
-const transferInput = v.pipe(
-    v.object({
-        code: v.string(),
-        /** The credential this browser already holds for the link's Project, which the new one replaces. */
-        replaces: v.optional(v.pipe(v.string(), v.maxLength(512))),
-        /** How the browser describes itself, such as "iPhone · Safari"; shown to the owner's other devices. */
-        device: v.optional(v.pipe(v.string(), v.trim(), v.regex(/^[^\p{C}]{1,80}$/u))),
-        /** A browser-held secret naming this redemption, so repeating it after a lost reply returns the same access. */
-        redemptionKey: v.optional(v.pipe(v.string(), v.regex(/^[A-Za-z0-9_-]{43}$/u))),
     }),
     v.readonly(),
 );
@@ -288,7 +278,7 @@ export function createTransferRedemptionRoutes(initialize: MiddlewareHandler<Man
         bodyLimit({ maxSize: 3 * 1_024 * 1_024 }),
         initialize,
         requestHeaders,
-        bodyParser<ManagementHttpEnvironment, typeof transferInput>(transferInput),
+        bodyParser<ManagementHttpEnvironment, typeof transferRedemptionInput>(transferRedemptionInput),
         async (context) => {
             const input = context.req.valid("json");
             const identity = await context.var.application.services.management.redeemTransfer(
@@ -308,7 +298,7 @@ export function createTransferRedemptionRoutes(initialize: MiddlewareHandler<Man
                     410,
                 );
             }
-            return json(identity);
+            return json(documented(identityResponse, identity));
         },
     );
 }

@@ -3,6 +3,7 @@ import { computerRequestTarget } from "@morty-build/client/relay";
 import { Hono, type MiddlewareHandler } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import * as v from "valibot";
+import { decodeSessionRequest } from "../../contracts/agent-api/session-requests.ts";
 import { COMPUTER_INTERNAL_PREFIX } from "../../contracts/computer-relay-http.ts";
 import { validateIdentifier } from "../../contracts/relay/pairing.ts";
 import { readJsonBody } from "../../http/body-parser.ts";
@@ -20,7 +21,6 @@ import type { ManagementHttpEnvironment } from "../components/management/http/ma
 import { createRelayProtocolRoutes } from "../components/management/http/protocol-routes.ts";
 import { sessionAccessTargetMiddleware } from "../components/runtime/http/session-access-target.ts";
 import { authorizeSessionContentUpload } from "../components/runtime/http/session-content-upload.ts";
-import { decodeSessionRequest } from "../components/runtime/http/session-requests.ts";
 import { acceptWebSocketHttpTransport } from "../components/runtime/http/websocket-http-transport.ts";
 import { createBrowserWebSocketRoutes } from "../components/runtime/websocket/browser-websocket-routes.ts";
 import { logger } from "../composition/application-context.ts";

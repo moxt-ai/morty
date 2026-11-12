@@ -1,7 +1,21 @@
-import { isDirectoryPath, type SessionAccessHolder } from "@morty-build/client/protocol";
+import type { SessionAccessHolder } from "@morty-build/client/protocol";
 import { type Context, Hono } from "hono";
 import { createMiddleware } from "hono/factory";
 import * as v from "valibot";
+import {
+    accessInput,
+    nativeContinuationInput,
+    nativeDirectory,
+    nativeSessionTargetInput,
+} from "../../../../contracts/agent-api/chat-requests.ts";
+import {
+    chatAccessResponse,
+    documented,
+    managedSessionsResponse,
+    nativeContinuationResponse,
+    sessionAccessResponse,
+    workspaceResponse,
+} from "../../../../contracts/agent-api/responses.ts";
 import type { Session } from "../../../../contracts/authentication/session.ts";
 import { relayIdentifier } from "../../../../contracts/computer-management.ts";
 import { bodyParser } from "../../../../http/body-parser.ts";
@@ -15,7 +29,6 @@ const setupInput = v.strictObject({
     computerId: relayIdentifier,
     harness: relayIdentifier,
 });
-const nativeDirectory = v.custom<string>(isDirectoryPath);
 const nativeIdentity = {
     computerId: relayIdentifier,
     harness: relayIdentifier,
@@ -29,35 +42,10 @@ const nativeListInput = v.strictObject({
 const nativeEntryInput = v.strictObject({ ...nativeIdentity });
 const nativePreviewInput = v.strictObject({ ...nativeIdentity, sessionId: relayIdentifier });
 const directoryInput = v.strictObject({ directory: nativeDirectory });
-const nativeContinuationInput = v.strictObject({ harness: relayIdentifier, sessionId: relayIdentifier });
-const sessionConfiguration = v.strictObject({
-    booleanValue: v.boolean(),
-    configId: relayIdentifier,
-    value: v.pipe(v.string(), v.maxLength(500)),
-    valueType: v.picklist(["select", "boolean"]),
-});
-const sessionConfigurations = v.pipe(
-    v.array(sessionConfiguration),
-    v.maxLength(100),
-    v.check(
-        (selections) => new Set(selections.map((selection) => selection.configId)).size === selections.length,
-        "Session configuration identifiers must be unique.",
-    ),
-);
 const agentSettingsInput = v.strictObject({
     harness: relayIdentifier,
     workspaceRef: nativeDirectory,
 });
-const nativeSessionTargetInput = v.strictObject({ harness: relayIdentifier, sessionId: relayIdentifier });
-const accessInput = v.union([
-    nativeSessionTargetInput,
-    v.strictObject({
-        harness: relayIdentifier,
-        conversationKey: relayIdentifier,
-        configurations: sessionConfigurations,
-        workspaceRef: nativeDirectory,
-    }),
-]);
 
 type AuthorizedChatEnvironment = ChatHttpEnvironment & {
     readonly Variables: ChatHttpEnvironment["Variables"] & {
@@ -116,7 +104,10 @@ export function createBotChatRoutes() {
     return new Hono<AuthorizedChatEnvironment>()
         .post("/workspace", authenticatedSession, authorizedChat(), async (context) => {
             return privateJson(
-                await context.var.application.services.chat.computerConfiguration(context.get("chatScope")),
+                documented(
+                    workspaceResponse,
+                    await context.var.application.services.chat.computerConfiguration(context.get("chatScope")),
+                ),
             );
         })
         .post("/daemon-diagnostics", authenticatedSession, authorizedChat(), async (context) => {
@@ -142,7 +133,12 @@ export function createBotChatRoutes() {
                 ),
         )
         .post("/managed-sessions", authenticatedSession, authorizedChat(), async (context) => {
-            return privateJson(await context.var.application.services.chat.managedSessions(context.get("chatScope")));
+            return privateJson(
+                documented(
+                    managedSessionsResponse,
+                    await context.var.application.services.chat.managedSessions(context.get("chatScope")),
+                ),
+            );
         })
         .post(
             "/agent-settings",
@@ -165,9 +161,12 @@ export function createBotChatRoutes() {
             bodyParser<AuthorizedChatEnvironment, typeof accessInput>(accessInput),
             async (context) => {
                 return privateJson(
-                    await context.var.application.services.chat.openChat(
-                        context.get("chatScope"),
-                        context.req.valid("json"),
+                    documented(
+                        chatAccessResponse,
+                        await context.var.application.services.chat.openChat(
+                            context.get("chatScope"),
+                            context.req.valid("json"),
+                        ),
                     ),
                 );
             },
@@ -181,7 +180,13 @@ export function createBotChatRoutes() {
             async (context) => {
                 const input = context.req.valid("json");
                 return privateJson(
-                    await context.var.application.services.chat.nativeSessionAccess(context.get("chatScope"), input),
+                    documented(
+                        sessionAccessResponse,
+                        await context.var.application.services.chat.nativeSessionAccess(
+                            context.get("chatScope"),
+                            input,
+                        ),
+                    ),
                 );
             },
         )
@@ -233,10 +238,13 @@ export function createBotChatRoutes() {
             async (context) => {
                 const input = context.req.valid("json");
                 return privateJson(
-                    await context.var.application.services.chat.continueNativeSession(
-                        context.get("chatScope"),
-                        input.harness,
-                        input.sessionId,
+                    documented(
+                        nativeContinuationResponse,
+                        await context.var.application.services.chat.continueNativeSession(
+                            context.get("chatScope"),
+                            input.harness,
+                            input.sessionId,
+                        ),
                     ),
                 );
             },
