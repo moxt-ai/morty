@@ -1,3 +1,4 @@
+import type { ProjectLocationHint } from "@morty-build/client/protocol";
 import { ComputerManagementError } from "./computer-management.ts";
 import type { ComputerManagementPlacement } from "./relay/computer-management.ts";
 
@@ -7,6 +8,17 @@ const placements: ReadonlyMap<string, ComputerManagementPlacement> = new Map([
     ["an", { locationHint: "apac-ne" }],
     ["as", { locationHint: "apac-se" }],
 ]);
+
+/** A fixed creation reference recovers its computer; a new reference always allocates another one. */
+export async function accountComputerId(key: string, locationHint: ProjectLocationHint): Promise<string> {
+    const digest = new Uint8Array(
+        await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify(["morty-computer-v1", key]))),
+    );
+    const localId = btoa(String.fromCharCode(...digest.subarray(0, 18)))
+        .replaceAll("+", "-")
+        .replaceAll("/", "_");
+    return encodeRelayComputerId({ locationHint }, localId);
+}
 
 /** Relay IDs contain a locally mapped shard code followed by a 144-bit local identifier. */
 export function encodeRelayComputerId(placement: ComputerManagementPlacement, localId: string): string {

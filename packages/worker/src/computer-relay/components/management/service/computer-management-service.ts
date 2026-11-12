@@ -1,19 +1,9 @@
 import type { ProjectLocationHint, SessionAccessGrant, SessionAccessHolder } from "@morty-build/client/protocol";
-import { decodeComputerPlacement, encodeRelayComputerId } from "../../contracts/computer-id.ts";
-import { PairingDirectoryError, validateIdentifier } from "../../contracts/relay/pairing.ts";
+import { accountComputerId, decodeComputerPlacement } from "../../../../contracts/computer-id.ts";
+import { PairingDirectoryError, validateIdentifier } from "../../../../contracts/relay/pairing.ts";
 import type { ComputerManagementStorage } from "../storage/computer-management-storage.ts";
 import { ComputerAccessService } from "./computer-access-service.ts";
 
-/** A fixed creation reference recovers its computer; a new reference always allocates another one. */
-async function accountComputerId(key: string, locationHint: ProjectLocationHint): Promise<string> {
-    const digest = new Uint8Array(
-        await crypto.subtle.digest("SHA-256", new TextEncoder().encode(JSON.stringify(["morty-computer-v1", key]))),
-    );
-    const localId = btoa(String.fromCharCode(...digest.subarray(0, 18)))
-        .replaceAll("+", "-")
-        .replaceAll("/", "_");
-    return encodeRelayComputerId({ locationHint }, localId);
-}
 export class ComputerManagementService {
     readonly #projectAccess: ComputerAccessService;
     readonly storage: ComputerManagementStorage;

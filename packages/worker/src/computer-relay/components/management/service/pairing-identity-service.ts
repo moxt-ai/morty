@@ -1,9 +1,9 @@
 import type { VerifiedComputerAccess } from "../../../../contracts/relay/pairing.ts";
 import { PairingDirectoryError, validateIdentifier } from "../../../../contracts/relay/pairing.ts";
 import type { ComputerIdentityCredential } from "../../../../contracts/relay/pairing-identity.ts";
-import type { ComputerManagementService } from "../../../../directory/service/computer-management-service.ts";
 import { DatabaseError } from "../../../../infra/sql-database.ts";
 import type { ComputerRelayStore } from "../storage/computer-relay-store.ts";
+import type { ComputerManagementService } from "./computer-management-service.ts";
 
 /** A credential that matches nothing, including one stored for a Project that is no longer served. */
 function unmatchedCredential(credential: ComputerIdentityCredential): PairingDirectoryError {
