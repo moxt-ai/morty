@@ -30,12 +30,6 @@ export function accountProvisioner(bindings: CloudBindings, forComputer: Compute
     return async (reference, location, signal) =>
         v.parse(
             computerManagementSchema,
-            await computerDirectory(bindings, forComputer).provisionComputerAccount(
-                "Morty",
-                `cloud-${reference}`,
-                reference,
-                location,
-                signal,
-            ),
+            await computerDirectory(bindings, forComputer).provisionComputerAccount(reference, location, signal),
         );
 }

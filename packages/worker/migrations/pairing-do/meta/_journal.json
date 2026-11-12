@@ -148,6 +148,13 @@
             "when": 1794374725906,
             "tag": "0020_unknown_naoko",
             "breakpoints": true
+        },
+        {
+            "idx": 21,
+            "version": "6",
+            "when": 1794456877587,
+            "tag": "0021_solid_lady_vermin",
+            "breakpoints": true
         }
     ]
 }

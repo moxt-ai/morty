@@ -1,4 +1,4 @@
-import { abortAllDurableObjects, runInDurableObject } from "cloudflare:test";
+import { abortAllDurableObjects } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
 import { createOwner, ownerOrigin, ownerRequest } from "./owner-fixture.ts";
@@ -16,7 +16,7 @@ const request = (computerId: string, resource: string, body?: unknown) =>
         ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
 
-it("Given an owned computer, When its internal HTTP boundary reads authority and records an audit, Then it returns current authority and persists the event without exposing the operations publicly", async () => {
+it("Given an owned computer, When its internal HTTP boundary reads authority, Then it returns current authority without exposing the operations publicly", async () => {
     const owner = await createOwner();
     const stub = env.COMPUTER_RELAY.getByName(owner.computerId);
     const generation = await stub.fetch(request(owner.computerId, "active-generation"));
@@ -32,30 +32,9 @@ it("Given an owned computer, When its internal HTTP boundary reads authority and
     expect(access.status).toBe(200);
     expect(await access.json()).toEqual({ holdsAccess: false });
 
-    const audit = {
-        action: "computer.internal-http.verified",
-        actorId: owner.computerId,
-        actorKind: "application",
-        actorRef: owner.computerId,
-        auditId: "internal-http-audit",
-        computerId: owner.computerId,
-        detailsJson: "{}",
-        outcome: "succeeded",
-        recordedAt: Date.now(),
-        subjectId: owner.computerId,
-    };
-    expect((await stub.fetch(request(owner.computerId, "audit-events", audit))).status).toBe(204);
-    const events = await runInDurableObject(stub, (_instance, state) =>
-        state.storage.sql
-            .exec("SELECT audit_id, computer_id, action FROM audit_events WHERE audit_id = ?", audit.auditId)
-            .toArray(),
-    );
-    expect(events).toEqual([{ audit_id: audit.auditId, computer_id: owner.computerId, action: audit.action }]);
-
     for (const internal of [
         request(owner.computerId, "active-generation"),
         request(owner.computerId, "access-check", { kind: "credential", credentialId: "unknown-credential" }),
-        request(owner.computerId, "audit-events", audit),
     ]) {
         const exposed = await ownerRequest(new Request(new URL(new URL(internal.url).pathname, ownerOrigin), internal));
         expect(exposed.status).toBe(404);
@@ -63,7 +42,7 @@ it("Given an owned computer, When its internal HTTP boundary reads authority and
     expect((await ownerRequest(request(owner.computerId, "active-generation"))).status).toBe(404);
 });
 
-it("Given two owned computers, When an internal request names the wrong object or supplies malformed authority, Then the object rejects it before changing its audit data", async () => {
+it("Given two owned computers, When an internal request names the wrong object or supplies malformed authority, Then the object rejects it", async () => {
     const owner = await createOwner();
     const other = await createOwner();
     const stub = env.COMPUTER_RELAY.getByName(owner.computerId);
@@ -75,24 +54,4 @@ it("Given two owned computers, When an internal request names the wrong object o
         expect(invalid.status).toBe(400);
         expect(await invalid.json()).toMatchObject({ error: { code: "invalid_request" } });
     }
-    const audit = await stub.fetch(request(owner.computerId, "audit-events", { computerId: other.computerId }));
-    expect(audit.status).toBe(400);
-    const foreignAudit = {
-        action: "computer.internal-http.denied",
-        actorId: owner.computerId,
-        actorKind: "application",
-        actorRef: owner.computerId,
-        auditId: "foreign-internal-http-audit",
-        computerId: other.computerId,
-        detailsJson: "{}",
-        outcome: "succeeded",
-        recordedAt: Date.now(),
-        subjectId: other.computerId,
-    };
-    const unauthorized = await stub.fetch(request(owner.computerId, "audit-events", foreignAudit));
-    expect(unauthorized.status).toBe(421);
-    const events = await runInDurableObject(stub, (_instance, state) =>
-        state.storage.sql.exec("SELECT audit_id FROM audit_events WHERE audit_id = ?", foreignAudit.auditId).toArray(),
-    );
-    expect(events).toEqual([]);
 });

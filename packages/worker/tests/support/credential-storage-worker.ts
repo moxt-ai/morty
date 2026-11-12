@@ -4,11 +4,9 @@ import {
     type SessionClosedEvent,
     type SessionOperationFailedEvent,
 } from "@morty-build/client/protocol";
-import * as v from "valibot";
 import { SqliteComputerRelayStore } from "../../src/computer-relay/components/management/storage/sqlite-computer-relay-store.ts";
 import { ComputerRelay as ProductionComputerRelay } from "../../src/computer-relay/computer-relay.ts";
 import { DurableObjectDatabase } from "../../src/computer-relay/infra/durable-object-database.ts";
-import { ProjectRowSchema } from "../../src/contracts/relay/relay-records.ts";
 import type { ConfiguredRelayBindings } from "../../src/contracts/relay-bindings.ts";
 import { RequestDeadline } from "../../src/http/request-deadline.ts";
 import chat from "../../src/index.ts";
@@ -61,17 +59,6 @@ export class ComputerRelay extends ProductionComputerRelay {
     }
 
     override async fetch(request: Request): Promise<Response> {
-        if (request.url === "https://computer.internal/retire-account" && request.method === "POST") {
-            const value: unknown = await request.json();
-            const input = v.parse(v.object({ computerId: v.string() }), value);
-            const stored: unknown = await this.ctx.storage.get("computer-account");
-            const account = v.parse(ProjectRowSchema, stored);
-            if (account.computer_id !== input.computerId) {
-                throw new Error("The test account does not match its Computer.");
-            }
-            await this.ctx.storage.put("computer-account", { ...account, lifecycle: "deleted" });
-            return new Response(null, { status: 204 });
-        }
         if (request.url === "https://computer.internal/close-session" && request.method === "POST") {
             // Set a real daemon lifecycle condition through its protocol; the browser still observes production events.
             const command = decodeServiceToDaemonMessage(await request.text());
@@ -100,9 +87,6 @@ export class ComputerRelay extends ProductionComputerRelay {
                 {
                     computerId,
                     now: Date.now(),
-                    actorKind: "system",
-                    actorId: computerId,
-                    auditId: `test-revocation-${crypto.randomUUID()}`,
                 },
                 request.signal,
             );

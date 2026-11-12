@@ -86,20 +86,6 @@ export function createComputerHttpRoutes(
                     ),
                 }),
         )
-        .post(
-            `${COMPUTER_INTERNAL_PREFIX}/:computerId/audit-events`,
-            timeout,
-            computerFromPath,
-            initializeInternal,
-            sizeLimit,
-            async (context) => {
-                await context.var.computerInternal.recordAudit(
-                    await readJsonBody(context.req.raw),
-                    context.req.raw.signal,
-                );
-                return new Response(null, { status: 204 });
-            },
-        )
         .route(
             "/",
             createRelayProtocolRoutes(
