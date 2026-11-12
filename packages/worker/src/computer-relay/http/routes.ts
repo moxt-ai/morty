@@ -6,6 +6,7 @@ import * as v from "valibot";
 import { COMPUTER_INTERNAL_PREFIX } from "../../contracts/computer-relay-http.ts";
 import { validateIdentifier } from "../../contracts/relay/pairing.ts";
 import { readJsonBody } from "../../http/body-parser.ts";
+import { computerIdFromApiPath } from "../../http/computer-api-target.ts";
 import { computerFromPath, computerFromRuntimeCredential } from "../../http/computer-target.ts";
 import { errorHandler } from "../../http/error-middleware.ts";
 import { json } from "../../http/json.ts";
@@ -37,6 +38,7 @@ export function createComputerHttpRoutes(
     const timeout = requestTimeoutMiddleware<ComputerRouteHttpEnvironment>(30_000);
     const sizeLimit = bodyLimit({ maxSize: 3 * 1_024 * 1_024 });
     const cors = createBrowserCors(["GET"], ["authorization"]);
+    const applicationRoutes = createApplicationRoutes(ctx);
     return new Hono<ComputerRouteHttpEnvironment>()
         .use("*", errorMiddleware)
         .get(
@@ -120,27 +122,30 @@ export function createComputerHttpRoutes(
             (context) => {
                 const computerId = context.req.param("computerId");
                 const sessionAccess = context.var.sessionAccess;
-                const dispatchBrowserMessage = createBrowserWebSocketRoutes({
+                const browserRoutes = createBrowserWebSocketRoutes({
                     computerId,
                     services: { sessions: sessionAccess, operations: context.var.sessionOperations },
-                });
+                }).route("/", applicationRoutes);
                 return acceptWebSocketHttpTransport({
                     request: context.req.raw,
-                    dispatch: async (operation) => {
-                        const response = await dispatchBrowserMessage(operation);
+                    dispatch: async (operation): Promise<Response> => {
+                        const response = await browserRoutes.fetch(operation, ctx.bindings);
                         if (response.status === 101) {
                             await ctx.utilities.connectionOpened();
                         }
                         return response;
                     },
                     uploads: ctx.resources.uploads,
+                    cancellable: (operation) => computerIdFromApiPath(operation) !== null,
                     authorizeUpload: async (operation) => {
                         const authorized = await authorizeSessionContentUpload(operation, sessionAccess);
                         return authorized instanceof Response ? authorized : new Response(null, { status: 204 });
                     },
                     validateTarget: (operation) => {
                         const target = computerRequestTarget(operation);
-                        return target?.kind === "operation" && target.computerId === computerId;
+                        const targetId =
+                            target?.kind === "operation" ? target.computerId : computerIdFromApiPath(operation);
+                        return targetId === computerId;
                     },
                 });
             },
@@ -184,7 +189,7 @@ export function createComputerHttpRoutes(
                 context.req.raw.signal,
             );
         })
-        .route("/", createApplicationRoutes(ctx));
+        .route("/", applicationRoutes);
 }
 
 function createApplicationRoutes(ctx: ComputerRouteContext) {
