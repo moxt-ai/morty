@@ -1,5 +1,4 @@
-import type { SessionConfigOption } from "@morty-build/client";
-import type { AgentQuestion } from "@morty-build/client/protocol";
+import type { AgentQuestion, SessionConfigOption } from "@morty-build/client/protocol";
 import { Check, CircleAlert, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { useStore } from "zustand";

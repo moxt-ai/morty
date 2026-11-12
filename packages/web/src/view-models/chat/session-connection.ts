@@ -1,6 +1,7 @@
-import { type MortyClient, MortyError, SESSION_CLOSED_ERROR_CODE } from "@morty-build/client";
+import { type MortyClient, MortyError } from "@morty-build/client";
+import { SESSION_CLOSED_ERROR_CODE } from "@morty-build/client/protocol";
 
-// The Session pane owns live-stream recovery; SDK retries are disabled so
+// The Session pane owns live-stream recovery: the session client never retries, so
 // connection attempts and reconciliation share one bounded retry policy.
 
 export type SessionConnection =

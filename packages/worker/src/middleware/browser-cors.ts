@@ -10,8 +10,7 @@ function browserCorsHeaders(origin: string, methods: readonly string[], headers:
         "access-control-allow-headers": headers.join(", "),
         "access-control-allow-methods": [...methods, "OPTIONS"].join(", "),
         "access-control-allow-origin": origin,
-        "access-control-expose-headers":
-            "content-length, content-type, x-morty-artifact-id, x-morty-byte-length, x-morty-event-format, x-morty-file-name, x-morty-sha256",
+        "access-control-expose-headers": "content-length, content-type, x-morty-byte-length, x-morty-file-name",
         "access-control-max-age": "600",
         vary: "Origin, Access-Control-Request-Method, Access-Control-Request-Headers",
     });

@@ -372,7 +372,7 @@ export type ServiceToDaemonMessage = ReturnType<
 const serviceToDaemonRegistry: Readonly<Record<string, MessageSignature<ServiceToDaemonMessage>>> =
     serviceToDaemonSignatures;
 
-/** Decodes a message this SDK can consume, or skips it when its schema is not understood. */
+/** Decodes a message this client can consume, or skips it when its schema is not understood. */
 export function decodeKnownServiceToDaemonMessage(encoded: string): ServiceToDaemonMessage | null {
     try {
         return decodeServiceToDaemonMessage(encoded);
@@ -574,7 +574,7 @@ export type DaemonToServiceMessage = ReturnType<
 const daemonToServiceRegistry: Readonly<Record<string, MessageSignature<DaemonToServiceMessage>>> =
     daemonToServiceSignatures;
 
-/** Decodes a message this SDK can consume, or skips it when its schema is not understood. */
+/** Decodes a message this client can consume, or skips it when its schema is not understood. */
 function decodeKnownDaemonToServiceMessage(encoded: string): DaemonToServiceMessage | null {
     const kind = decodeMessageKind(encoded);
     const signature = daemonToServiceRegistry[kind];

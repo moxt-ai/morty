@@ -4,9 +4,13 @@ import {
     MortyPageRequest,
     type MortySessionEventObserver,
     MortyTimeoutError,
-    type SessionConfigOption,
 } from "@morty-build/client";
-import type { NativeSessionTarget, SessionEvent, SessionLiveEvent } from "@morty-build/client/protocol";
+import type {
+    NativeSessionTarget,
+    SessionConfigOption,
+    SessionEvent,
+    SessionLiveEvent,
+} from "@morty-build/client/protocol";
 import { createStore, type StoreApi } from "zustand/vanilla";
 import type { ComposerAttachment } from "../../components/chat/composer-attachment.ts";
 import type { BotChatApi } from "../../services/chat/bot-chat-api.ts";
@@ -743,7 +747,7 @@ export function createSessionPaneModel(options: {
                 if (controller.signal.aborted || get().projection.revision !== revision) {
                     return;
                 }
-                // This pane owns the history deadline. The SDK only sees an aborted
+                // This pane owns the history deadline. The session client only sees an aborted
                 // caller signal, so retain timeout semantics for subscription recovery.
                 if (deadline.signal.aborted) {
                     throw new MortyTimeoutError({ cause });
@@ -983,24 +987,7 @@ export function createSessionPaneModel(options: {
                         );
                     };
                     const observer: MortySessionEventObserver = {
-                        reconcile: async (connection) => {
-                            const reconciliation =
-                                connection.kind === "initial"
-                                    ? { kind: "initial-subscription" as const }
-                                    : { kind: "reconnecting" as const };
-                            switch (reconciliation.kind) {
-                                case "initial-subscription":
-                                    break;
-                                case "reconnecting":
-                                    setAndSettle({
-                                        connection: {
-                                            kind: "reconnecting",
-                                            notice: recoveryNotice(),
-                                            message: connectionFailure(get().connection),
-                                        },
-                                    });
-                                    break;
-                            }
+                        reconcile: async () => {
                             await dispatchProjection({ kind: "reconcile" }, connected, signal);
                             signal.throwIfAborted();
                             // Confirm execution after history is adopted. An earlier idle snapshot
@@ -1011,13 +998,6 @@ export function createSessionPaneModel(options: {
                                 signal,
                                 submission.kind === "delivery-unknown" ? submission.journal.commandId : null,
                             );
-                            switch (reconciliation.kind) {
-                                case "initial-subscription":
-                                    break;
-                                case "reconnecting":
-                                    setAndSettle({ connection: { client: connected, kind: "ready" } });
-                                    break;
-                            }
                         },
                         receive: async (events) => {
                             for (const event of events) {

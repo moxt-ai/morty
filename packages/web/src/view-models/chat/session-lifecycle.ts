@@ -1,4 +1,4 @@
-import type { SessionElicitationRequestedEvent, SessionPermissionRequestedEvent } from "@morty-build/client";
+import type { SessionElicitationRequestedEvent, SessionPermissionRequestedEvent } from "@morty-build/client/protocol";
 import { promptCompletion, type SessionLiveEvent } from "@morty-build/client/protocol";
 import type { SessionInteraction } from "./session-pane-types.ts";
 

@@ -1,4 +1,4 @@
-import type { SessionElicitationField } from "@morty-build/client";
+import type { SessionElicitationField } from "@morty-build/client/protocol";
 
 /** What a field holds while it is answered: its text as typed, yes or no, or the options chosen. */
 export type ElicitationFieldValue = string | boolean | readonly string[];
