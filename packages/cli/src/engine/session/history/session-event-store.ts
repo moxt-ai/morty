@@ -10,7 +10,7 @@ import type { ProjectedToolCall } from "../../acp/tool-call-projection.ts";
 import type { SessionEventCacheTable } from "../../storage/session/session-event-cache-table.ts";
 import type { SessionLiveEventPosition } from "./live-event-positions.ts";
 import { type MaterializedEventsResolver, SessionEventHistoryProjection } from "./session-event-history-projection.ts";
-import { InMemorySessionEventIdAllocator, type SessionEventIdAllocator } from "./session-event-id-allocator.ts";
+import { SessionEventIdAllocator } from "./session-event-id-allocator.ts";
 
 const HOT_EVENT_HIGH_WATER_MARK = 256;
 const HOT_EVENT_RETENTION = 128;
@@ -248,11 +248,7 @@ function eventPage(
 export class MemorySessionEventStore implements SessionEventStore {
     readonly #allocatedPositionBySession = new NativeSessionMap<number>();
     readonly #events = new NativeSessionMap<SessionEvents>();
-    readonly #eventIds: SessionEventIdAllocator;
-
-    constructor(eventIds: SessionEventIdAllocator = new InMemorySessionEventIdAllocator()) {
-        this.#eventIds = eventIds;
-    }
+    readonly #eventIds = new SessionEventIdAllocator();
 
     readonly #session = (sessionTarget: NativeSessionTarget): SessionEvents => {
         const sessionGenerationId = randomUUID();
@@ -358,17 +354,12 @@ export class MemorySessionEventStore implements SessionEventStore {
 
 export class CachedSessionEventStore implements SessionEventStore {
     readonly #cacheTable: SessionEventCacheTable;
-    readonly #eventIds: SessionEventIdAllocator;
+    readonly #eventIds = new SessionEventIdAllocator();
     readonly #liveEventPositions: SessionLiveEventPosition;
     readonly #sessions = new NativeSessionMap<SessionEvents>();
     #flushSchedule: FlushSchedule = { kind: "idle" };
 
-    constructor(
-        cacheTable: SessionEventCacheTable,
-        liveEventPositions: SessionLiveEventPosition,
-        eventIds: SessionEventIdAllocator = new InMemorySessionEventIdAllocator(),
-    ) {
-        this.#eventIds = eventIds;
+    constructor(cacheTable: SessionEventCacheTable, liveEventPositions: SessionLiveEventPosition) {
         this.#liveEventPositions = liveEventPositions;
         this.#cacheTable = cacheTable;
     }

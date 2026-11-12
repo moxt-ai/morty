@@ -13,7 +13,6 @@ export interface LocalAgentDiscoveryContext {
     readonly dataDirectory: string;
     readonly defaultWorkspace: string;
     readonly environment: Readonly<NodeJS.ProcessEnv>;
-    readonly platform?: NodeJS.Platform;
     readonly onProbeDiagnostic?: (diagnostic: AgentProbeDiagnostic) => void;
     readonly signal: AbortSignal;
 }

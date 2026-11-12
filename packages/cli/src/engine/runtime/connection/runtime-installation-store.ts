@@ -6,7 +6,6 @@ import {
     type InstallationDirectory,
     installationDirectory,
     readInstallationFile,
-    removeInstallationFile,
     writeInstallationFile,
 } from "../../storage/installation/installation-files.ts";
 import { tryLock } from "../../storage/installation/local-lock.ts";
@@ -14,23 +13,20 @@ import { validateLocalPath } from "../../util/filesystem/private-path.ts";
 import {
     type ComputerConnectionActivation,
     type ComputerConnectionInput,
-    VerifiedComputerConnection,
+    SavedComputerConnection,
 } from "./computer-connection.ts";
 import type { ComputerCredentials, HeldComputerCredentials } from "./computer-credentials.ts";
 import { readRelayOrigin } from "./relay-origin.ts";
 
-const PAIRING_RECORD_VERSION = 9;
 const PAIRING_GENERATION_PATTERN = /^mcn_[a-f0-9]{32}$/;
 const COMPUTER_CREDENTIAL_PATTERN = /^[a-zA-Z0-9_-]{32,256}$/;
-const VERIFIED_CONNECTION_KEYS: readonly string[] = [
+const CONNECTION_KEYS: readonly string[] = [
     "activation",
     "computerId",
     "pairingGeneration",
     "defaultWorkspace",
-    "kind",
     "relayOrigin",
     "credentials",
-    "version",
 ];
 
 export class RuntimeInstallationStoreError extends Error {
@@ -85,12 +81,8 @@ function pairingGeneration(): string {
     return `mcn_${randomUUID().replaceAll("-", "")}`;
 }
 
-function decodeVerifiedConnection(value: Readonly<Record<string, unknown>>): VerifiedComputerConnection {
-    if (
-        !hasExactKeys(value, VERIFIED_CONNECTION_KEYS) ||
-        value["version"] !== PAIRING_RECORD_VERSION ||
-        value["kind"] !== "verified"
-    ) {
+function decodeSavedConnection(value: Readonly<Record<string, unknown>>): SavedComputerConnection {
+    if (!hasExactKeys(value, CONNECTION_KEYS)) {
         throw new RuntimeInstallationStoreError("invalid_connection", "The saved Runtime connection is invalid");
     }
     const activation = value["activation"];
@@ -112,7 +104,7 @@ function decodeVerifiedConnection(value: Readonly<Record<string, unknown>>): Ver
     ) {
         throw new RuntimeInstallationStoreError("invalid_connection", "The saved Runtime connection is invalid");
     }
-    return new VerifiedComputerConnection(
+    return new SavedComputerConnection(
         activation,
         validatePairingGeneration(pairingGeneration),
         validateIdentifier(computerId, "invalid_connection"),
@@ -125,11 +117,11 @@ function decodeVerifiedConnection(value: Readonly<Record<string, unknown>>): Ver
     );
 }
 
-function decodeConnection(value: unknown): VerifiedComputerConnection {
+function decodeConnection(value: unknown): SavedComputerConnection {
     if (!isRecord(value)) {
         throw new RuntimeInstallationStoreError("invalid_connection", "The saved Runtime connection is invalid");
     }
-    return decodeVerifiedConnection(value);
+    return decodeSavedConnection(value);
 }
 
 async function readJsonFile(path: string, signal: AbortSignal, missingCode: string): Promise<unknown> {
@@ -221,7 +213,7 @@ export class RuntimeInstallationStore {
     readonly readConnection = async (
         pairingGeneration: string,
         signal: AbortSignal,
-    ): Promise<VerifiedComputerConnection> => {
+    ): Promise<SavedComputerConnection> => {
         validatePairingGeneration(pairingGeneration);
         const connection = decodeConnection(await readJsonFile(this.pairingPath, signal, "connection_not_found"));
         if (connection.pairingGeneration !== pairingGeneration) {
@@ -236,8 +228,8 @@ export class RuntimeInstallationStore {
     readonly saveConnection = async (
         input: ComputerConnectionInput,
         signal: AbortSignal,
-    ): Promise<VerifiedComputerConnection> => {
-        const stored = new VerifiedComputerConnection(
+    ): Promise<SavedComputerConnection> => {
+        const stored = new SavedComputerConnection(
             "active",
             pairingGeneration(),
             validateIdentifier(input.computerId, "invalid_connection"),
@@ -251,7 +243,7 @@ export class RuntimeInstallationStore {
         return stored;
     };
 
-    readonly currentConnection = async (signal: AbortSignal): Promise<VerifiedComputerConnection | null> => {
+    readonly currentConnection = async (signal: AbortSignal): Promise<SavedComputerConnection | null> => {
         try {
             return decodeConnection(await readJsonFile(this.pairingPath, signal, "connection_not_found"));
         } catch (cause) {
@@ -262,19 +254,14 @@ export class RuntimeInstallationStore {
         }
     };
 
-    readonly listConnections = async (signal: AbortSignal): Promise<readonly VerifiedComputerConnection[]> => {
-        const current = await this.currentConnection(signal);
-        return current === null ? [] : [current];
-    };
-
     readonly setConnectionActivation = async (
         pairingGeneration: string,
         activation: ComputerConnectionActivation,
         signal: AbortSignal,
-    ): Promise<VerifiedComputerConnection> => {
+    ): Promise<SavedComputerConnection> => {
         return await this.changePairing(async () => {
             const connection = await this.readConnection(pairingGeneration, signal);
-            const updated = new VerifiedComputerConnection(
+            const updated = new SavedComputerConnection(
                 activation,
                 connection.pairingGeneration,
                 connection.computerId,
@@ -325,12 +312,12 @@ export class RuntimeInstallationStore {
     });
 
     private readonly overwriteCredentials = async (
-        connection: VerifiedComputerConnection,
+        connection: SavedComputerConnection,
         credentials: HeldComputerCredentials,
         signal: AbortSignal,
     ): Promise<void> => {
         await this.overwriteConnection(
-            new VerifiedComputerConnection(
+            new SavedComputerConnection(
                 connection.activation,
                 connection.pairingGeneration,
                 connection.computerId,
@@ -342,16 +329,8 @@ export class RuntimeInstallationStore {
         );
     };
 
-    readonly removeConnection = async (pairingGeneration: string, signal: AbortSignal): Promise<void> => {
-        await this.changePairing(async () => {
-            await this.readConnection(pairingGeneration, signal);
-            signal.throwIfAborted();
-            await removeInstallationFile(this.pairingPath);
-        });
-    };
-
     private readonly overwriteConnection = async (
-        connection: VerifiedComputerConnection,
+        connection: SavedComputerConnection,
         signal: AbortSignal,
     ): Promise<void> => {
         await writeJsonAtomically(
@@ -361,10 +340,8 @@ export class RuntimeInstallationStore {
                 computerId: connection.computerId,
                 pairingGeneration: connection.pairingGeneration,
                 defaultWorkspace: connection.defaultWorkspace,
-                kind: connection.kind,
                 relayOrigin: connection.relayOrigin.toString(),
                 credentials: connection.credentials,
-                version: PAIRING_RECORD_VERSION,
             },
             signal,
         );

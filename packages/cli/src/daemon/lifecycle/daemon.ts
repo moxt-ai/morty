@@ -2,12 +2,13 @@ import { refreshAgentCatalog } from "../../engine/runtime/catalog/refresh-agent-
 import type { RuntimeConfig } from "../../engine/runtime/config.ts";
 import { prepareComputerConnection } from "../../engine/runtime/pairing.ts";
 import { ComputerRelayRevokedError } from "../../engine/runtime/relay/computer-revocation.ts";
-import { RuntimeLoop } from "../../engine/runtime/runtime-loop.ts";
+import { runRuntime } from "../../engine/runtime/run.ts";
 import { AgentProcessPool } from "../../engine/session/process/agent-process-pool.ts";
 import type { InstallationDirectory } from "../../engine/storage/installation/installation-files.ts";
 import { BoundedLineLog } from "../../engine/storage/logs/bounded-log.ts";
 import { DAEMON_LIFECYCLE_LOG_FILENAME, logDirectory } from "../../engine/storage/logs/log-files.ts";
 import { isNodeError } from "../../engine/util/node-error.ts";
+import { systemTimer } from "../../engine/util/timer.ts";
 import { acquireDaemonLock } from "../../storage/daemon/daemon-lock.ts";
 import { sendLocalRequest } from "../control/local-client.ts";
 import { serveLocalControl } from "../control/local-server.ts";
@@ -131,9 +132,10 @@ async function runDaemonRuntime(
                 try {
                     const config = await prepareComputerConnection(installation, connection, combined, process.env);
                     const controller = new AbortController();
-                    const processes = new AgentProcessPool(config.localContext.maxAcpProcesses);
-                    const loop = new RuntimeLoop(async () => config, { processes });
-                    const completion = loop.run(AbortSignal.any([combined, controller.signal])).then(
+                    const processes = new AgentProcessPool();
+                    const completion = runRuntime(config, AbortSignal.any([combined, controller.signal]), systemTimer, {
+                        processes,
+                    }).then(
                         () => {
                             if (!combined.aborted && !controller.signal.aborted) {
                                 fail(connection.pairingGeneration, new Error("The Computer stopped unexpectedly"));

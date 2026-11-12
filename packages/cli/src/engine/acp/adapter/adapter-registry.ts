@@ -1,4 +1,5 @@
 import type { AcpAgentDefinition } from "../agent/agent-definition.ts";
+import { AcpContentExternalizer } from "../content/content-externalizer.ts";
 import type { Adapter, AdapterDependencies, AdapterResolver } from "../native-history/preview-contract.ts";
 
 /** Stable adapters retain preview state while query definitions follow catalog rediscovery. */
@@ -26,5 +27,19 @@ export class AdapterRegistry {
     readonly close = async (): Promise<void> => {
         await Promise.all([...this.#adapters.values()].map((adapter) => adapter.close()));
         this.#adapters.clear();
+    };
+}
+
+/** The Runtime's adapters and the content externalizer they share. */
+export function createRuntimeAdapterRegistry(
+    adapters: AdapterResolver,
+    processes: AdapterDependencies["processes"],
+    externalize: ConstructorParameters<typeof AcpContentExternalizer>[0],
+    linkedResources: ConstructorParameters<typeof AcpContentExternalizer>[1],
+) {
+    const contentExternalizer = new AcpContentExternalizer(externalize, linkedResources);
+    return {
+        adapters: new AdapterRegistry(adapters, { processes, contentExternalizer }),
+        externalizeSessionUpdate: contentExternalizer.update,
     };
 }

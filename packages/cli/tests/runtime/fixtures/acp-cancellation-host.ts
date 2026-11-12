@@ -13,7 +13,7 @@ import {
 import { type ControlledAcpPeer, ControlledEndpointConnection } from "@morty-build/runtime-test-support/fake-daemon";
 import { WebSocketServer } from "ws";
 import { RuntimeLocalContext } from "../../../src/engine/runtime/config.ts";
-import { RuntimeLoop } from "../../../src/engine/runtime/runtime-loop.ts";
+import { runRuntime } from "../../../src/engine/runtime/run.ts";
 import { createControlledAgent } from "../../support/agents/controlled-agent-definition.ts";
 import { memoryComputerCredentials } from "../../support/computer-credentials.ts";
 import { createControlledRuntimeConfig as createRuntimeConfig } from "../../support/controlled-runtime-config.ts";
@@ -124,14 +124,14 @@ const config = createRuntimeConfig(
     async (agent) => agent,
 );
 try {
-    await new RuntimeLoop(async () => config).run(controller.signal);
+    await runRuntime(config, controller.signal);
     await new Promise<void>((resolve) => setImmediate(resolve));
     if (!endpointClosed) {
         throw new Error("The cancelled endpoint was not closed");
     }
     process.stdout.write("cancelled-request-settled\n");
     const healthy = new AbortController();
-    const runtime = new RuntimeLoop(async () => config).run(healthy.signal);
+    const runtime = runRuntime(config, healthy.signal);
     try {
         await settings.promise;
         process.stdout.write("subsequent-settings-succeeded\n");

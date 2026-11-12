@@ -1,7 +1,8 @@
 import { resolve } from "node:path";
+import { harnessAdapters } from "../acp/adapter/registry.ts";
+import type { AdapterResolver } from "../acp/native-history/preview-contract.ts";
 import type { CatalogAgent } from "../agent/catalog.ts";
 import { LocalAgentCatalog } from "../agent/catalog.ts";
-import type { RuntimeAgentDependencies } from "../agent/runtime-agents.ts";
 import type { ComputerCredentials } from "./connection/computer-credentials.ts";
 
 /**
@@ -11,12 +12,21 @@ import type { ComputerCredentials } from "./connection/computer-credentials.ts";
 export class RuntimeLocalContext {
     readonly agentLaunchEnvironment: Readonly<NodeJS.ProcessEnv>;
     readonly stateDirectory: string;
-    readonly maxAcpProcesses: number;
 
-    constructor(stateDirectory: string, agentLaunchEnvironment: Readonly<NodeJS.ProcessEnv>, maxAcpProcesses = 1000) {
+    constructor(stateDirectory: string, agentLaunchEnvironment: Readonly<NodeJS.ProcessEnv>) {
         this.stateDirectory = resolve(stateDirectory);
         this.agentLaunchEnvironment = Object.freeze({ ...agentLaunchEnvironment });
-        this.maxAcpProcesses = maxAcpProcesses;
+    }
+}
+
+/** Local Agent inventory and its explicitly registered harness adapters. */
+export class RuntimeAgentDependencies {
+    readonly agents: readonly CatalogAgent[];
+    readonly adapters: AdapterResolver;
+
+    constructor(agents: readonly CatalogAgent[], adapters: AdapterResolver = harnessAdapters) {
+        this.agents = agents;
+        this.adapters = adapters;
     }
 }
 
@@ -31,7 +41,7 @@ export function withRuntimeEnvironment(agent: CatalogAgent, environment: Readonl
 }
 
 export interface RuntimeConfig {
-    readonly adapters: RuntimeAgentDependencies["adapters"];
+    readonly adapters: AdapterResolver;
     readonly defaultWorkspace: string;
 
     readonly catalog: LocalAgentCatalog;

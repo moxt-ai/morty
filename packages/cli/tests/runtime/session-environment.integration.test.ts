@@ -249,7 +249,6 @@ await import(${JSON.stringify(agentPeer)});
             process.execPath,
             external.environment,
             external.agentVersion,
-            undefined,
             external.capabilities,
         );
     const agent = createAgent("codex");

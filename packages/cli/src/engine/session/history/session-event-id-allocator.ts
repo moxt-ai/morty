@@ -1,11 +1,8 @@
 import { NativeSessionMap } from "@morty-build/client/native-session";
 import type { NativeSessionTarget } from "@morty-build/client/protocol";
 
-export interface SessionEventIdAllocator {
-    readonly allocate: (sessionTarget: NativeSessionTarget, sessionGenerationId: string) => string;
-}
-
-export class InMemorySessionEventIdAllocator implements SessionEventIdAllocator {
+/** Allocates each Session generation's event identifiers in order. */
+export class SessionEventIdAllocator {
     readonly #allocations = new NativeSessionMap<{ readonly nextId: number; readonly sessionGenerationId: string }>();
 
     readonly allocate = (sessionTarget: NativeSessionTarget, sessionGenerationId: string): string => {

@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest";
 import type { AcpAgentDefinition } from "../../src/engine/acp/agent/agent-definition.ts";
 import { AcpContentExternalizer } from "../../src/engine/acp/content/content-externalizer.ts";
 import { NullSessionObserver } from "../../src/engine/session/api/session-api.ts";
+import { MemorySessionEventStore } from "../../src/engine/session/history/session-event-store.ts";
 import { MemorySessionStore, SqliteSessionStore } from "../../src/engine/session/record/session-store.ts";
 import { AcpSessionTable } from "../../src/engine/storage/session/acp-session-table.ts";
 import { openAcpSessionDatabase } from "../../src/engine/storage/sqlite/local-databases.ts";
@@ -47,7 +48,9 @@ function createManager(store: MemorySessionStore | SqliteSessionStore): SessionM
         observer: new NullSessionObserver(),
         store,
         adapters: acpAdapters,
-        onSessionStatusChanged: () => undefined,
+        onSessionClosed: () => undefined,
+        lastTurn: () => undefined,
+        settledTurns: () => [],
         contentExternalizer: new AcpContentExternalizer((sessionTarget, content, signal) =>
             new UnretainedExternalContentStore().put({
                 bytes: content.bytes,
@@ -143,7 +146,10 @@ describe("Session settings reads after a daemon restart", () => {
             signal: AbortSignal.timeout(10_000),
         });
         await seed.close();
-        const store = new SqliteSessionStore(new AcpSessionTable(openAcpSessionDatabase(databasePath)));
+        const store = new SqliteSessionStore(
+            new AcpSessionTable(openAcpSessionDatabase(databasePath)),
+            new MemorySessionEventStore(),
+        );
         const first = createManager(store);
         try {
             const imported = await first.openNativeSession(

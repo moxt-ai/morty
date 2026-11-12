@@ -26,19 +26,8 @@ export const SESSION_ARCHIVE_KIND = "session.archive";
 export const SESSION_ARCHIVED_KIND = "session.archived";
 /** Failure code of an operation on a Session the Computer is archiving. */
 export const SESSION_CLOSED_ERROR_CODE = "session_closed";
-export const SESSION_STATUS_CHANGED_KIND = "session.status.changed";
 export const SESSION_OPERATION_FAILED_KIND = "session.operation.failed";
 export const SESSION_PROMPT_ACCEPTED_KIND = "session.prompt.accepted";
-
-const sessionStatusChangedEventSchema = z
-    .object({
-        kind: z.literal(SESSION_STATUS_CHANGED_KIND),
-        target: nativeSessionTargetSchema,
-        status: sessionStatusSchema,
-    })
-    .readonly();
-
-export type SessionStatusChangedEvent = z.infer<typeof sessionStatusChangedEventSchema>;
 
 const sessionMetadataSchema = z
     .object({
@@ -305,10 +294,6 @@ export const decodeSessionCloseNoticeEvent = (encoded: string): SessionCloseNoti
     decode(encoded, sessionCloseNoticeEventSchema);
 export const encodeSessionCloseNoticeEvent = (message: SessionCloseNoticeEvent): string =>
     encode(message, sessionCloseNoticeEventSchema);
-export const decodeSessionStatusChangedEvent = (encoded: string): SessionStatusChangedEvent =>
-    decode(encoded, sessionStatusChangedEventSchema);
-export const encodeSessionStatusChangedEvent = (message: SessionStatusChangedEvent): string =>
-    encode(message, sessionStatusChangedEventSchema);
 export const decodeSessionPrepareCommand = (encoded: string): SessionPrepareCommand =>
     decode(encoded, sessionPrepareCommandSchema);
 export const encodeSessionPrepareCommand = (message: SessionPrepareCommand): string =>

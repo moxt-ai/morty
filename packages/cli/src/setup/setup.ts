@@ -33,7 +33,8 @@ export interface SetupAgentReport {
 /** The Morty installation in a state directory, as setup drives it. */
 export interface SetupRuntime {
     /** The Computers the installation keeps a connection for. */
-    readonly computers: (directory: string, signal: AbortSignal) => Promise<readonly string[]>;
+    /** The Computer this computer's saved pairing serves, if any. */
+    readonly computer: (directory: string, signal: AbortSignal) => Promise<string | null>;
     /** Redeems a pairing, saves its connection, and has the daemon serve it. */
     readonly pair: (directory: string, pairing: SetupPairing, signal: AbortSignal) => Promise<void>;
     /** Has the daemon serve the saved connection, starting one when none runs. */
@@ -368,22 +369,6 @@ class RuntimeStartError extends Error {
     }
 
     readonly diagnostic = () => ({ nextStep: this.nextStep });
-}
-
-class RuntimePreflightError extends Error {
-    readonly code = "RUNTIME_PREFLIGHT_FAILED";
-    readonly nextStep = "Use Node.js 22.19+ or 24.20+ and repair the installed Morty release before rerunning setup.";
-
-    constructor(message: string, cause?: unknown) {
-        super(message, { cause });
-        this.name = "RuntimePreflightError";
-    }
-
-    readonly diagnostic = () => ({
-        nodeVersion: process.versions.node,
-        nodeExecutable: process.execPath,
-        nextStep: this.nextStep,
-    });
 }
 
 /** Morty refused this shell's state root; setup must not continue against a state it cannot see. */
@@ -1161,14 +1146,13 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         confirmedComputerId: string | null,
     ): Promise<{ readonly context: Context; readonly computer: ComputerSelection }> {
         progress("pairing", "Preparing the Computer connection.");
-        const replaceWithApproval = async (reason: ReplacementReason, managedConnectionCount: number | null) => {
+        const replaceWithApproval = async (reason: ReplacementReason) => {
             const computerId = context.identity.computerId;
             emit({
                 status: "replacement_check",
                 reason,
                 computerId,
                 expectedComputerId: computerPairing === "unpaired" ? null : computerId,
-                managedConnectionCount,
                 approved: confirmedComputerId === computerId,
                 platform: process.platform,
                 nodeVersion: process.versions.node,
@@ -1182,28 +1166,24 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         // A restored local pairing cannot settle whether a previous request revoked shared access.
         // Finish that idempotent operation with its original approval before reporting setup ready.
         if (context.identity.replacement.kind === "unknown") {
-            return await replaceWithApproval("replacement_result_unknown", null);
+            return await replaceWithApproval("replacement_result_unknown");
         }
-        // Computer IDs are unique, so the Computer's own connection list names the connection that serves one.
-        const reusable = async (computerId: string) => {
-            const connections = await host.runtime.computers(context.directory, signal);
-            const existing = connections.includes(computerId) ? { computerId } : undefined;
-            if (existing !== undefined) {
-                emit({
-                    status: "computer_reused",
-                    computerId: existing.computerId,
-                });
+        // Whether this computer's saved pairing already serves the Computer.
+        const computerId = context.identity.computerId;
+        const reused = async (): Promise<boolean> => {
+            if ((await host.runtime.computer(context.directory, signal)) !== computerId) {
+                return false;
             }
-            return { existing, managedConnectionCount: connections.length };
+            emit({ status: "computer_reused", computerId });
+            return true;
         };
         switch (computerPairing) {
             case "paired": {
-                const { existing, managedConnectionCount } = await reusable(context.identity.computerId);
-                if (existing !== undefined) {
-                    return { context, computer: { kind: "existing", ...existing, paired: true } };
+                if (await reused()) {
+                    return { context, computer: { kind: "existing", computerId, paired: true } };
                 }
                 // Losing the local pairing does not itself authorize ending shared access.
-                return await replaceWithApproval("managed_computer_missing", managedConnectionCount);
+                return await replaceWithApproval("managed_computer_missing");
             }
             case "revoked":
                 // Morty disconnected this computer because a copy of its connection key was used. The Computer and the
@@ -1218,9 +1198,8 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             case "unpaired": {
                 // A Computer an earlier run started for this computer may still be waiting for its pairing, so continue
                 // on it while this computer still manages its connection.
-                const { existing } = await reusable(context.identity.computerId);
-                if (existing !== undefined) {
-                    return { context, computer: { kind: "existing", ...existing, paired: false } };
+                if (await reused()) {
+                    return { context, computer: { kind: "existing", computerId, paired: false } };
                 }
                 return await pairComputer(context);
             }
@@ -1615,12 +1594,6 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
 
     async function preflightRuntime(directory: string) {
         progress("preflight", "Verifying the Morty CLI before creating an identity.");
-        const [major = 0, minor = 0] = process.versions.node.split(".").map(Number);
-        if (!((major === 22 && minor >= 19) || (major === 24 && minor >= 20))) {
-            throw new RuntimePreflightError(
-                `Node.js 22.19+ or 24.20+ is required; found ${process.versions.node} at ${process.execPath}.`,
-            );
-        }
         try {
             await validateStateRoot({ ...process.env, MORTY_STATE_DIRECTORY: directory });
         } catch (cause) {
@@ -1688,7 +1661,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 cause: serializeErrorCause(cause),
                 ...(cause instanceof MortyStateRootError
                     ? { runtime: cause.diagnostic(replacementAccess) }
-                    : cause instanceof RuntimeStartError || cause instanceof RuntimePreflightError
+                    : cause instanceof RuntimeStartError
                       ? { runtime: cause.diagnostic() }
                       : {}),
                 ...(cause instanceof AgentBindingError ? { binding: cause.diagnostic() } : {}),

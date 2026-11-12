@@ -225,7 +225,6 @@ export type {
     SessionReadyEvent,
     SessionRestoreCommand,
     SessionRestoredEvent,
-    SessionStatusChangedEvent,
     SessionsListedEvent,
     SessionsQueriedEvent,
 } from "./session/lifecycle/index.ts";
@@ -243,7 +242,6 @@ export {
     decodeSessionReadyEvent,
     decodeSessionRestoreCommand,
     decodeSessionRestoredEvent,
-    decodeSessionStatusChangedEvent,
     decodeSessionsListedEvent,
     decodeSessionsQueriedEvent,
     encodeSessionCreateCommand,
@@ -253,7 +251,6 @@ export {
     encodeSessionPromptAcceptedEvent,
     encodeSessionQueryCommand,
     encodeSessionRestoreCommand,
-    encodeSessionStatusChangedEvent,
     SESSION_ARCHIVE_KIND,
     SESSION_ARCHIVED_KIND,
     SESSION_CLOSE_NOTICE_KIND,
@@ -269,7 +266,6 @@ export {
     SESSION_READY_KIND,
     SESSION_RESTORE_KIND,
     SESSION_RESTORED_KIND,
-    SESSION_STATUS_CHANGED_KIND,
 } from "./session/lifecycle/index.ts";
 
 export type {

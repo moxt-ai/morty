@@ -15,7 +15,6 @@ import {
     decodeSessionPromptAcceptedEvent,
     decodeSessionReadyEvent,
     decodeSessionRestoredEvent,
-    decodeSessionStatusChangedEvent,
     decodeSessionsQueriedEvent,
     encodeNativeSessionRequest,
     encodeSessionCreateCommand,
@@ -37,7 +36,6 @@ import {
     SESSION_QUERIED_KIND,
     SESSION_READY_KIND,
     SESSION_RESTORED_KIND,
-    SESSION_STATUS_CHANGED_KIND,
     SessionPromptDisposition,
 } from "@morty-build/client/protocol";
 import { listen, port } from "@morty-build/relay-test-support/websocket";
@@ -163,11 +161,8 @@ test("Given a newly created native Session, When its first Turn resolves interac
                 target: sessionTarget,
             }),
         );
-        expect(decodeSessionStatusChangedEvent(await messages.nextKind(SESSION_STATUS_CHANGED_KIND))).toEqual({
-            kind: SESSION_STATUS_CHANGED_KIND,
-            target: sessionTarget,
-            status: { commandId: "interaction_turn", kind: "working" },
-        });
+        // The prompt is answered once the Session is executing it.
+        await messages.nextKind("session.prompt.accepted");
         const snapshot = async (requestId: string) => {
             socket.send(
                 encodeNativeSessionRequest({
@@ -270,11 +265,6 @@ test("Given a newly created native Session, When its first Turn resolves interac
             turn: { interaction: null },
         });
         await writeFile(join(stateDirectory, "agent", "resume-after-elicitation"), "");
-        expect(decodeSessionStatusChangedEvent(await messages.nextKind(SESSION_STATUS_CHANGED_KIND))).toEqual({
-            kind: SESSION_STATUS_CHANGED_KIND,
-            target: sessionTarget,
-            status: { kind: "idle" },
-        });
         await messages.nextKind("prompt.completed");
     } finally {
         cancellation.abort();
@@ -378,11 +368,7 @@ test("Given an Agent announced a tool call with its input, When it requests perm
             }),
         );
         // The Agent finishes the Turn only after it receives the permission response.
-        expect(decodeSessionStatusChangedEvent(await messages.nextKind(SESSION_STATUS_CHANGED_KIND))).toEqual({
-            kind: SESSION_STATUS_CHANGED_KIND,
-            target: sessionTarget,
-            status: { kind: "idle" },
-        });
+        await messages.nextKind("prompt.completed");
     } finally {
         cancellation.abort();
         await runtime;
@@ -485,11 +471,7 @@ test("Given an Agent announced a tool call and then sent a rawInput null update,
             }),
         );
         // The Agent finishes the Turn only after it receives the permission response.
-        expect(decodeSessionStatusChangedEvent(await messages.nextKind(SESSION_STATUS_CHANGED_KIND))).toEqual({
-            kind: SESSION_STATUS_CHANGED_KIND,
-            target: sessionTarget,
-            status: { kind: "idle" },
-        });
+        await messages.nextKind("prompt.completed");
     } finally {
         cancellation.abort();
         await runtime;
@@ -592,11 +574,7 @@ test("Given an Agent's first recorded form of a tool call is an update, When it 
             }),
         );
         // The Agent finishes the Turn only after it receives the permission response.
-        expect(decodeSessionStatusChangedEvent(await messages.nextKind(SESSION_STATUS_CHANGED_KIND))).toEqual({
-            kind: SESSION_STATUS_CHANGED_KIND,
-            target: sessionTarget,
-            status: { kind: "idle" },
-        });
+        await messages.nextKind("prompt.completed");
     } finally {
         cancellation.abort();
         await runtime;
@@ -918,9 +896,8 @@ test("Given a running turn and a queued prompt with a file, When an active-turn 
                 target: sessionTarget,
             }),
         );
-        expect(decodeSessionStatusChangedEvent(await messages.nextKind(SESSION_STATUS_CHANGED_KIND))).toMatchObject({
-            status: { commandId: "running_turn", kind: "working" },
-        });
+        // The prompt is answered once the Session is executing it.
+        await messages.nextKind("session.prompt.accepted");
         // A prompt with a file queues behind the running turn; a client needs the file to restore it for editing.
         const report = {
             byteLength: 17,

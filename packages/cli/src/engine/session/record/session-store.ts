@@ -90,7 +90,7 @@ export class SqliteSessionStore implements SessionStore {
     readonly events: SessionEventStore;
     readonly #table: AcpSessionTable;
 
-    constructor(table: AcpSessionTable, events: SessionEventStore = new MemorySessionEventStore()) {
+    constructor(table: AcpSessionTable, events: SessionEventStore) {
         this.events = events;
         this.#table = table;
     }

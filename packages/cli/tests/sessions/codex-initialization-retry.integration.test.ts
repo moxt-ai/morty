@@ -3,11 +3,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test, vi } from "vitest";
 import { harnessAdapters } from "../../src/engine/acp/adapter/registry.ts";
-import { AcpAgentDefinition } from "../../src/engine/acp/agent/agent-definition.ts";
 import { AcpContentExternalizer } from "../../src/engine/acp/content/content-externalizer.ts";
 import { NullSessionObserver } from "../../src/engine/session/api/session-api.ts";
 import { MemorySessionStore } from "../../src/engine/session/record/session-store.ts";
 import { systemTimer } from "../../src/engine/util/timer.ts";
+import { testAgentDefinition } from "../support/agent-definition.ts";
 import { SessionRuntimeFixture } from "../support/session-runtime.ts";
 import { UnretainedExternalContentStore } from "../support/unretained-external-content-store.ts";
 
@@ -20,7 +20,9 @@ test("Given Codex initialization fails once, When the user creates a conversatio
         observer: new NullSessionObserver(),
         store: new MemorySessionStore(),
         adapters: harnessAdapters,
-        onSessionStatusChanged: () => undefined,
+        onSessionClosed: () => undefined,
+        lastTurn: () => undefined,
+        settledTurns: () => [],
         contentExternalizer: new AcpContentExternalizer((target, content, signal) =>
             new UnretainedExternalContentStore().put({ ...content, target, signal }),
         ),
@@ -49,7 +51,7 @@ createInterface({ input: process.stdin }).on("line", line => {
 `,
             { mode: 0o700 },
         );
-        const agent = new AcpAgentDefinition("codex", "Codex", command, {});
+        const agent = testAgentDefinition("codex", "Codex", command, {});
         await expect(
             sessions.createNativeSession({ agent, cwd: directory, signal: AbortSignal.timeout(30_000) }),
         ).resolves.toEqual({ harness: "codex", sessionId: "recovered-thread" });

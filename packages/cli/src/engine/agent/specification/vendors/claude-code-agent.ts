@@ -3,7 +3,7 @@ import type { SessionCapabilities } from "@morty-build/client/protocol";
 import { createClaudeClient, initializeClaudeClient } from "../../../acp/adapter/claude/create-client.ts";
 import { waitForAgentOperation } from "../../../acp/connection/agent-operation.ts";
 import { normalizeAcpCapabilities } from "../../../acp/protocol/session-capabilities.ts";
-import { platformSupportFor } from "../../../util/platform/index.ts";
+import { hostPlatform } from "../../../util/platform/index.ts";
 import { type ResolvedExecutable, resolveExecutablePath } from "../../../util/process/executable.ts";
 import type { LocalAgentDiscoveryContext } from "../../discovery/agent-discovery-context.ts";
 import { AgentProbeError } from "../../discovery/agent-probe-error.ts";
@@ -65,11 +65,10 @@ export class ClaudeCodeAgentSpecification extends LocalAgentSpecification {
         context: LocalAgentDiscoveryContext,
     ): Promise<readonly ResolvedExecutable[]> => {
         context.signal.throwIfAborted();
-        const platform = context.platform ?? process.platform;
-        const paths = platformSupportFor(platform).claudeCodeExecutablePaths(context.environment);
+        const paths = hostPlatform.claudeCodeExecutablePaths(context.environment);
         const executables: ResolvedExecutable[] = [];
         for (const path of paths) {
-            const executable = await resolveExecutablePath(path, platform);
+            const executable = await resolveExecutablePath(path);
             context.signal.throwIfAborted();
             if (executable !== null) {
                 executables.push(executable);

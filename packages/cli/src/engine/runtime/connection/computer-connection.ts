@@ -10,8 +10,7 @@ export interface ComputerConnectionInput {
 export type ComputerConnectionActivation = "active" | "stopped";
 
 /** A saved pairing: the identity a Computer presents to the relay, and whether it should run. */
-export class VerifiedComputerConnection {
-    readonly kind = "verified";
+export class SavedComputerConnection {
     readonly activation: ComputerConnectionActivation;
     readonly computerId: string;
     /** Fences work from an earlier pairing, even when this computer is paired again with the same identity. */

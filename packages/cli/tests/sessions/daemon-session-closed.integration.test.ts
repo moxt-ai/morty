@@ -1,12 +1,11 @@
-import { sameNativeSession } from "@morty-build/client/native-session";
 import {
     decodeMessageKind,
     decodeSessionArchivedEvent,
     decodeSessionCloseNoticeEvent,
     decodeSessionConfigReadResult,
     decodeSessionOperationFailedEvent,
+    decodeSessionPromptAcceptedEvent,
     decodeSessionRenamedEvent,
-    decodeSessionStatusChangedEvent,
     decodeSessionsQueriedEvent,
     encodeServiceToDaemonMessage,
     encodeSessionPromptCommand,
@@ -20,6 +19,7 @@ import type { AgentConnectionFactory } from "../support/agents/agent-connection.
 import { ControlledReadinessSpecification } from "../support/agents/controlled-readiness-specification.ts";
 import { ControlledSessionAgent } from "../support/agents/controlled-session-agent.ts";
 import {
+    nextPromptSettlement,
     prepareNewRealSession,
     type RealDaemonPeer,
     withControlledDaemon as withRealDaemon,
@@ -75,11 +75,8 @@ async function nextFailure(peer: RealDaemonPeer, requestId: string): Promise<Ses
     for (;;) {
         const message = await peer.nextMessage();
         const kind = decodeMessageKind(message);
-        if (kind === "session.status.changed") {
-            const { status } = decodeSessionStatusChangedEvent(message);
-            if (status.kind === "working" && status.commandId === requestId) {
-                throw new Error("The prompt started instead of failing");
-            }
+        if (kind === "session.prompt.accepted" && decodeSessionPromptAcceptedEvent(message).requestId === requestId) {
+            throw new Error("The prompt was accepted instead of failing");
         }
         if (kind === "session.renamed" && decodeSessionRenamedEvent(message).requestId === requestId) {
             throw new Error("The rename succeeded instead of failing");
@@ -113,14 +110,7 @@ function sendPrompt(peer: RealDaemonPeer, sessionTarget: RealDaemonPeer["target"
 }
 
 async function prompt(peer: RealDaemonPeer, sessionTarget: RealDaemonPeer["target"], text: string): Promise<void> {
-    sendPrompt(peer, sessionTarget, text);
-    for (;;) {
-        const message = await nextMessageOfKind(peer, "session.status.changed");
-        const event = decodeSessionStatusChangedEvent(message);
-        if (sameNativeSession(event.target, sessionTarget) && event.status.kind === "idle") {
-            return;
-        }
-    }
+    await nextPromptSettlement(peer, sendPrompt(peer, sessionTarget, text));
 }
 
 function sendArchive(peer: RealDaemonPeer, sessionTarget: RealDaemonPeer["target"]): string {

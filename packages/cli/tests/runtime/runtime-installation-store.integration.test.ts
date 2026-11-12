@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
-import { VerifiedComputerConnection } from "../../src/engine/runtime/connection/computer-connection.ts";
+import { SavedComputerConnection } from "../../src/engine/runtime/connection/computer-connection.ts";
 import {
     RuntimeInstallationStore,
     type RuntimeInstallationStoreError,
@@ -69,10 +69,10 @@ describe("Computer installation storage", () => {
             );
             await rename(relocated, join(stateRoot, "installations", "build.morty.cli"));
             await expect(original.readConnection(saved.pairingGeneration, signal)).resolves.toEqual(saved);
-            await expect(original.removeConnection(connection.pairingGeneration, signal)).rejects.toMatchObject({
+            await expect(original.readConnection(connection.pairingGeneration, signal)).rejects.toMatchObject({
                 code: "connection_not_found",
             });
-            await expect(original.listConnections(signal)).resolves.toEqual([saved]);
+            await expect(original.currentConnection(signal)).resolves.toEqual(saved);
         } finally {
             await rm(stateRoot, { recursive: true, force: true });
         }
@@ -107,12 +107,11 @@ describe("Computer installation storage", () => {
             const resumed = await moxt.readConnection(moxtConnection.pairingGeneration, signal);
 
             expect(resumed.computerId).toBe(computerId);
-            expect(resumed).toBeInstanceOf(VerifiedComputerConnection);
-            if (!(resumed instanceof VerifiedComputerConnection)) {
+            expect(resumed).toBeInstanceOf(SavedComputerConnection);
+            if (!(resumed instanceof SavedComputerConnection)) {
                 throw new Error("Expected a verified Computer connection");
             }
             expect(resumed.computerId).toBe(computerId);
-            await expect(moxt.listConnections(signal)).resolves.toEqual([resumed]);
             await expect(moxt.currentConnection(signal)).resolves.toEqual(resumed);
             expect(morty.pairingPath).not.toContain("moxt-data");
             expect(moxt.pairingPath).toContain("moxt-data");

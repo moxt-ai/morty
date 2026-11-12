@@ -52,7 +52,6 @@ export function fakeAgentHarness(definition: FakeAgentHarnessDefinition, stateDi
         process.execPath,
         { MORTY_FAKE_ACP_STATE_DIRECTORY: nativeStorage },
         "1.0.0",
-        undefined,
         fakeAgentHarnessCapabilities(definition),
     );
 }

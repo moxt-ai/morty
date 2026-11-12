@@ -111,7 +111,6 @@ import {
     decodeSessionReadyEvent,
     decodeSessionRestoreCommand,
     decodeSessionRestoredEvent,
-    decodeSessionStatusChangedEvent,
     decodeSessionsListedEvent,
     decodeSessionsQueriedEvent,
     encodeSessionArchiveCommand,
@@ -126,7 +125,6 @@ import {
     encodeSessionReadyEvent,
     encodeSessionRestoreCommand,
     encodeSessionRestoredEvent,
-    encodeSessionStatusChangedEvent,
     encodeSessionsListedEvent,
     encodeSessionsQueriedEvent,
     SESSION_ARCHIVE_KIND,
@@ -143,7 +141,6 @@ import {
     SESSION_READY_KIND,
     SESSION_RESTORE_KIND,
     SESSION_RESTORED_KIND,
-    SESSION_STATUS_CHANGED_KIND,
 } from "../session/lifecycle/index.ts";
 import {
     decodeNativeSessionCancel,
@@ -497,11 +494,6 @@ const daemonToServiceSignatures = {
         SESSION_RESTORED_KIND,
         encodeSessionRestoredEvent,
         decodeSessionRestoredEvent,
-    ),
-    [SESSION_STATUS_CHANGED_KIND]: defineMessageSignature(
-        SESSION_STATUS_CHANGED_KIND,
-        encodeSessionStatusChangedEvent,
-        decodeSessionStatusChangedEvent,
     ),
     [NATIVE_SESSION_RESULT_KIND]: defineMessageSignature(
         NATIVE_SESSION_RESULT_KIND,

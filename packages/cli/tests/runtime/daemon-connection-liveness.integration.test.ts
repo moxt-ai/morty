@@ -28,8 +28,7 @@ import {
 } from "@morty-build/client/protocol";
 import { listen, port as readPort, sendText as writeServerTextFrame } from "@morty-build/relay-test-support/websocket";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { RuntimeAgentDependencies } from "../../src/engine/agent/runtime-agents.ts";
-import { createRuntimeConfig, RuntimeLocalContext } from "../../src/engine/runtime/config.ts";
+import { createRuntimeConfig, RuntimeAgentDependencies, RuntimeLocalContext } from "../../src/engine/runtime/config.ts";
 import { ComputerRelayRevokedError } from "../../src/engine/runtime/relay/computer-revocation.ts";
 import { SESSION_EVENT_BATCH_WINDOW_MILLISECONDS } from "../../src/engine/runtime/relay/session-event-publisher.ts";
 import { runRuntime } from "../../src/engine/runtime/run.ts";

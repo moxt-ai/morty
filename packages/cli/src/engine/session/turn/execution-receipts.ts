@@ -161,7 +161,6 @@ const storedOutcome = (stored: string): RestatedOutcome | undefined => {
  */
 export class ExecutionReceipts {
     readonly #ledger: CommandLedgerTable;
-    readonly #onCount: (count: number) => void;
     /**
      * The terminal events this process recorded with the Agent's own failure text. That text can quote user input, so
      * it never enters the ledger, which keeps the content-free form; clients of this process still read the original.
@@ -176,9 +175,8 @@ export class ExecutionReceipts {
     readonly #watchers = new Map<string, Set<(progress: CommandProgress) => void>>();
     #closing = false;
 
-    constructor(ledger: CommandLedgerTable, onCount: (count: number) => void = () => undefined) {
+    constructor(ledger: CommandLedgerTable) {
         this.#ledger = ledger;
-        this.#onCount = onCount;
     }
 
     readonly #withShutdownSettlement = (command: LedgerCommand): LedgerCommand => {
@@ -203,9 +201,6 @@ export class ExecutionReceipts {
             listener(progress);
         }
     };
-    readonly #publishCount = (): void => {
-        this.#onCount(this.#ledger.unsettled().filter((commandId) => !this.#shutdownSettlements.has(commandId)).length);
-    };
     /**
      * Settles an unsettled command with `settled`, whose stored outcome is `outcome`. `agentOutcome` is the outcome with
      * the Agent's text, when it differs.
@@ -226,7 +221,6 @@ export class ExecutionReceipts {
                 this.#agentOutcomes.delete(dropped);
             }
         }
-        this.#publishCount();
         this.#notify(commandId, "settled");
     };
 
@@ -585,7 +579,6 @@ export class ExecutionReceipts {
         } else {
             this.#ledger.admit(identity);
         }
-        this.#publishCount();
         return { attemptId, commandId, kind: "accepted" };
     };
 
