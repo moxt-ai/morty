@@ -13,5 +13,5 @@ const unauthenticated = () => {
 export const cloudRoutes = new Hono<{
     readonly Bindings: CloudBindings;
 }>()
-    .route("/", createComputerCreationRoutes({ services: { accounts: accountProvisioner } }))
+    .route("/v1", createComputerCreationRoutes({ services: { accounts: accountProvisioner } }))
     .all("/session", bodyLimit({ maxSize: 3 * 1_024 * 1_024 }), unauthenticated);

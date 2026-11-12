@@ -51,7 +51,7 @@ it("Given a Computer API with a 120-second deadline mounted beside Session route
                 },
             }).route(
                 "/",
-                new Hono().post("/morty/api/chat/computers/:computerId/agent-settings", (context) =>
+                new Hono().post("/morty/api/v1/computers/:computerId/agent-settings", (context) =>
                     api.fetch(context.req.raw),
                 ),
             );
@@ -77,7 +77,7 @@ it("Given a Computer API with a 120-second deadline mounted beside Session route
                         kind: "http.request",
                         requestId: "slow-settings",
                         method: "POST",
-                        path: `/morty/api/chat/computers/${owner.computerId}/agent-settings`,
+                        path: `/morty/api/v1/computers/${owner.computerId}/agent-settings`,
                         headers: [],
                         body: "{}",
                     }),

@@ -108,7 +108,7 @@ export class WorkerApiTransport {
     };
     readonly measureMortyLatency = async (parent: AbortSignal) => {
         const start = performance.now();
-        const response = await fetch(new URL("/morty/api/health", this.#origin), {
+        const response = await fetch(new URL("/morty/api/v1/health", this.#origin), {
             cache: "no-store",
             signal: AbortSignal.any([parent, this.#lifetime.signal, AbortSignal.timeout(10000)]),
         });

@@ -236,7 +236,7 @@ it("Given a browser bound to one computer, When it opens another Session or addr
         await transport.fetch(computerRequest("https://relay.example.test/first"));
         const events = await transport.openSessionLiveEvents(
             computerRequest(
-                "https://relay.example.test/morty/api/v1/computers/computer-1/harnesses/claude/sessions/session-2/events-v2",
+                "https://relay.example.test/morty/api/v1/computers/computer-1/harnesses/claude/sessions/session-2/events",
             ),
         );
         expect(connector.sockets).toHaveLength(1);
@@ -262,9 +262,7 @@ it("Given a quiet subscription with connection heartbeats, When minutes pass, Th
     vi.setSystemTime(new Date("2030-01-01T00:00:00Z"));
     const connector = new BrowserWebSocketConnector("", "responsive");
     const transport = new WsTransport({ connector });
-    const stream = await transport.openSessionLiveEvents(
-        computerRequest("https://relay.example.test/session/events-v2"),
-    );
+    const stream = await transport.openSessionLiveEvents(computerRequest("https://relay.example.test/session/events"));
     const reader = stream.getReader();
     try {
         await vi.advanceTimersByTimeAsync(180_000);
@@ -299,9 +297,7 @@ it("Given a transport whose peer stops answering heartbeats, When the ten-second
     vi.setSystemTime(new Date("2030-01-01T00:00:00Z"));
     const connector = new BrowserWebSocketConnector("", "silent");
     const transport = new WsTransport({ connector });
-    const stream = await transport.openSessionLiveEvents(
-        computerRequest("https://relay.example.test/session/events-v2"),
-    );
+    const stream = await transport.openSessionLiveEvents(computerRequest("https://relay.example.test/session/events"));
     const reader = stream.getReader();
     try {
         await vi.advanceTimersByTimeAsync(20_000);
@@ -354,7 +350,7 @@ it("Given a replacement WebSocket carries a live subscription, When the old sock
     }
     const events = await transport.openSessionLiveEvents(
         computerRequest(
-            "https://relay.example.test/morty/api/v1/computers/computer/harnesses/claude/sessions/session/events-v2",
+            "https://relay.example.test/morty/api/v1/computers/computer/harnesses/claude/sessions/session/events",
         ),
     );
     const subscriptionId = second.subscriptionIds[0];

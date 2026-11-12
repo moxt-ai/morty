@@ -49,7 +49,7 @@ async function computer() {
         );
     const management = (method: string, body?: object) =>
         ownerRequest(
-            new Request(`${origin}/computers/${computerId}/management/pairing`, {
+            new Request(`${origin}/v1/computers/${computerId}/pairing`, {
                 method,
                 headers: { authorization: `Bearer ${owner.token}`, "content-type": "application/json" },
                 ...(body === undefined ? {} : { body: JSON.stringify(body) }),
@@ -63,7 +63,7 @@ async function computer() {
             v.parse(pairingSchema, await responseJson(await create(key), 201)),
         status: async () => management("GET"),
         claim: async (pairing: Pairing, computerName = "Paired computer") =>
-            request(`/v1/pairings/${pairing.computerId}/redeem`, "POST", {
+            request(`/v1/computers/${pairing.computerId}/pairing/redeem`, "POST", {
                 pairingCode: pairing.pairingCode,
                 computerName,
                 workspaceName: "Computer workspace",
@@ -79,7 +79,7 @@ async function computer() {
         },
         list: async () => Response.json({ computers: await backend.computers(AbortSignal.timeout(10000)) }),
         publish: async (pairing: Pairing, token: string) =>
-            request(`/channels/${pairing.computerId}/catalog`, "PUT", { agents: [] }, token),
+            request(`/v1/computers/${pairing.computerId}/catalog`, "PUT", { agents: [] }, token),
         storage: async <T>(operation: (storage: DurableObjectStorage) => Promise<T> | T): Promise<T> =>
             runInDurableObject(stub, async (_instance, state) => operation(state.storage)),
         restart: async () => evictDurableObject(stub),

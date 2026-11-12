@@ -31,7 +31,7 @@ export function createComputerPairingRoutes(ctx: RelayProtocolRouteContext) {
         .onError(rethrowHonoError)
         .use("*", errorMiddleware)
         .post(
-            "/pairings/:computerId/redeem",
+            "/computers/:computerId/pairing/redeem",
             timeout,
             computerFromPath,
             pairingTimeoutMiddleware("Computer pairing redemption timed out"),

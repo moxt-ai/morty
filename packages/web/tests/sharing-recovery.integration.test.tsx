@@ -44,7 +44,7 @@ test("Given a sharing replacement committed before its reply was lost, When the 
         expect(getByRole(dialog, "combobox", { name: "Device access" }).textContent).toContain("1 hour");
         const redeem = (url: URL) =>
             app.transport.request(
-                new Request(new URL("/morty/api/identity/transfers/redeem", app.origin), {
+                new Request(new URL("/morty/api/v1/identity/transfers/redeem", app.origin), {
                     method: "POST",
                     headers: { "content-type": "application/json" },
                     body: JSON.stringify({ code: new URLSearchParams(url.hash.slice(1)).get("code") }),

@@ -91,7 +91,7 @@ export const identityCalls = Object.freeze({
         encodeIdentityCall({
             origin,
             computerId,
-            path: "identity/v1/other-browser-access",
+            path: "identity/other-browser-access",
             definition: {
                 method: "DELETE",
                 operation: "other-browser-access",
@@ -108,7 +108,7 @@ export const identityCalls = Object.freeze({
         encodeIdentityCall({
             origin,
             computerId,
-            path: `identity/v1/devices/${encodeURIComponent(deviceId)}`,
+            path: `identity/devices/${encodeURIComponent(deviceId)}`,
             definition: {
                 method: "DELETE",
                 operation: "end-device-access",
@@ -121,7 +121,7 @@ export const identityCalls = Object.freeze({
         encodeIdentityCall({
             origin,
             computerId,
-            path: "identity/v1/local-credential",
+            path: "identity/local-credential",
             definition: {
                 method: "DELETE",
                 operation: "local-credential",
@@ -134,7 +134,7 @@ export const identityCalls = Object.freeze({
         encodeIdentityCall({
             origin,
             computerId,
-            path: "identity/v1/browser-access",
+            path: "identity/browser-access",
             definition: {
                 method: "DELETE",
                 operation: "browser-access",

@@ -189,7 +189,7 @@ export function createAuthenticationRoutes(ctx: ManagementRouteContext) {
                 }
             },
         )
-        .delete("/identity/v1/other-browser-access", async (context) => {
+        .delete("/identity/other-browser-access", async (context) => {
             const application = await applicationForRequest(ctx, context);
             const result = await application.services.authentication.endOtherBrowserAccess(
                 readBearerToken(context.req.raw),
@@ -208,7 +208,7 @@ export function createAuthenticationRoutes(ctx: ManagementRouteContext) {
                     );
             }
         })
-        .delete("/identity/v1/devices/:deviceId", async (context) => {
+        .delete("/identity/devices/:deviceId", async (context) => {
             const application = await applicationForRequest(ctx, context);
             const result = await application.services.authentication.endDeviceAccess(
                 readBearerToken(context.req.raw),

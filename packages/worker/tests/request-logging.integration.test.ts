@@ -54,7 +54,7 @@ afterAll(async () => runtime.dispose());
 
 test("Given a request whose credential field is malformed, When the Worker logs the rejected request, Then the log names the field but never its value", async () => {
     const canary = "CREDENTIAL-CANARY-not-a-valid-creation-key";
-    const response = await runtime.dispatchFetch("https://chat.test/morty/api/computers", {
+    const response = await runtime.dispatchFetch("https://chat.test/morty/api/v1/computers", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ creationKey: canary }),

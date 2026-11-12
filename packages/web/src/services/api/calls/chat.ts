@@ -10,7 +10,7 @@ import { type ComputerCallEncoding, encodeComputerCall } from "./encode-call.ts"
 function encodeChatCall(input: ComputerCallEncoding): ApiRequest {
     return encodeComputerCall({
         ...input,
-        path: `chat/computers/${encodeURIComponent(input.computerId)}/${input.path}`,
+        path: `computers/${encodeURIComponent(input.computerId)}/${input.path}`,
     });
 }
 
@@ -24,7 +24,7 @@ export const chatCalls = Object.freeze({
         encodeChatCall({
             origin,
             computerId,
-            path: "daemon-diagnostics",
+            path: "diagnostics/daemon",
             definition: {
                 method: "POST",
                 operation: "daemon-diagnostics",
@@ -37,7 +37,7 @@ export const chatCalls = Object.freeze({
         encodeChatCall({
             origin,
             computerId,
-            path: "network-diagnostic",
+            path: "diagnostics/network",
             definition: {
                 method: "POST",
                 operation: "network-diagnostic",
@@ -61,7 +61,7 @@ export const chatCalls = Object.freeze({
         encodeChatCall({
             origin,
             computerId,
-            path: "access",
+            path: "managed-sessions/open",
             definition: {
                 method: "POST",
                 operation: "access",
@@ -93,7 +93,7 @@ export const chatCalls = Object.freeze({
         encodeChatCall({
             origin,
             computerId,
-            path: "managed-session/archive",
+            path: "managed-sessions/archive",
             definition: {
                 method: "POST",
                 operation: "managed-session/archive",
@@ -111,7 +111,7 @@ export const chatCalls = Object.freeze({
         encodeChatCall({
             origin,
             computerId,
-            path: "managed-session",
+            path: "managed-sessions/resolve",
             definition: {
                 method: "POST",
                 operation: "managed-session",
@@ -130,7 +130,7 @@ export const chatCalls = Object.freeze({
         encodeChatCall({
             origin,
             computerId,
-            path: "continue-native-session",
+            path: "native-sessions/continue",
             definition: {
                 method: "POST",
                 operation: "continue-native-session",
@@ -198,7 +198,7 @@ export const chatCalls = Object.freeze({
         encodeChatCall({
             origin,
             computerId,
-            path: `native-session-forks/${encodeURIComponent(operationId)}`,
+            path: `native-sessions/forks/${encodeURIComponent(operationId)}`,
             definition: {
                 method: "POST",
                 operation: "native-session-fork",
@@ -237,7 +237,7 @@ export const chatCalls = Object.freeze({
         encodeChatCall({
             origin,
             computerId,
-            path: `native-session/${encodeURIComponent(sessionId)}/import`,
+            path: `native-sessions/${encodeURIComponent(sessionId)}/import`,
             definition: {
                 method: "POST",
                 operation: "native-session-import",
@@ -256,7 +256,7 @@ export const chatCalls = Object.freeze({
         encodeChatCall({
             origin,
             computerId,
-            path: `native-session/${encodeURIComponent(sessionId)}`,
+            path: `native-sessions/${encodeURIComponent(sessionId)}`,
             definition: {
                 method: "POST",
                 operation: "native-session",
@@ -274,7 +274,7 @@ export const chatCalls = Object.freeze({
         encodeChatCall({
             origin,
             computerId,
-            path: "session-access",
+            path: "native-sessions/access",
             definition: {
                 method: "POST",
                 operation: "session-access",

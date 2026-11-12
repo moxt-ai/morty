@@ -129,7 +129,7 @@ test("Given a stored identity, When the user shares access with an AI agent, The
     expect(guide.status).toBe(200);
     expect(await guide.text()).toContain(`${app.origin}/agent-api/openapi.json`);
     const redeemed = await app.transport.request(
-        new Request(new URL("/morty/api/identity/transfers/redeem", app.origin), {
+        new Request(new URL("/morty/api/v1/identity/transfers/redeem", app.origin), {
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify({
@@ -466,7 +466,7 @@ test("Given an end confirmation for access revoked elsewhere, When the API rejec
     });
     const signal = new AbortController().signal;
     const revoked = await app.transport.request(
-        new Request(`${app.origin}/morty/api/computers/${app.identity.computerId}/identity/v1/local-credential`, {
+        new Request(`${app.origin}/morty/api/v1/computers/${app.identity.computerId}/identity/local-credential`, {
             method: "DELETE",
             headers: { authorization: `Bearer ${await app.identity.getToken(signal)}` },
             signal,
@@ -654,14 +654,14 @@ test("Given other browsers joined this computer, When the user disconnects one f
     const app = await joined.reload();
     const session = (token: string) =>
         app.transport.request(
-            new Request(`${app.origin}/morty/api/computers/${app.identity.computerId}/session`, {
+            new Request(`${app.origin}/morty/api/v1/computers/${app.identity.computerId}/session`, {
                 headers: { authorization: `Bearer ${token}` },
             }),
         );
     const join = async (device: string) => {
         const code = new URL(await app.createTransferUrl()).hash.slice("#code=".length);
         const redeemed = await app.transport.request(
-            new Request(`${app.origin}/morty/api/identity/transfers/redeem`, {
+            new Request(`${app.origin}/morty/api/v1/identity/transfers/redeem`, {
                 method: "POST",
                 headers: { "content-type": "application/json" },
                 body: JSON.stringify({ code, device }),
@@ -720,7 +720,7 @@ test("Given a browser that acknowledged a new device, When another device joins 
     const join = async (page: typeof joined, device: string) => {
         const code = new URL(await page.createTransferUrl()).hash.slice("#code=".length);
         const redeemed = await page.transport.request(
-            new Request(`${page.origin}/morty/api/identity/transfers/redeem`, {
+            new Request(`${page.origin}/morty/api/v1/identity/transfers/redeem`, {
                 method: "POST",
                 headers: { "content-type": "application/json" },
                 body: JSON.stringify({ code, device }),
@@ -754,7 +754,7 @@ test("Given a new device and this browser's access in the sidebar, When the user
     await joined.waitForView(() => expect(new URL(window.location.href).searchParams.get("identity")).not.toBeNull());
     const code = new URL(await joined.createTransferUrl()).hash.slice("#code=".length);
     const redeemed = await joined.transport.request(
-        new Request(`${joined.origin}/morty/api/identity/transfers/redeem`, {
+        new Request(`${joined.origin}/morty/api/v1/identity/transfers/redeem`, {
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify({ code, device: "iPhone · Safari" }),
@@ -805,7 +805,7 @@ test("Given this browser already dismissed its access notice, When a new device 
     centralLocalStorage.write(linkedDevicesSeenEntry(joined.identity.computerId), new Date(0).toISOString());
     const code = new URL(await app.createTransferUrl()).hash.slice("#code=".length);
     const redeemed = await app.transport.request(
-        new Request(`${app.origin}/morty/api/identity/transfers/redeem`, {
+        new Request(`${app.origin}/morty/api/v1/identity/transfers/redeem`, {
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify({ code, device: "iPhone · Safari" }),

@@ -69,13 +69,13 @@ async function request(path: string, status: number, token?: string, body?: obje
 
 const owner = v.parse(
     v.object({ computerToken: v.string(), computerId: v.string() }),
-    await request("/morty/api/computers", 201, undefined, {
+    await request("/morty/api/v1/computers", 201, undefined, {
         creationKey: randomBytes(32).toString("base64url"),
     }),
 );
 const pairing = v.parse(
     v.object({ pairingCode: v.string() }),
-    await request(`/morty/api/computers/${owner.computerId}/management/pairing`, 201, owner.computerToken, {
+    await request(`/morty/api/v1/computers/${owner.computerId}/pairing`, 201, owner.computerToken, {
         idempotencyKey: `verification-${randomBytes(16).toString("hex")}`,
     }),
 );
@@ -83,7 +83,7 @@ const behavior = { harness: "codex", agentName: "Controlled verification Agent",
 const harness = createMortyFakeDaemon(behavior);
 const claim = v.parse(
     v.object({ computerCredential: v.string() }),
-    await request(`/morty/api/v1/pairings/${owner.computerId}/redeem`, 200, undefined, {
+    await request(`/morty/api/v1/computers/${owner.computerId}/pairing/redeem`, 200, undefined, {
         pairingCode: pairing.pairingCode,
         computerName: "Deployment verification",
         workspaceName: "Isolated verification",
@@ -99,11 +99,11 @@ await using _runtime = await connectControlledAgentRuntime({
         credentials: memoryComputerCredentials(claim.computerCredential),
     },
 });
-const chat = `/morty/api/chat/computers/${owner.computerId}`;
+const chat = `/morty/api/v1/computers/${owner.computerId}`;
 await request(`${chat}/setup`, 202, owner.computerToken, { harness: "codex" });
 const access = v.parse(
     v.object({ credential: v.string(), target: v.object({ harness: v.string(), sessionId: v.string() }) }),
-    await request(`${chat}/access`, 200, owner.computerToken, {
+    await request(`${chat}/managed-sessions/open`, 200, owner.computerToken, {
         harness: "codex",
         conversationKey: `verification-${randomBytes(16).toString("hex")}`,
         workspaceRef: ".",
@@ -125,13 +125,13 @@ const readConfiguration = sessionEndpoints.readConfiguration({ computerId: owner
 await requestSession(readConfiguration, 200, access.credential);
 await requestSession(readConfiguration, 401, `${signed}.${Buffer.alloc(32).toString("base64url")}`);
 const successor = `morty_computer_v1_${randomBytes(32).toString("base64url")}`;
-await request(`/morty/api/computers/${owner.computerId}/identity/revoke-all-access`, 200, owner.computerToken, {
+await request(`/morty/api/v1/computers/${owner.computerId}/identity/revoke-all-access`, 200, owner.computerToken, {
     successor,
 });
 await requestSession(readConfiguration, 401, access.credential);
 const renewed = v.parse(
     v.object({ credential: v.string() }),
-    await request(`${chat}/session-access`, 200, successor, access.target),
+    await request(`${chat}/native-sessions/access`, 200, successor, access.target),
 );
 await requestSession(readConfiguration, 200, renewed.credential);
 await writeFile(

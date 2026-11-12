@@ -7,7 +7,6 @@ import {
 } from "../../contracts/websocket-http-dispatch.ts";
 import { errorHandler } from "../../http/error-middleware.ts";
 import { RequestDeadline } from "../../http/request-deadline.ts";
-import { createChatApplication } from "../components/chat/http/index.ts";
 import { createTransferRedemptionRoutes } from "../components/management/http/authentication-routes.ts";
 import { createManagementApplication } from "../components/management/http/index.ts";
 import type { ManagementHttpEnvironment } from "../components/management/http/management-http-environment.ts";
@@ -37,9 +36,8 @@ export function createComputerHttpApplication(ctx: ComputerRouteContext): (reque
     const management = managementRouteContext(ctx);
     const http = new Hono<ManagementHttpEnvironment>()
         .onError(errorHandler)
-        .route("/morty/api/chat/computers/:computerId", createChatApplication(management))
-        .route("/morty/api/computers/:computerId", createManagementApplication(management))
-        .route("/morty/api", createTransferRedemptionRoutes(management))
+        .route("/morty/api/v1/computers/:computerId", createManagementApplication(management))
+        .route("/morty/api/v1", createTransferRedemptionRoutes(management))
         .notFound(() =>
             Response.json(
                 { error: { code: "not_found", message: "The requested Morty resource does not exist" } },
@@ -69,22 +67,17 @@ export function createComputerWebSocketApplication(ctx: ComputerRouteContext): W
         await next();
         return;
     };
-    const chat = new Hono<WebSocketApplicationEnvironment>()
-        // CLI setup remains HTTP-only, including its established transport rejection.
-        .all("/setup", () => {
+    const management = new Hono<WebSocketApplicationEnvironment>()
+        // CLI/Runtime and private endpoints are not browser Computer operations.
+        .on("ALL", ["/setup", "/catalog", "/pairing/redeem", "/daemon/*", "/transport", "/harnesses/*"], () => {
             throw new WebSocketDispatchError();
         })
-        .use("*", prepareApplicationRequest)
-        .route("/", createChatApplication(managementContext));
-    const management = new Hono<WebSocketApplicationEnvironment>()
         .use("*", prepareApplicationRequest)
         .route("/", createManagementApplication(managementContext));
     const websocket = new Hono<WebSocketApplicationEnvironment>()
         .onError((cause) => {
             throw cause;
         })
-        .route("/morty/api/chat/computers/:computerId", chat)
-        .route("/morty/api/computers/:computerId", management)
         .route(
             "/",
             createSessionWebSocketRoutes({
@@ -92,6 +85,7 @@ export function createComputerWebSocketApplication(ctx: ComputerRouteContext): W
                 services: { forComputer: ctx.services.sessions },
             }),
         )
+        .route("/morty/api/v1/computers/:computerId", management)
         .notFound(() => {
             throw new WebSocketDispatchError();
         });
