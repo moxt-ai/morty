@@ -51,7 +51,7 @@
         "@types/ws": "^8.18.2",
         "commander": "15.0.0",
         "drizzle-kit": "1.0.0-rc.4",
-        "drizzle-orm": "1.0.0-rc.4",
+        "drizzle-orm": "1.0.0-rc.5",
         "esbuild": "catalog:",
         "semver": "^7.8.6",
         "valibot": "catalog:",
