@@ -1,4 +1,5 @@
-import { Hono } from "hono";
+import { Hono, type MiddlewareHandler } from "hono";
+import { bodyLimit } from "hono/body-limit";
 import * as v from "valibot";
 import {
     credentialRevocationPaths,
@@ -10,8 +11,11 @@ import { clientLocationHeader, decodeClientLocation } from "../../../../contract
 import { relayIdentifier } from "../../../../contracts/computer-management.ts";
 import { ManagementError } from "../../../../contracts/management-error.ts";
 import { bodyParser } from "../../../../http/body-parser.ts";
+import { computerFromTransfer } from "../../../../http/computer-target.ts";
 import { json } from "../../../../http/json.ts";
 import { RequestDeadline } from "../../../../http/request-deadline.ts";
+import { requestTimeoutMiddleware } from "../../../../middleware/request-timeout-middleware.ts";
+import { requestHeaders } from "../../../middleware/request-headers.ts";
 import { credentialRejected, localIdentityRequired } from "./authenticated-session.ts";
 import type { ManagementHttpEnvironment } from "./management-http-environment.ts";
 
@@ -183,31 +187,6 @@ export function createAuthenticationRoutes() {
             );
         })
         .post(
-            "/identity/transfers/redeem",
-            bodyParser<ManagementHttpEnvironment, typeof transferInput>(transferInput),
-            async (context) => {
-                const input = context.req.valid("json");
-                const identity = await context.var.application.services.management.redeemTransfer(
-                    input.code,
-                    input.replaces ?? null,
-                    {
-                        label: input.device ?? null,
-                        location: decodeClientLocation(context.req.raw.headers.get(clientLocationHeader)),
-                    },
-                    input.redemptionKey ?? null,
-                    context.req.raw.signal,
-                );
-                if (identity === null) {
-                    throw new ManagementError(
-                        "TRANSFER_UNAVAILABLE",
-                        "This link was already used, has expired, or was revoked.",
-                        410,
-                    );
-                }
-                return json(identity);
-            },
-        )
-        .post(
             "/identity/revoke-all-access",
             bodyParser<ManagementHttpEnvironment, typeof revokeAllAccessInput>(revokeAllAccessInput),
             async (context) => {
@@ -299,6 +278,39 @@ export function createAuthenticationRoutes() {
                 ),
             );
         });
+}
+
+export function createTransferRedemptionRoutes(initialize: MiddlewareHandler<ManagementHttpEnvironment>) {
+    return new Hono<ManagementHttpEnvironment>().post(
+        "/identity/transfers/redeem",
+        requestTimeoutMiddleware<ManagementHttpEnvironment>(30_000),
+        computerFromTransfer,
+        bodyLimit({ maxSize: 3 * 1_024 * 1_024 }),
+        initialize,
+        requestHeaders,
+        bodyParser<ManagementHttpEnvironment, typeof transferInput>(transferInput),
+        async (context) => {
+            const input = context.req.valid("json");
+            const identity = await context.var.application.services.management.redeemTransfer(
+                input.code,
+                input.replaces ?? null,
+                {
+                    label: input.device ?? null,
+                    location: decodeClientLocation(context.req.raw.headers.get(clientLocationHeader)),
+                },
+                input.redemptionKey ?? null,
+                context.req.raw.signal,
+            );
+            if (identity === null) {
+                throw new ManagementError(
+                    "TRANSFER_UNAVAILABLE",
+                    "This link was already used, has expired, or was revoked.",
+                    410,
+                );
+            }
+            return json(identity);
+        },
+    );
 }
 
 // Deletion answers 204; a credential that no longer authenticates answers 401, so a retry after a lost reply is safe.

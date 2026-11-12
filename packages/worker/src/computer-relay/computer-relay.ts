@@ -3,17 +3,10 @@ import { COMPUTER_HEARTBEAT_ACK_MESSAGE, COMPUTER_HEARTBEAT_MESSAGE } from "@mor
 import { Hono, type MiddlewareHandler } from "hono";
 import { decodeComputerPlacement } from "../contracts/computer-id.ts";
 import { ComputerManagementError } from "../contracts/computer-management.ts";
-import { COMPUTER_INTERNAL_PREFIX } from "../contracts/computer-relay-http.ts";
 import { relayAuthenticationFromEnvironment } from "../contracts/relay-authentication-environment.ts";
 import type { ConfiguredRelayBindings } from "../contracts/relay-bindings.ts";
-import {
-    type ComputerTargetEnvironment,
-    computerFromPath,
-    computerFromRuntimeCredential,
-} from "../http/computer-target.ts";
 import { logger } from "../infra/logger.ts";
-import { errorMiddleware, relayErrorHandler } from "../middleware/error-middleware.ts";
-import { requestTimeoutMiddleware } from "../middleware/request-timeout-middleware.ts";
+import { relayErrorHandler } from "../middleware/error-middleware.ts";
 import { ComputerBackendService } from "./components/computer/service/computer-backend-service.ts";
 import { ComputerInternalService } from "./components/management/service/computer-internal-service.ts";
 import type { ComputerManagementStore } from "./components/management/storage/computer-management-store.ts";
@@ -34,10 +27,7 @@ import { DurableObjectDatabase } from "./infra/durable-object-database.ts";
 const REAUTHORIZATION_INTERVAL_MILLISECONDS = 60_000;
 
 type Store = ComputerManagementStore;
-type ComputerHttpEnvironment = ComputerRouteHttpEnvironment &
-    ComputerTargetEnvironment & {
-        readonly Bindings: ConfiguredRelayBindings;
-    };
+type ComputerHttpEnvironment = ComputerRouteHttpEnvironment;
 
 /**
  * Owns one computer's storage. Requests routed to the computer run here against that storage, and every other
@@ -102,24 +92,7 @@ export class ComputerRelay extends DurableObject<ConfiguredRelayBindings> {
         };
         return new Hono<ComputerHttpEnvironment>()
             .onError(relayErrorHandler)
-            .use(
-                `${COMPUTER_INTERNAL_PREFIX}/:computerId/*`,
-                errorMiddleware,
-                requestTimeoutMiddleware<ComputerHttpEnvironment>(30_000),
-                computerFromPath,
-                initializeInternal,
-            )
-            .use("/morty/api/*", errorMiddleware, requestTimeoutMiddleware<ComputerHttpEnvironment>(30_000))
-            .use("/morty/api/v1/pairings/:computerId/redeem", computerFromPath, initialize)
-            .use("/morty/api/channels/:computerId/catalog", computerFromPath, initialize)
-            .use("/morty/api/v1/computers/connect", computerFromRuntimeCredential, initialize)
-            .use("/morty/api/v1/computers/:computerId/transport", computerFromPath, initialize)
-            .use(
-                "/morty/api/v1/computers/:computerId/harnesses/:harness/sessions/:sessionId/files/content",
-                computerFromPath,
-                initialize,
-            )
-            .route("/", createComputerHttpRoutes(ctx))
+            .route("/", createComputerHttpRoutes(ctx, initialize, initializeInternal))
             .notFound(() =>
                 Response.json(
                     { error: { code: "not_found", message: "The requested Morty resource does not exist" } },

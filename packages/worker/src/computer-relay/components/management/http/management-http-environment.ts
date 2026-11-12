@@ -6,5 +6,8 @@ import type { RequestHeaders } from "../../../middleware/request-headers.ts";
 export type ManagementHttpEnvironment = {
     readonly Bindings: CloudBindings;
     readonly Variables: RequestHeaders &
-        ComputerTargetEnvironment["Variables"] & { readonly application: ApplicationContext };
+        ComputerTargetEnvironment["Variables"] & {
+            readonly application: ApplicationContext;
+            readonly signal: AbortSignal;
+        };
 };

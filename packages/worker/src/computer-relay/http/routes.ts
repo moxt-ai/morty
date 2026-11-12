@@ -7,12 +7,15 @@ import { COMPUTER_INTERNAL_PREFIX } from "../../contracts/computer-relay-http.ts
 import { ManagementError } from "../../contracts/management-error.ts";
 import { validateIdentifier } from "../../contracts/relay/pairing.ts";
 import { readJsonBody } from "../../http/body-parser.ts";
-import { computerFromPath, computerFromTransfer } from "../../http/computer-target.ts";
+import { computerFromPath, computerFromRuntimeCredential } from "../../http/computer-target.ts";
 import { errorHandler } from "../../http/error-middleware.ts";
 import { json } from "../../http/json.ts";
 import { RequestDeadline } from "../../http/request-deadline.ts";
 import { createBrowserCors } from "../../middleware/browser-cors.ts";
+import { errorMiddleware } from "../../middleware/error-middleware.ts";
+import { requestTimeoutMiddleware } from "../../middleware/request-timeout-middleware.ts";
 import { createChatApplication } from "../components/chat/http/index.ts";
+import { createTransferRedemptionRoutes } from "../components/management/http/authentication-routes.ts";
 import { createManagementApplication } from "../components/management/http/index.ts";
 import type { ManagementHttpEnvironment } from "../components/management/http/management-http-environment.ts";
 import { createRelayProtocolRoutes } from "../components/management/http/protocol-routes.ts";
@@ -26,73 +29,125 @@ import type { ComputerRouteContext } from "../composition/computer-route-context
 import type { ComputerRouteHttpEnvironment } from "./environment.ts";
 
 /** ComputerRelay HTTP endpoints and connection upgrades. Session commands stay inside the WS dispatchers. */
-export function createComputerHttpRoutes(ctx: ComputerRouteContext) {
+export function createComputerHttpRoutes(
+    ctx: ComputerRouteContext,
+    initialize: MiddlewareHandler<ComputerRouteHttpEnvironment>,
+    initializeInternal: MiddlewareHandler<ComputerRouteHttpEnvironment>,
+) {
     const filePath = `${MORTY_API_PREFIX}/v1/computers/:computerId/harnesses/:harness/sessions/:sessionId/files/content`;
+    const timeout = requestTimeoutMiddleware<ComputerRouteHttpEnvironment>(30_000);
+    const sizeLimit = bodyLimit({ maxSize: 3 * 1_024 * 1_024 });
+    const cors = createBrowserCors(["GET"], ["authorization"]);
     return new Hono<ComputerRouteHttpEnvironment>()
-        .use(`${COMPUTER_INTERNAL_PREFIX}/*`, bodyLimit({ maxSize: 3 * 1_024 * 1_024 }))
-        .get(`${COMPUTER_INTERNAL_PREFIX}/:computerId/account`, async (context) =>
-            context.json(await context.var.computerInternal.readAccount(context.req.raw.signal)),
+        .use("*", errorMiddleware)
+        .get(
+            `${COMPUTER_INTERNAL_PREFIX}/:computerId/account`,
+            timeout,
+            computerFromPath,
+            initializeInternal,
+            sizeLimit,
+            async (context) => context.json(await context.var.computerInternal.readAccount(context.req.raw.signal)),
         )
-        .post(`${COMPUTER_INTERNAL_PREFIX}/:computerId/account`, async (context) =>
-            context.json(
-                await context.var.computerInternal.createAccount(
+        .post(
+            `${COMPUTER_INTERNAL_PREFIX}/:computerId/account`,
+            timeout,
+            computerFromPath,
+            initializeInternal,
+            sizeLimit,
+            async (context) =>
+                context.json(
+                    await context.var.computerInternal.createAccount(
+                        await readJsonBody(context.req.raw),
+                        context.req.raw.signal,
+                    ),
+                ),
+        )
+        .get(
+            `${COMPUTER_INTERNAL_PREFIX}/:computerId/active-generation`,
+            timeout,
+            computerFromPath,
+            initializeInternal,
+            sizeLimit,
+            async (context) =>
+                context.json({
+                    generation: await context.var.computerInternal.readActiveGeneration(context.req.raw.signal),
+                }),
+        )
+        .post(
+            `${COMPUTER_INTERNAL_PREFIX}/:computerId/access-check`,
+            timeout,
+            computerFromPath,
+            initializeInternal,
+            sizeLimit,
+            async (context) =>
+                context.json({
+                    holdsAccess: await context.var.computerInternal.holdsAccess(
+                        await readJsonBody(context.req.raw),
+                        context.req.raw.signal,
+                    ),
+                }),
+        )
+        .post(
+            `${COMPUTER_INTERNAL_PREFIX}/:computerId/audit-events`,
+            timeout,
+            computerFromPath,
+            initializeInternal,
+            sizeLimit,
+            async (context) => {
+                await context.var.computerInternal.recordAudit(
                     await readJsonBody(context.req.raw),
                     context.req.raw.signal,
-                ),
+                );
+                return new Response(null, { status: 204 });
+            },
+        )
+        .route(
+            "/",
+            createRelayProtocolRoutes(
+                [timeout, computerFromPath, initialize],
+                [timeout, computerFromRuntimeCredential, initialize],
             ),
         )
-        .get(`${COMPUTER_INTERNAL_PREFIX}/:computerId/active-generation`, async (context) =>
-            context.json({
-                generation: await context.var.computerInternal.readActiveGeneration(context.req.raw.signal),
-            }),
-        )
-        .post(`${COMPUTER_INTERNAL_PREFIX}/:computerId/access-check`, async (context) =>
-            context.json({
-                holdsAccess: await context.var.computerInternal.holdsAccess(
-                    await readJsonBody(context.req.raw),
-                    context.req.raw.signal,
-                ),
-            }),
-        )
-        .post(`${COMPUTER_INTERNAL_PREFIX}/:computerId/audit-events`, async (context) => {
-            await context.var.computerInternal.recordAudit(await readJsonBody(context.req.raw), context.req.raw.signal);
-            return new Response(null, { status: 204 });
-        })
-        .route("/", createRelayProtocolRoutes())
         .post("/__computer/bootstrap", async (context) => {
             using deadline = new RequestDeadline(context.req.raw.signal, 45_000);
             const input: unknown = await context.req.json();
             return json(await ctx.services.browser.bootstrap(input, ctx.bindings, deadline.signal), 201);
         })
-        .get(`${MORTY_API_PREFIX}/v1/computers/:computerId/transport`, (context) => {
-            const computerId = context.req.param("computerId");
-            const sessionAccess = context.var.sessionAccess;
-            const dispatchBrowserMessage = createBrowserWebSocketRoutes({
-                computerId,
-                services: { sessions: sessionAccess, operations: context.var.sessionOperations },
-            });
-            return acceptWebSocketHttpTransport({
-                request: context.req.raw,
-                dispatch: async (operation) => {
-                    const response = await dispatchBrowserMessage(operation);
-                    if (response.status === 101) {
-                        await ctx.utilities.connectionOpened();
-                    }
-                    return response;
-                },
-                uploads: ctx.resources.uploads,
-                authorizeUpload: async (operation) => {
-                    const authorized = await authorizeSessionContentUpload(operation, sessionAccess);
-                    return authorized instanceof Response ? authorized : new Response(null, { status: 204 });
-                },
-                validateTarget: (operation) => {
-                    const target = computerRequestTarget(operation);
-                    return target?.kind === "operation" && target.computerId === computerId;
-                },
-            });
-        })
-        .use(filePath, createBrowserCors(["GET"], ["authorization"]))
-        .get(filePath, sessionAccessTargetMiddleware, async (context) => {
+        .get(
+            `${MORTY_API_PREFIX}/v1/computers/:computerId/transport`,
+            timeout,
+            computerFromPath,
+            initialize,
+            (context) => {
+                const computerId = context.req.param("computerId");
+                const sessionAccess = context.var.sessionAccess;
+                const dispatchBrowserMessage = createBrowserWebSocketRoutes({
+                    computerId,
+                    services: { sessions: sessionAccess, operations: context.var.sessionOperations },
+                });
+                return acceptWebSocketHttpTransport({
+                    request: context.req.raw,
+                    dispatch: async (operation) => {
+                        const response = await dispatchBrowserMessage(operation);
+                        if (response.status === 101) {
+                            await ctx.utilities.connectionOpened();
+                        }
+                        return response;
+                    },
+                    uploads: ctx.resources.uploads,
+                    authorizeUpload: async (operation) => {
+                        const authorized = await authorizeSessionContentUpload(operation, sessionAccess);
+                        return authorized instanceof Response ? authorized : new Response(null, { status: 204 });
+                    },
+                    validateTarget: (operation) => {
+                        const target = computerRequestTarget(operation);
+                        return target?.kind === "operation" && target.computerId === computerId;
+                    },
+                });
+            },
+        )
+        .options(filePath, timeout, computerFromPath, initialize, cors)
+        .get(filePath, timeout, computerFromPath, initialize, cors, sessionAccessTargetMiddleware, async (context) => {
             const credential = (context.req.header("authorization") ?? "").match(/^Bearer ([^\s]+)$/u)?.[1];
             if (credential === undefined) {
                 return context.json(
@@ -130,12 +185,6 @@ export function createComputerHttpRoutes(ctx: ComputerRouteContext) {
                 context.req.raw.signal,
             );
         })
-        .all("/morty/api/v1/computers/:computerId/harnesses/*", () =>
-            Response.json(
-                { error: { code: "not_found", message: "The requested Morty resource does not exist" } },
-                { status: 404 },
-            ),
-        )
         .route("/", createApplicationRoutes(ctx));
 }
 
@@ -146,16 +195,13 @@ function createApplicationRoutes(ctx: ComputerRouteContext) {
         context.set("application", await ctx.services.browser.forComputer(computerId, ctx.bindings, deadline.signal));
         await next();
     };
-    const sizeLimit = bodyLimit({ maxSize: 3 * 1_024 * 1_024 });
+    const timeout = requestTimeoutMiddleware<ManagementHttpEnvironment>(30_000);
     return new Hono<ManagementHttpEnvironment>()
         .onError(errorHandler<ManagementHttpEnvironment>(() => logger))
-        .post("/morty/api/computers/:computerId/identity/transfers/redeem", () => {
+        .post("/morty/api/computers/:computerId/identity/transfers/redeem", timeout, () => {
             throw new ManagementError("NOT_FOUND", "Not found.", 404);
         })
-        .use("/morty/api/computers/:computerId/*", computerFromPath, sizeLimit, initialize)
-        .use("/morty/api/chat/computers/:computerId/*", computerFromPath, sizeLimit, initialize)
-        .use("/morty/api/identity/transfers/redeem", computerFromTransfer, sizeLimit, initialize)
-        .route("/morty/api/chat/computers/:computerId", createChatApplication())
-        .route("/morty/api/computers/:computerId", createManagementApplication())
-        .route("/morty/api", createManagementApplication());
+        .route("/morty/api/chat/computers/:computerId", createChatApplication(initialize))
+        .route("/morty/api/computers/:computerId", createManagementApplication(initialize))
+        .route("/morty/api", createTransferRedemptionRoutes(initialize));
 }
