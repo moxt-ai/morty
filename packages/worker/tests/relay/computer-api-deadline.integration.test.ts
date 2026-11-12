@@ -1,0 +1,102 @@
+import { abortAllDurableObjects, runInDurableObject } from "cloudflare:test";
+import { env } from "cloudflare:workers";
+import { Hono } from "hono";
+import { afterAll, expect, it, vi } from "vitest";
+import { DurableComputerAccount } from "../../src/computer-relay/components/management/storage/durable-computer-account.ts";
+import { SessionAccessSigner } from "../../src/computer-relay/components/runtime/entity/session-access-credential.ts";
+import { acceptWebSocketHttpTransport } from "../../src/computer-relay/components/runtime/http/websocket-http-transport.ts";
+import { createLocalSessionOperations } from "../../src/computer-relay/components/runtime/service/local-session-operations.ts";
+import { SessionAccessService } from "../../src/computer-relay/components/runtime/service/session-access-service.ts";
+import { createBrowserWebSocketRoutes } from "../../src/computer-relay/components/runtime/websocket/browser-websocket-routes.ts";
+import { createRelayDurableObjectContext } from "../../src/computer-relay/composition/relay-durable-object-context.ts";
+import { DurableObjectDatabase } from "../../src/computer-relay/infra/durable-object-database.ts";
+import { computerDirectory } from "../../src/directory/composition.ts";
+import { ComputerRelayGateway } from "../../src/gateway/computer-relay.ts";
+import { RequestDeadline } from "../../src/http/request-deadline.ts";
+import { createOwner, ownerOrigin } from "./owner-fixture.ts";
+import { computerManagementStore } from "./registered-computer.ts";
+
+/** A stateful downstream application boundary whose response is released by the scenario. */
+class PendingComputerApiBoundary {
+    readonly requested = Promise.withResolvers<void>();
+    readonly response = Promise.withResolvers<Response>();
+
+    readonly fetch = async (request: Request): Promise<Response> => {
+        using deadline = new RequestDeadline(request.signal, 120_000);
+        this.requested.resolve();
+        return await deadline.wait(this.response.promise);
+    };
+}
+
+afterAll(abortAllDurableObjects);
+
+it("Given a Computer API with a 120-second deadline mounted beside Session routes, When it finishes after 45 seconds over WebSocket, Then its response succeeds without inheriting the Session deadline", async () => {
+    const owner = await createOwner();
+    vi.useFakeTimers({ now: new Date("2026-11-12T00:00:00.000Z") });
+    try {
+        await runInDurableObject(env.COMPUTER_RELAY.getByName(owner.computerId), async (_instance, state) => {
+            const runtime = createRelayDurableObjectContext(state, {
+                accounts: new DurableComputerAccount(state.storage),
+                database: new DurableObjectDatabase(state.storage),
+                storeFor: (computerId) => computerManagementStore(computerId, state.storage),
+            });
+            const api = new PendingComputerApiBoundary();
+            const router = createBrowserWebSocketRoutes({
+                computerId: owner.computerId,
+                services: {
+                    sessions: new SessionAccessService(
+                        computerDirectory(env, (id) => new ComputerRelayGateway(env, id)),
+                        new SessionAccessSigner(env.MORTY_SESSION_SIGNING_SECRET),
+                    ),
+                    operations: createLocalSessionOperations(runtime, owner.computerId),
+                },
+            }).route(
+                "/",
+                new Hono().post("/morty/api/chat/computers/:computerId/agent-settings", (context) =>
+                    api.fetch(context.req.raw),
+                ),
+            );
+            const response = acceptWebSocketHttpTransport({
+                request: new Request(`${ownerOrigin}/morty/api/v1/computers/${owner.computerId}/transport`, {
+                    headers: { Upgrade: "websocket" },
+                }),
+                dispatch: async (request) => await router.fetch(request),
+            });
+            const socket = response.webSocket;
+            if (socket === null) {
+                throw new Error("Expected a WebSocket transport");
+            }
+            socket.accept();
+            try {
+                const received = new Promise<unknown>((resolve) =>
+                    socket.addEventListener("message", (event) => resolve(JSON.parse(String(event.data))), {
+                        once: true,
+                    }),
+                );
+                socket.send(
+                    JSON.stringify({
+                        kind: "http.request",
+                        requestId: "slow-settings",
+                        method: "POST",
+                        path: `/morty/api/chat/computers/${owner.computerId}/agent-settings`,
+                        headers: [],
+                        body: "{}",
+                    }),
+                );
+                await api.requested.promise;
+                await vi.advanceTimersByTimeAsync(45_000);
+                api.response.resolve(Response.json({ settings: [] }));
+                expect(await received).toMatchObject({
+                    kind: "http.response",
+                    requestId: "slow-settings",
+                    status: 200,
+                    body: JSON.stringify({ settings: [] }),
+                });
+            } finally {
+                socket.close(1000, "Test complete");
+            }
+        });
+    } finally {
+        vi.useRealTimers();
+    }
+});
