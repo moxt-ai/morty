@@ -5,7 +5,7 @@ import { cleanup, render } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
-import { HttpApiTransport } from "../src/services/api/http-api-transport.ts";
+import { WorkerApiTransport } from "../src/services/api/worker-api-transport.ts";
 import { initializeBrowserMonitoring } from "../src/services/diagnostics/sentry-monitoring.ts";
 import { createMortyApplication } from "../src/view-models/morty-application.ts";
 import { App } from "../src/views/application/app.tsx";
@@ -21,8 +21,8 @@ import { createTestApp } from "./infra/test-app.tsx";
  * operation fails on its own, so measurements and requests degrade instead of
  * reaching the network.
  */
-function noopTransport(): HttpApiTransport {
-    return new HttpApiTransport("http://127.0.0.1:1");
+function noopTransport(): WorkerApiTransport {
+    return new WorkerApiTransport("http://127.0.0.1:1");
 }
 
 const observers = new Set<MutationObserver>();

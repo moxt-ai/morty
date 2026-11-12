@@ -1,7 +1,7 @@
 import { sameNativeSession } from "@morty-build/client/native-session";
 import { type NativeSessionTarget, readNativeSessionTarget } from "@morty-build/client/protocol";
 import { createStore } from "zustand/vanilla";
-import { isApiConnectionError } from "../../services/api/http-api-transport.ts";
+import { isApiConnectionError } from "../../services/api/worker-api-transport.ts";
 import {
     type BotChatApi,
     type BotComputerConfiguration,

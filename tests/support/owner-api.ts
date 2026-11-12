@@ -1,5 +1,5 @@
 import { decodeSessionReadyEvent, type SessionConfigurationSelection } from "@morty-build/client/protocol";
-import { HttpApiTransport } from "../../packages/web/src/services/api/http-api-transport.ts";
+import { WorkerApiTransport } from "../../packages/web/src/services/api/worker-api-transport.ts";
 import { BotChatApi } from "../../packages/web/src/services/chat/bot-chat-api.ts";
 
 /** Uses the product's owner API client against the real Worker in Computer integration scenarios. */
@@ -9,7 +9,7 @@ export function createOwnerApi(options: {
     readonly credential: string;
     readonly request: (request: Request) => Promise<Response>;
 }) {
-    const transport = new HttpApiTransport(options.origin);
+    const transport = new WorkerApiTransport(options.origin);
     const api = new BotChatApi({
         origin: options.origin,
         computerId: options.computerId,

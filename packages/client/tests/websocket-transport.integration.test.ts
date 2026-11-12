@@ -121,7 +121,7 @@ class BrowserWebSocket extends EventTarget implements WebSocket {
                         headers: [],
                         kind: "http.response",
                         requestId,
-                        status: 204,
+                        status: this.responseBody === "" ? 204 : 200,
                     }),
                 }),
             );
