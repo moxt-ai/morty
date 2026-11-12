@@ -17,6 +17,7 @@ import {
     VerifiedComputerConnection,
 } from "./computer-connection.ts";
 import type { ComputerCredentials, HeldComputerCredentials } from "./computer-credentials.ts";
+import { readRelayOrigin } from "./relay-origin.ts";
 
 const PAIRING_RECORD_VERSION = 9;
 const PAIRING_GENERATION_PATTERN = /^mcn_[a-f0-9]{32}$/;
@@ -73,26 +74,11 @@ function validateComputerCredential(value: string): string {
 }
 
 function parseRelayOrigin(value: string): URL {
-    let origin: URL;
-    try {
-        origin = new URL(value);
-    } catch (cause) {
-        throw new RuntimeInstallationStoreError("invalid_connection", "The saved Runtime connection is invalid", {
-            cause,
-        });
-    }
-    if (
-        (origin.protocol !== "https:" && origin.protocol !== "http:") ||
-        origin.username.length > 0 ||
-        origin.password.length > 0 ||
-        (origin.protocol === "http:" && origin.hostname !== "127.0.0.1" && origin.hostname !== "localhost")
-    ) {
+    const origin = readRelayOrigin(value);
+    if (origin.kind !== "valid") {
         throw new RuntimeInstallationStoreError("invalid_connection", "The saved Runtime connection is invalid");
     }
-    origin.hash = "";
-    origin.pathname = "/";
-    origin.search = "";
-    return origin;
+    return origin.url;
 }
 
 function pairingGeneration(): string {
@@ -100,18 +86,15 @@ function pairingGeneration(): string {
 }
 
 function decodeVerifiedConnection(value: Readonly<Record<string, unknown>>): VerifiedComputerConnection {
-    // Normalize the version-8 field at the storage boundary; all writers use the current representation.
-    const generationKey = value["version"] === 8 ? "connectionId" : "pairingGeneration";
-    const expectedKeys = VERIFIED_CONNECTION_KEYS.map((key) => (key === "pairingGeneration" ? generationKey : key));
     if (
-        !hasExactKeys(value, expectedKeys) ||
-        (value["version"] !== 8 && value["version"] !== PAIRING_RECORD_VERSION) ||
+        !hasExactKeys(value, VERIFIED_CONNECTION_KEYS) ||
+        value["version"] !== PAIRING_RECORD_VERSION ||
         value["kind"] !== "verified"
     ) {
         throw new RuntimeInstallationStoreError("invalid_connection", "The saved Runtime connection is invalid");
     }
     const activation = value["activation"];
-    const pairingGeneration = value[generationKey];
+    const pairingGeneration = value["pairingGeneration"];
     const defaultWorkspace = value["defaultWorkspace"];
     const computerId = value["computerId"];
     const relayOrigin = value["relayOrigin"];

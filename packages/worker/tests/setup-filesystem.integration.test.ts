@@ -7,30 +7,27 @@ import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import * as v from "valibot";
 import { beforeAll, expect, test } from "vitest";
-import { processPlatformSupportFor } from "../../../packages/cli/src/engine/util/process/platform/index.ts";
 import { mortyReply } from "../../../tests/support/fake-daemon/scenarios.ts";
 import { ControlledSetupRuntime } from "../../e2e/infra/setup-daemon.ts";
 import worker from "../src/worker/application.ts";
 import { prepareIdentityFixture } from "./support/identity-fixture.ts";
 
-async function writeCliFixture(bin: string, body: string): Promise<string> {
-    const entry = join(bin, "morty.mjs");
-    await writeFile(entry, body, { mode: 0o700 });
-    return entry;
-}
+const localRuntimeModule = JSON.stringify(new URL("../../cli/src/setup/local-runtime.ts", import.meta.url).href);
+const builtCli = JSON.stringify(fileURLToPath(new URL("../../cli/dist/cli.js", import.meta.url)));
 
-async function writeSetupRunner(directory: string, cliEntry: string): Promise<string> {
+async function writeSetupRunner(directory: string): Promise<string> {
     const entry = join(directory, "run-setup.mjs");
     await writeFile(
         entry,
         `
 import { runSetup } from ${JSON.stringify(new URL("../../cli/src/setup/setup.ts", import.meta.url).href)};
+import { localSetupRuntime } from ${localRuntimeModule};
 const cancellation = new AbortController();
 process.once('SIGINT', () => cancellation.abort());
 process.once('SIGTERM', () => cancellation.abort());
 process.exitCode = await runSetup(process.argv.slice(2), {
     state: process.env.MORTY_STATE_DIRECTORY,
-    cliEntry: ${JSON.stringify(cliEntry)},
+    runtime: localSetupRuntime(${builtCli}),
     signal: cancellation.signal,
     emit: event => console.log(JSON.stringify(event)),
 });
@@ -56,7 +53,6 @@ interface SetupModule {
         args: readonly string[],
         host: {
             readonly state: string;
-            readonly cliEntry?: string;
             readonly agentEnvironment?: Readonly<Record<string, string | undefined>>;
             readonly signal: AbortSignal;
             readonly runtime?: ControlledSetupRuntime;
@@ -131,9 +127,11 @@ test.each(["fresh", "unknown", "revoked"] as const)(
     },
     async (replacementState) => {
         const directory = await mkdtemp(join(tmpdir(), "morty-setup-state-root-"));
-        const state = join(directory, "state");
-        const bin = join(directory, "bin");
-        await mkdir(bin);
+        // The shell names the installation data of another state root, which Morty refuses.
+        const owner = join(directory, "owner");
+        const state = join(owner, "computer");
+        await mkdir(owner, { recursive: true, mode: 0o700 });
+        await writeFile(join(owner, "config.json"), "{}", { mode: 0o600 });
         const fixture = await createIdentityFixture();
         try {
             if (replacementState !== "fresh") {
@@ -173,14 +171,7 @@ test.each(["fresh", "unknown", "revoked"] as const)(
                 );
             }
             const saved = replacementState === "fresh" ? null : await readFile(join(state, "config.json"), "utf8");
-            // Morty refuses another root's installation data with EX_CONFIG.
-            const refusal =
-                "MORTY_STATE_DIRECTORY is Morty installation data, not a state root. Use the state root that owns it: MORTY_STATE_DIRECTORY=/owning-root";
-            const localCli = await writeCliFixture(
-                bin,
-                `process.stderr.write(${JSON.stringify(refusal)}); process.exit(78);`,
-            );
-            const runner = await writeSetupRunner(directory, localCli);
+            const runner = await writeSetupRunner(directory);
             let output = "";
             const child = spawn(
                 process.execPath,
@@ -199,7 +190,6 @@ test.each(["fresh", "unknown", "revoked"] as const)(
                 {
                     env: {
                         ...process.env,
-                        PATH: bin,
                         MOBIUS_STATE_DIRECTORY: join(directory, "inherited-installation-data"),
                         MORTY_STATE_DIRECTORY: state,
                     },
@@ -217,9 +207,7 @@ test.each(["fresh", "unknown", "revoked"] as const)(
             const [code] = await once(child, "close");
             expect(code, output).toBe(1);
             expect(output).toContain('"code":"MORTY_STATE_ROOT_INVALID"');
-            expect(output).toContain(
-                "Rerun setup with MORTY_STATE_DIRECTORY set to the state root that the Runtime log names",
-            );
+            expect(output).toContain("Rerun setup with MORTY_STATE_DIRECTORY set to the owning state root");
             expect(output).not.toContain("RUNTIME_PREFLIGHT_FAILED");
             expect(output).not.toContain('"status":"identity_ready"');
             if (saved === null) {
@@ -238,65 +226,6 @@ test.each(["fresh", "unknown", "revoked"] as const)(
     },
 );
 
-test.each(["missing", "unlaunchable"] as const)(
-    "Given a %s local dependency, When setup checks the Morty executable, Then it fails before creating an identity and reports recovery instructions",
-    async (failure) => {
-        const directory = await mkdtemp(join(tmpdir(), "morty-setup-preflight-"));
-        const state = join(directory, "state");
-        const bin = join(directory, "bin");
-        await mkdir(bin);
-        const fixture = await createIdentityFixture();
-        try {
-            const localCli =
-                failure === "missing" ? join(bin, "missing.mjs") : await writeCliFixture(bin, "await using = ;");
-            const runner = await writeSetupRunner(directory, localCli);
-            let output = "";
-            const child = spawn(
-                process.execPath,
-                [
-                    runner,
-                    "setup",
-                    "--base-url",
-                    fixture.origin,
-                    "--cwd",
-                    directory,
-                    "--harness",
-                    "codex",
-                    "--session-id",
-                    "preflight-test",
-                ],
-                {
-                    env: {
-                        ...process.env,
-                        PATH: bin,
-                        MOBIUS_STATE_DIRECTORY: join(directory, "morty-state"),
-                        MORTY_STATE_DIRECTORY: state,
-                    },
-                    stdio: ["ignore", "pipe", "pipe"],
-                    signal: AbortSignal.timeout(SETUP_PROCESS_TIMEOUT_MS),
-                    windowsHide: true,
-                },
-            );
-            child.stdout.on("data", (chunk: Buffer) => {
-                output += chunk.toString();
-            });
-            child.stderr.on("data", (chunk: Buffer) => {
-                output += chunk.toString();
-            });
-            const [code] = await once(child, "close");
-            expect(code, output).toBe(1);
-            expect(output).toContain('"code":"RUNTIME_PREFLIGHT_FAILED"');
-            expect(output).toContain("nextStep");
-            expect(output).not.toContain('"status":"identity_ready"');
-            await expect(readFile(join(state, "config.json"))).rejects.toMatchObject({ code: "ENOENT" });
-        } finally {
-            await fixture.close();
-            await rm(directory, { recursive: true, force: true });
-        }
-    },
-    SETUP_PROCESS_TEST_TIMEOUT_MS,
-);
-
 test("Given a local workspace and a private state directory, When setup creates its identity and the user cancels, Then credentials remain private and can be reused", {
     timeout: SETUP_PROCESS_TEST_TIMEOUT_MS,
 }, async () => {
@@ -310,10 +239,11 @@ test("Given a local workspace and a private state directory, When setup creates 
         runner,
         `
 import { runSetup } from ${JSON.stringify(new URL("../../cli/src/setup/setup.ts", import.meta.url).href)};
+import { localSetupRuntime } from ${localRuntimeModule};
 const cancellation = new AbortController();
 process.exitCode = await runSetup(process.argv.slice(2), {
     state: process.env.MORTY_STATE_DIRECTORY,
-    cliEntry: ${JSON.stringify(fileURLToPath(new URL("../../cli/dist/cli.js", import.meta.url)))},
+    runtime: localSetupRuntime(${builtCli}),
     agentEnvironment: {},
     signal: cancellation.signal,
     emit(event) {
@@ -498,201 +428,6 @@ test.runIf(process.platform !== "win32")(
         }
     },
 );
-
-const starterFailures = [
-    ["exit", "When its starter fails by exit, Then setup reports actionable diagnostics and bounds recovery"],
-    ["signal", "When its starter fails by signal, Then setup reports actionable diagnostics and bounds recovery"],
-    [
-        "cancel",
-        "When its starter fails and setup is cancelled during recovery, Then setup reports actionable diagnostics and bounds recovery",
-    ],
-    ["recover", "When its starter fails by recover, Then setup reports actionable diagnostics and bounds recovery"],
-    [
-        "cancel-download",
-        "When setup is cancelled while the starter downloads, Then setup stops the processes it started",
-    ],
-    ["stuck-start", "When setup is cancelled while its starter ignores SIGTERM, Then setup still stops the starter"],
-] as const;
-
-for (const [failure, scenario] of starterFailures) {
-    test.runIf(process.platform !== "win32")(
-        `Given an offline managed Computer, ${scenario}`,
-        async () => {
-            const directory = await mkdtemp(join(tmpdir(), "morty-setup-start-"));
-            const state = join(directory, "state");
-            const bin = join(directory, "bin");
-            await Promise.all([mkdir(state, { recursive: true, mode: 0o700 }), mkdir(bin)]);
-            const fixture = await createIdentityFixture();
-            try {
-                const identity = await fixture.createAnonymousUser();
-                const runtime = await fixture.connectAgent(identity.computerId, identity.token);
-                const request = async (path: string, body?: object) => {
-                    const response = await fetch(`${fixture.origin}/morty/api/${path}`, {
-                        method: body === undefined ? "GET" : "POST",
-                        headers: { authorization: `Bearer ${identity.token}`, "content-type": "application/json" },
-                        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-                        signal: AbortSignal.timeout(10000),
-                    });
-                    expect(response.ok).toBe(true);
-                    return await response.json();
-                };
-                await request(`chat/computers/${identity.computerId}/setup`, {
-                    computerId: runtime.computerId,
-                    harness: "codex",
-                });
-                await runtime.disconnect();
-                const connection = {
-                    computer_id: runtime.computerId,
-                };
-                await writeFile(join(state, "config.json"), savedSetupState(fixture.origin, identity), {
-                    mode: 0o600,
-                });
-                await writeFile(join(directory, "connections.json"), JSON.stringify([connection]));
-                await writeFile(join(directory, "attempts.txt"), "0");
-                const localCli = await writeCliFixture(
-                    bin,
-                    `
-import { spawn } from 'node:child_process';
-import { readFileSync, writeFileSync } from 'node:fs';
-const output = process.argv.find(arg => arg.startsWith('--output-json='));
-if (process.argv[2] === '--version' || process.argv[2] === 'install') { process.exit(0); }
-if (process.argv[2] === 'start' && ${JSON.stringify(failure === "cancel-download")}) {
-    ${
-        failure === "cancel-download"
-            ? `// A CLI invocation may own descendants that also need cancellation.
-    const download = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { stdio: 'ignore' });
-    writeFileSync('download.pid', String(download.pid));
-    process.kill(process.ppid, 'SIGUSR2');
-    setInterval(() => {}, 1000);`
-            : "// The daemon already runs the newest release, so an upgrade has nothing to do.\n    process.exit(0);"
-    }
-} else if (output) { writeFileSync(output.slice('--output-json='.length), readFileSync('connections.json')); }
-else if (${JSON.stringify(failure === "stuck-start")}) {
-    // A starter that ignores the request to stop and never exits on its own.
-    process.on('SIGTERM', () => {});
-    writeFileSync('starter.pid', String(process.pid));
-    process.kill(process.ppid, 'SIGUSR2');
-    setInterval(() => {}, 1000);
-} else {
-    const attempts = Number(readFileSync('attempts.txt', 'utf8')) + 1;
-    writeFileSync('attempts.txt', String(attempts));
-    ${failure === "signal" ? "process.kill(process.pid, 'SIGTERM');" : failure === "recover" ? "process.exit(attempts === 1 ? 42 : 0);" : failure === "cancel-download" ? "process.exit(0);" : "process.exit(42);"}
-}
-`,
-                );
-                const runner = join(directory, "run.mjs");
-                await writeFile(
-                    runner,
-                    `import { runSetup } from ${JSON.stringify(new URL("../../cli/src/setup/setup.ts", import.meta.url).href)};
-const cancellation = new AbortController();
-process.on('SIGUSR2', () => cancellation.abort());
-let time = Date.parse('2026-09-15T12:00:00Z');
-process.exitCode = await runSetup(process.argv.slice(2), {
-    state: process.env.MORTY_STATE_DIRECTORY, signal: cancellation.signal,
-    cliEntry: ${JSON.stringify(localCli)},
-    emit(event) { console.log(JSON.stringify(event)); ${failure === "cancel" ? "if (event.status === 'runtime_retrying') cancellation.abort();" : ""} },
-    clock: { now: () => new Date(time), wait: async (milliseconds, signal) => { signal.throwIfAborted(); time += milliseconds; } },
-});
-`,
-                );
-                const child = spawn(
-                    process.execPath,
-                    [
-                        runner,
-                        "setup",
-                        "--base-url",
-                        fixture.origin,
-                        "--cwd",
-                        directory,
-                        "--harness",
-                        "codex",
-                        "--session-id",
-                        "native-start",
-                    ],
-                    {
-                        env: {
-                            ...process.env,
-                            MORTY_STATE_DIRECTORY: state,
-                            PATH: `${bin}:${process.env["PATH"] ?? ""}`,
-                        },
-                        stdio: ["ignore", "pipe", "pipe"],
-                        signal: AbortSignal.timeout(SETUP_PROCESS_TIMEOUT_MS),
-                    },
-                );
-                const exited = once(child, "exit");
-                let output = "";
-                let recovery: Promise<void> | undefined;
-                child.stdout.on("data", (chunk) => {
-                    output += chunk.toString();
-                    // The started daemon comes online, so setup proceeds to the handoff.
-                    if (
-                        (failure === "recover" || failure === "cancel-download") &&
-                        recovery === undefined &&
-                        output.includes('"status":"runtime_started"')
-                    ) {
-                        recovery = runtime.reconnect();
-                        void recovery.catch(() => child.kill());
-                    }
-                });
-                child.stderr.on("data", (chunk) => {
-                    output += chunk.toString();
-                });
-                const [code] = await exited;
-                await recovery;
-                expect(code, output).toBe(failure === "recover" ? 0 : 1);
-                const events = output
-                    .trim()
-                    .split("\n")
-                    .map((line) => v.parse(v.record(v.string(), v.unknown()), JSON.parse(line)));
-                if (failure === "cancel-download" || failure === "stuck-start") {
-                    expect(events.at(-1)).toMatchObject({ error: { code: "CANCELLED" } });
-                    const download = Number(
-                        await readFile(
-                            join(directory, failure === "stuck-start" ? "starter.pid" : "download.pid"),
-                            "utf8",
-                        ),
-                    );
-                    // An exited child its new parent has not reaped yet is a zombie; the relay rule counts it as gone.
-                    const running = processPlatformSupportFor(process.platform).processExists(download);
-                    if (running) {
-                        process.kill(download, "SIGKILL");
-                    }
-                    expect(
-                        running,
-                        `the ${failure === "stuck-start" ? "starter" : "upgrade download"} outlived setup`,
-                    ).toBe(false);
-                    return;
-                }
-                const retries = events.filter((event) => event["status"] === "runtime_retrying");
-                expect(retries, output).toHaveLength(failure === "cancel" || failure === "recover" ? 1 : 2);
-                if (failure === "recover") {
-                    expect(events.at(-1)).toMatchObject({ status: "ready" });
-                    expect(events).toContainEqual(expect.objectContaining({ status: "computer_online" }));
-                    return;
-                }
-                expect(events.at(-1)).toMatchObject({
-                    error: { code: failure === "cancel" ? "CANCELLED" : "RUNTIME_START_FAILED" },
-                });
-                const lastError = v.parse(v.object({ runtime: v.optional(v.unknown()) }), events.at(-1)?.["error"]);
-                const diagnostic = v.parse(
-                    v.object({ logPath: v.string(), termination: v.unknown(), nextStep: v.string() }),
-                    failure === "cancel" ? retries[0]?.["failure"] : lastError.runtime,
-                );
-                expect(diagnostic).toMatchObject({
-                    termination:
-                        failure === "signal" ? { kind: "signal", signal: "SIGTERM" } : { kind: "exit", exitCode: 42 },
-                    logPath: expect.stringMatching(/runtime-.*\.log$/u),
-                    nextStep: expect.stringContaining("morty"),
-                });
-                expect(await readFile(diagnostic.logPath, "utf8")).toContain(failure === "signal" ? "SIGTERM" : "42");
-            } finally {
-                await fixture.close();
-                await rm(directory, { recursive: true, force: true });
-            }
-        },
-        SETUP_PROCESS_TEST_TIMEOUT_MS,
-    );
-}
 
 test.runIf(process.env["MORTY_VERIFY_SYSTEM_STATE"] === "true" && process.platform === "darwin")(
     "Given MORTY_STATE_DIRECTORY is unset on macOS, When setup connects and the user cancels, Then the private identity is saved under ~/Library/Application Support/Morty",
@@ -905,8 +640,7 @@ async function setupComputer(
     return { code, events };
 }
 
-async function withUpgradeComputer(
-    upgrade: ConstructorParameters<typeof ControlledSetupRuntime>[2],
+async function withSetupComputer(
     scenario: (
         runtime: ControlledSetupRuntime,
         paths: {
@@ -916,18 +650,14 @@ async function withUpgradeComputer(
             readonly dispatch: (request: Request) => Promise<Response>;
         },
     ) => Promise<void>,
-    /** The release the computer's daemon runs before setup. */
-    release: ConstructorParameters<typeof ControlledSetupRuntime>[3] = "latest",
 ): Promise<void> {
-    const root = await realpath(await mkdtemp(join(tmpdir(), "morty-setup-upgrade-")));
+    const root = await realpath(await mkdtemp(join(tmpdir(), "morty-setup-computer-")));
     const workspace = join(root, "workspace");
     await mkdir(workspace, { recursive: true });
     const fixture = await createIdentityFixture();
     const runtime = new ControlledSetupRuntime(
         { harness: "settings-test", agentName: "Settings Agent", reply: mortyReply },
         "Setup test Computer",
-        upgrade,
-        release,
     );
     try {
         await scenario(runtime, {
@@ -943,31 +673,24 @@ async function withUpgradeComputer(
     }
 }
 
-test("Given a paired computer whose online daemon runs an outdated release, When the user reruns setup, Then setup reuses the running Computer without restarting it", {
+test("Given a paired computer whose daemon is online, When the user reruns setup, Then setup reuses the running Computer without restarting it", {
     timeout: 90_000,
 }, async () => {
-    await withUpgradeComputer(
-        "unavailable",
-        async (runtime, paths) => {
-            const first = await setupComputer(runtime, paths);
-            expect(first.code, JSON.stringify(first.events)).toBe(0);
-            expect(runtime.daemonRelease()).toBe("outdated");
+    await withSetupComputer(async (runtime, paths) => {
+        const first = await setupComputer(runtime, paths);
+        expect(first.code, JSON.stringify(first.events)).toBe(0);
 
-            runtime.setUpgrade("available");
-            const rerun = await setupComputer(runtime, paths);
-            expect(rerun.code, JSON.stringify(rerun.events)).toBe(0);
-            expect(rerun.events).toContainEqual(expect.objectContaining({ status: "computer_already_online" }));
-            expect(rerun.events.at(-1)).toMatchObject({ status: "ready", workspace: paths.workspace });
-            expect(runtime.daemonRelease()).toBe("outdated");
-        },
-        "outdated",
-    );
+        const rerun = await setupComputer(runtime, paths);
+        expect(rerun.code, JSON.stringify(rerun.events)).toBe(0);
+        expect(rerun.events).toContainEqual(expect.objectContaining({ status: "computer_already_online" }));
+        expect(rerun.events.at(-1)).toMatchObject({ status: "ready", workspace: paths.workspace });
+    });
 });
 
 test("Given setup was stopped after pairing its Computer, When the user runs setup again and again, Then each run continues on that Computer and setup finishes", {
     timeout: 120_000,
 }, async () => {
-    await withUpgradeComputer("unavailable", async (runtime, paths) => {
+    await withSetupComputer(async (runtime, paths) => {
         // A Project holds at most eight Computers; each stopped run must not leave another one behind.
         for (let attempt = 1; attempt <= 8; attempt += 1) {
             const stopped = await setupComputer(runtime, paths, undefined, { interruptAt: "computer_paired" });
@@ -982,7 +705,7 @@ test("Given setup was stopped after pairing its Computer, When the user runs set
 test("Given a shared Computer whose local pairing was removed, When setup has no matching replacement approval, Then shared access stays valid until the user approves that Project", {
     timeout: 120_000,
 }, async () => {
-    await withUpgradeComputer("unavailable", async (runtime, paths) => {
+    await withSetupComputer(async (runtime, paths) => {
         const first = await setupComputer(runtime, paths);
         expect(first.code, JSON.stringify(first.events)).toBe(0);
         const config = await savedIdentity(paths.state);
@@ -1054,7 +777,7 @@ test("Given a shared Computer whose local pairing was removed, When setup has no
 test("Given an approved replacement request times out, When setup is retried without approval, Then it reports the uncertain access state and does not silently replace the Project", {
     timeout: 120_000,
 }, async () => {
-    await withUpgradeComputer("unavailable", async (runtime, paths) => {
+    await withSetupComputer(async (runtime, paths) => {
         const first = await setupComputer(runtime, paths);
         expect(first.code).toBe(0);
         const config = await savedIdentity(paths.state);
@@ -1082,7 +805,7 @@ test("Given an approved replacement request times out, When setup is retried wit
 test("Given a saved uncertain replacement and a restored local pairing, When setup runs without approval, Then it does not hide the uncertain access state behind a successful reconnection", {
     timeout: 120_000,
 }, async () => {
-    await withUpgradeComputer("unavailable", async (runtime, paths) => {
+    await withSetupComputer(async (runtime, paths) => {
         expect((await setupComputer(runtime, paths)).code).toBe(0);
         const configPath = join(paths.state, "config.json");
         const config = v.parse(
@@ -1116,7 +839,7 @@ test.each(["replacement_access_revoked", "project_replaced"])(
         timeout: 120_000,
     },
     async (interruptAt) => {
-        await withUpgradeComputer("unavailable", async (runtime, paths) => {
+        await withSetupComputer(async (runtime, paths) => {
             const first = await setupComputer(runtime, paths);
             expect(first.events.at(-1)).toMatchObject({ status: "ready", project: "created" });
             const config = await savedIdentity(paths.state);
@@ -1163,7 +886,7 @@ test.each(["replacement_access_revoked", "project_replaced"])(
 test("Given a Computer bound by setup, When the user runs setup again, Then setup finishes on that Computer without a local binding copy", {
     timeout: 90_000,
 }, async () => {
-    await withUpgradeComputer("unavailable", async (runtime, paths) => {
+    await withSetupComputer(async (runtime, paths) => {
         const first = await setupComputer(runtime, paths);
         expect(first.code, JSON.stringify(first.events)).toBe(0);
         // The Worker's binding is the only record, so a reply lost after the Worker bound the Computer leaves the

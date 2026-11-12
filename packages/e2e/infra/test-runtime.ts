@@ -115,19 +115,15 @@ export async function createTestRuntime(
                 }
                 await openChat();
                 const pairing = await chat.createPairing();
-                await computer.run(
+                await computer.pair(
                     journey.workDirectory,
-                    [
-                        "pair",
-                        "--url",
-                        text(pairing["relayUrl"], "relay URL"),
-                        "--computer",
-                        text(pairing["computerId"], "pairing ID"),
-                        "--code-stdin",
-                    ],
-                    stack.directories.workspace,
+                    {
+                        relayOrigin: text(pairing["relayUrl"], "relay URL"),
+                        computerId: text(pairing["computerId"], "pairing ID"),
+                        pairingCode: text(pairing["pairingCode"], "pairing code"),
+                        workspace: stack.directories.workspace,
+                    },
                     journey.signal,
-                    text(pairing["pairingCode"], "pairing code"),
                 );
                 const paired = await chat.readPairedAgent(text(pairing["computerId"], "pairing ID"), harness);
                 await chat.bindAgent(paired.computerId, harness);
@@ -148,19 +144,15 @@ export async function createTestRuntime(
                     }),
                 );
                 const pairing = await unrelated.createPairing();
-                await runtime.run(
+                await runtime.pair(
                     journey.workDirectory,
-                    [
-                        "pair",
-                        "--url",
-                        text(pairing["relayUrl"], "relay URL"),
-                        "--computer",
-                        text(pairing["computerId"], "pairing ID"),
-                        "--code-stdin",
-                    ],
-                    stack.directories.workspace,
+                    {
+                        relayOrigin: text(pairing["relayUrl"], "relay URL"),
+                        computerId: text(pairing["computerId"], "pairing ID"),
+                        pairingCode: text(pairing["pairingCode"], "pairing code"),
+                        workspace: stack.directories.workspace,
+                    },
                     journey.signal,
-                    text(pairing["pairingCode"], "pairing code"),
                 );
                 await unrelated.readPairedAgent(text(pairing["computerId"], "unrelated computerId"), harness);
             },
