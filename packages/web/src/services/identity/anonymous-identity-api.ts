@@ -79,7 +79,7 @@ export type LinkedDevice = v.InferOutput<typeof linkedDeviceSchema>;
 const linkedDevicesSchema = v.object({ devices: v.array(linkedDeviceSchema) });
 const deviceAccessEndedSchema = v.object({ status: v.literal("device_access_ended") });
 const otherBrowserAccessEndedSchema = v.object({ status: v.literal("other_browser_access_ended") });
-const credentialRevocationPathSchema = v.picklist(["/identity/v1/local-credential", "/identity/v1/browser-access"]);
+const credentialRevocationPathSchema = v.picklist(["/identity/local-credential", "/identity/browser-access"]);
 export type AnonymousIdentity = v.InferOutput<typeof identitySchema>;
 export type IdentityTransfer = v.InferOutput<typeof transferSchema>;
 /** What a new link grants, and the unopened link from this page it replaces. */
@@ -350,7 +350,7 @@ export class AnonymousIdentityApi {
         // The Worker names the deletion that ends this credential's kind.
         const path = v.parse(credentialRevocationPathSchema, session.headers.get("Morty-Credential-Revocation"));
         const request =
-            path === "/identity/v1/local-credential"
+            path === "/identity/local-credential"
                 ? identityCalls.endLocalCredential({ origin: this.#origin, computerId: this.#computerId() })
                 : identityCalls.endBrowserAccess({ origin: this.#origin, computerId: this.#computerId() });
         await this.#request(request, { headers }, signal);

@@ -42,7 +42,7 @@ The link has the form `{{BASE_URL}}/continue?harness=<h>&sessionId=<s>#code=<cod
 continue. Take `code` from the URL fragment.
 
 Generate a `redemptionKey` (32 random bytes, base64url without padding, 43 characters)
-and persist it before sending. `POST /morty/api/identity/transfers/redeem` with
+and persist it before sending. `POST /morty/api/v1/identity/transfers/redeem` with
 `{code, redemptionKey, device}`, where `device` names you for the owner's device list,
 such as `"Codex agent · Linux"`. If the reply is lost, repeat the same request with the
 same `redemptionKey` to receive the same access. Store the returned `computerToken`
@@ -51,21 +51,21 @@ revokes it. Redeem once, then reuse the stored access.
 
 ## 2. Find or open a session
 
-Chat operations are `POST /morty/api/chat/computers/{computerId}/<operation>` with
+Chat operations are `POST /morty/api/v1/computers/{computerId}/<operation>` with
 `Authorization: Bearer <computerToken>` and a JSON body:
 
 - `workspace` reports whether the Computer is online and which Agent harnesses it has.
 - `managed-sessions` lists the sessions in Morty Recent.
-- `access` with `{harness, sessionId}` opens an existing session. With
+- `managed-sessions/open` with `{harness, sessionId}` opens an existing session. With
   `{harness, conversationKey, configurations, workspaceRef}` it starts a new
   conversation in a working directory; reuse `directory` from a Recent session as
   `workspaceRef`, generate one `conversationKey` per intended conversation, and send
   `[]` as `configurations` for the Agent's defaults.
-- `continue-native-session` with `{harness, sessionId}` imports a session that exists
-  on the Computer but is not in Recent yet; then call `access`.
+- `native-sessions/continue` with `{harness, sessionId}` imports a session that exists
+  on the Computer but is not in Recent yet; then call `managed-sessions/open`.
 
-`access` returns a short-lived Session `credential` with `expiresAt`, the session
-`target`, and the `computerId`. `session-access` with the same `{harness, sessionId}`
+`managed-sessions/open` returns a short-lived Session `credential` with `expiresAt`, the session
+`target`, and the `computerId`. `native-sessions/access` with the same `{harness, sessionId}`
 issues a fresh credential; renew before `expiresAt`.
 
 ## 3. Operate the session over the WebSocket transport
@@ -97,7 +97,7 @@ Session paths, relative to
 - `GET active-turn`: the running turn (`turn`), the queue, and `lastTurn`.
 - `POST turns` with `{content, attachments: [], sessionConfigurations: [], idempotencyKey}`
   submits a prompt. The answer means accepted, not finished.
-- `GET events-v2?limit=50` returns the latest session events; pass `nextCursor` as
+- `GET events?limit=50` returns the latest session events; pass `nextCursor` as
   `cursor` for the preceding page.
 - `POST turns/{turnId}/cancel` stops a running turn.
 - `GET configuration` and `POST configuration` read and change options such as the model.
@@ -105,7 +105,7 @@ Session paths, relative to
   request that the Agent is waiting on.
 
 For live updates instead of polling, send `session.events.subscribe` with a
-`subscriptionId` and the `events-v2` path; events arrive as `session.events.event`
+`subscriptionId` and the `events` path; events arrive as `session.events.event`
 frames until `session.events.end` or `session.events.error`.
 
 ## 4. Run a turn reliably
@@ -115,7 +115,7 @@ frames until `session.events.end` or `session.events.error`.
    `idempotencyKey`; never generate a new key for the same intended turn.
 3. Wait until `active-turn` shows `turn: null` with `lastTurn.commandId` equal to your
    key, or subscribe to events.
-4. Read `events-v2`. The Agent's reply is in `agent_message_chunk` updates; tool
+4. Read `events`. The Agent's reply is in `agent_message_chunk` updates; tool
    calls, permission requests, and `prompt.completed` show its progress.
 
 If the Computer is offline, or `workspace` does not list the harness you need, tell

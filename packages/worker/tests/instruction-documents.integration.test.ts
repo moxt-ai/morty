@@ -152,7 +152,7 @@ test("Given an AI agent receives a continue link, When it fetches the agent guid
     expect(text).toContain("Morty origin: https://chat.example");
     expect(text).toContain("https://chat.example/agent-api/openapi.json");
     expect(text).toContain("https://chat.example/agent-api/asyncapi.json");
-    expect(text).toContain("/morty/api/identity/transfers/redeem");
+    expect(text).toContain("/morty/api/v1/identity/transfers/redeem");
     expect(text).not.toMatch(/\{\{.*\}\}|preview\.example|token=ticket/);
 
     const openApiResponse = await worker.fetch(new Request("https://preview.example/agent-api/openapi.json"), bindings);

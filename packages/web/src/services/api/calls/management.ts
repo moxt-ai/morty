@@ -6,7 +6,7 @@ export const managementCalls = Object.freeze({
         encodeComputerCall({
             origin,
             computerId,
-            path: `computers/${encodeURIComponent(computerId)}/management/computer`,
+            path: `computers/${encodeURIComponent(computerId)}`,
             definition: {
                 method: "GET",
                 operation: "computer",
@@ -19,7 +19,7 @@ export const managementCalls = Object.freeze({
         encodeComputerCall({
             origin,
             computerId,
-            path: `computers/${encodeURIComponent(computerId)}/management/computer/pairing-state`,
+            path: `computers/${encodeURIComponent(computerId)}/pairing-state`,
             definition: {
                 method: "GET",
                 operation: "pairing-state",

@@ -24,7 +24,7 @@ export function encodeComputerCall({ origin, computerId, path, definition, body 
         endpoint: {
             ...definition,
             target: { kind: "computer", computerId },
-            url: new URL(`/morty/api/${path}`, origin),
+            url: new URL(`/morty/api/v1/${path}`, origin),
         },
         body: body === undefined ? null : JSON.stringify(body),
     };
@@ -52,7 +52,7 @@ export function encodeWorkerCall({
         endpoint: {
             ...definition,
             target: { kind: "worker", computerId },
-            url: new URL(`/morty/api/${path}`, origin),
+            url: new URL(`/morty/api/v1/${path}`, origin),
         },
         body: body === undefined ? null : JSON.stringify(body),
     };

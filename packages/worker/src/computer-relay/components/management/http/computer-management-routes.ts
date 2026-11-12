@@ -28,14 +28,14 @@ export function createComputerManagementRoutes(ctx: ManagementRouteContext) {
         },
     });
     return new Hono<ManagementHttpEnvironment>()
-        .get("/computer/pairing-state", authenticatedSession, async (context) => {
+        .get("/pairing-state", authenticatedSession, async (context) => {
             const application = await applicationForRequest(ctx, context);
             using deadline = new RequestDeadline(context.req.raw.signal, 45000);
             return json(
                 await application.services.management.readComputer(context.get("session").computerId, deadline.signal),
             );
         })
-        .get("/computer", sizeLimit, authenticatedSession, async (context) => {
+        .get("/", sizeLimit, authenticatedSession, async (context) => {
             const application = await applicationForRequest(ctx, context);
             const session = context.get("session");
             using deadline = new RequestDeadline(context.req.raw.signal, 15000);
@@ -43,7 +43,7 @@ export function createComputerManagementRoutes(ctx: ManagementRouteContext) {
                 computer: await application.services.management.findComputer(session.computerId, deadline.signal),
             });
         })
-        .post("/computer/replacement", async (context) => {
+        .post("/replacement", async (context) => {
             const application = await applicationForRequest(ctx, context);
             using deadline = new RequestDeadline(context.req.raw.signal, 45000);
             const signal = deadline.signal;

@@ -292,7 +292,7 @@ test("Given a remembered computer, When I connect another computer, Then setup r
 async function revokeAccess(app: TestApp): Promise<void> {
     const signal = AbortSignal.timeout(10_000);
     const response = await app.transport.request(
-        new Request(`${app.origin}/morty/api/computers/${app.identity.computerId}/identity/v1/local-credential`, {
+        new Request(`${app.origin}/morty/api/v1/computers/${app.identity.computerId}/identity/local-credential`, {
             method: "DELETE",
             headers: { authorization: `Bearer ${await app.identity.getToken(signal)}` },
             signal,
@@ -531,7 +531,7 @@ test("Given the remembered conversation was closed elsewhere, When I return, The
     const explicit = window.location.href;
     const signal = AbortSignal.timeout(10_000);
     const archived = await app.transport.request(
-        new Request(`${app.origin}/morty/api/chat/computers/${app.identity.computerId}/managed-session/archive`, {
+        new Request(`${app.origin}/morty/api/v1/computers/${app.identity.computerId}/managed-sessions/archive`, {
             method: "POST",
             headers: {
                 authorization: `Bearer ${await app.identity.getToken(signal)}`,
@@ -625,7 +625,7 @@ test("Given a computer whose remembered conversation was closed elsewhere, When 
     });
     const signal = AbortSignal.timeout(10_000);
     const archived = await first.transport.request(
-        new Request(`${first.origin}/morty/api/chat/computers/${first.identity.computerId}/managed-session/archive`, {
+        new Request(`${first.origin}/morty/api/v1/computers/${first.identity.computerId}/managed-sessions/archive`, {
             method: "POST",
             headers: {
                 authorization: `Bearer ${await first.identity.getToken(signal)}`,
@@ -668,7 +668,7 @@ test("Given a switch to a computer whose remembered conversation is gone, When o
     const closedSession = await startConversation(first, "Closed before a failed switch");
     const signal = AbortSignal.timeout(10_000);
     const archived = await first.transport.request(
-        new Request(`${first.origin}/morty/api/chat/computers/${first.identity.computerId}/managed-session/archive`, {
+        new Request(`${first.origin}/morty/api/v1/computers/${first.identity.computerId}/managed-sessions/archive`, {
             method: "POST",
             headers: {
                 authorization: `Bearer ${await first.identity.getToken(signal)}`,

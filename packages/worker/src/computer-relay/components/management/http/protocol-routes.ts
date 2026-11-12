@@ -15,5 +15,5 @@ export function createRelayProtocolRoutes(ctx: RelayProtocolRouteContext) {
         .basePath(MORTY_API_PREFIX)
         .onError(rethrowHonoError)
         .route("/v1", createComputerPairingRoutes(ctx))
-        .route("/channels", createComputerRoutes(ctx));
+        .route("/v1/computers", createComputerRoutes(ctx));
 }

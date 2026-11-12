@@ -25,7 +25,7 @@ test("Given the generated agent API description, When a peer sends every documen
     await bindings.configure({ APP_ORIGIN: bindings.origin });
     const signal = AbortSignal.timeout(45_000);
     const created = await bindings.request(
-        new Request(`${bindings.origin}/morty/api/computers`, {
+        new Request(`${bindings.origin}/morty/api/v1/computers`, {
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify({

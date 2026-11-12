@@ -45,7 +45,7 @@ export interface AgentApiOperation {
     readonly response: AgentApiResponse;
 }
 
-const chat = "/morty/api/chat/computers/{computerId}";
+const chat = "/morty/api/v1/computers/{computerId}";
 const session = "/morty/api/v1/computers/{computerId}/harnesses/{harness}/sessions/{sessionId}";
 const identifierParameter = (name: string, location: "path" | "query", description?: string): AgentApiParameter => ({
     name,
@@ -58,7 +58,7 @@ export const agentApiOperations: readonly AgentApiOperation[] = [
     {
         operationId: "redeemTransfer",
         method: "post",
-        path: "/morty/api/identity/transfers/redeem",
+        path: "/morty/api/v1/identity/transfers/redeem",
         transport: "http",
         security: "none",
         tag: "Identity",
@@ -90,7 +90,7 @@ export const agentApiOperations: readonly AgentApiOperation[] = [
     {
         operationId: "openSession",
         method: "post",
-        path: `${chat}/access`,
+        path: `${chat}/managed-sessions/open`,
         transport: "http",
         security: "computerToken",
         tag: "Chat",
@@ -102,7 +102,7 @@ export const agentApiOperations: readonly AgentApiOperation[] = [
     {
         operationId: "renewSessionCredential",
         method: "post",
-        path: `${chat}/session-access`,
+        path: `${chat}/native-sessions/access`,
         transport: "http",
         security: "computerToken",
         tag: "Chat",
@@ -113,7 +113,7 @@ export const agentApiOperations: readonly AgentApiOperation[] = [
     {
         operationId: "continueNativeSession",
         method: "post",
-        path: `${chat}/continue-native-session`,
+        path: `${chat}/native-sessions/continue`,
         transport: "http",
         security: "computerToken",
         tag: "Chat",
@@ -165,7 +165,7 @@ export const agentApiOperations: readonly AgentApiOperation[] = [
     {
         operationId: "listSessionEvents",
         method: "get",
-        path: `${session}/events-v2`,
+        path: `${session}/events`,
         transport: "websocket",
         security: "sessionCredential",
         tag: "Session",

@@ -156,7 +156,7 @@ it.each([
         binary: false,
     },
     { path: "/morty/api/computers/prj_ap_01_000000000000000000000002/session", binary: false },
-    { path: "/morty/api/chat/computers/prj_ap_01_000000000000000000000002/agent-settings", binary: false },
+    { path: "/morty/api/v1/computers/prj_ap_01_000000000000000000000002/agent-settings", binary: false },
     {
         path: `/morty/api/v1/computers/prj_ap_01_000000000000000000000002/harnesses/codex/sessions/example/content/${"a".repeat(64)}`,
         binary: true,
@@ -318,7 +318,7 @@ it.each([
             const subscription = JSON.stringify({
                 kind: "session.events.subscribe",
                 subscriptionId: "unauthorized-subscription",
-                path: "/morty/api/v1/computers/prj_wn_01_ABCDEFGHIJKLMNOPQRSTUVWX/harnesses/claude/sessions/session-unauthorized/events-v2",
+                path: "/morty/api/v1/computers/prj_wn_01_ABCDEFGHIJKLMNOPQRSTUVWX/harnesses/claude/sessions/session-unauthorized/events",
                 headers: authorization === null ? [] : [["authorization", authorization]],
             });
             for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -378,7 +378,7 @@ it("Given two quiet subscriptions, When multiple heartbeat intervals pass, Then 
                 JSON.stringify({
                     kind: "session.events.subscribe",
                     subscriptionId,
-                    path: "/morty/api/v1/computers/computer/harnesses/claude/sessions/session/events-v2",
+                    path: "/morty/api/v1/computers/computer/harnesses/claude/sessions/session/events",
                     headers: [],
                 }),
             );
@@ -737,7 +737,7 @@ it("Given an established event subscription, When the browser transport closes, 
         JSON.stringify({
             headers: [],
             kind: "session.events.subscribe",
-            path: "/morty/api/v1/computers/computer/harnesses/claude/sessions/session/events-v2",
+            path: "/morty/api/v1/computers/computer/harnesses/claude/sessions/session/events",
             subscriptionId: "subscription-1",
         }),
     );
@@ -779,7 +779,7 @@ it("Given two live subscriptions, When each receives event batches, Then deliver
             JSON.stringify({
                 headers: [],
                 kind: "session.events.subscribe",
-                path: `/morty/api/v1/computers/computer/harnesses/claude/sessions/${subscriptionId}/events-v2`,
+                path: `/morty/api/v1/computers/computer/harnesses/claude/sessions/${subscriptionId}/events`,
                 subscriptionId,
             }),
         );
@@ -842,7 +842,7 @@ it("Given an established event subscription is quiet, When the transport idle de
             JSON.stringify({
                 headers: [],
                 kind: "session.events.subscribe",
-                path: "/morty/api/v1/computers/computer/harnesses/claude/sessions/session/events-v2",
+                path: "/morty/api/v1/computers/computer/harnesses/claude/sessions/session/events",
                 subscriptionId: "subscription-1",
             }),
         );

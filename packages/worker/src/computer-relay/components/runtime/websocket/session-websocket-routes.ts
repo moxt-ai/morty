@@ -209,7 +209,7 @@ export function createSessionWebSocketRoutes(ctx: {
             );
             return json({ accepted: true });
         })
-        .get(`${sessionPath}/events-v2`, authenticate, async (context) => {
+        .get(`${sessionPath}/events`, authenticate, async (context) => {
             const request = context.req.raw;
             const access = context.var.access;
             await access.authorize(request.signal);

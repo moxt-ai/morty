@@ -97,7 +97,7 @@ export const transportFrames = {
         schema: v.object({
             kind: v.literal(EVENT_SUBSCRIBE_KIND),
             subscriptionId: frameIdentifier,
-            path: v.pipe(sessionPath, v.description("The Session's events-v2 path.")),
+            path: v.pipe(sessionPath, v.description("The Session's events path.")),
             headers,
         }),
     },
@@ -128,7 +128,7 @@ export const transportFrames = {
     },
     eventsError: {
         direction: "receive",
-        summary: "The subscription failed; read events-v2 and subscribe again.",
+        summary: "The subscription failed; read events and subscribe again.",
         schema: v.object({
             kind: v.literal("session.events.error"),
             subscriptionId: v.string(),

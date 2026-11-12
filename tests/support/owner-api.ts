@@ -43,7 +43,7 @@ export function createOwnerApi(options: {
             signal: AbortSignal,
         ) => {
             const setup = await options.request(
-                new Request(`${options.origin}/morty/api/chat/computers/${options.computerId}/setup`, {
+                new Request(`${options.origin}/morty/api/v1/computers/${options.computerId}/setup`, {
                     method: "POST",
                     signal,
                     headers: { authorization: `Bearer ${options.credential}`, "content-type": "application/json" },
