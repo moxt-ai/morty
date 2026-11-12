@@ -3,11 +3,13 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { NativeSessionCommand, NativeSessionTarget } from "@morty-build/client/protocol";
 import { harnessAdapters } from "../../../src/engine/acp/adapter/registry.ts";
-import { AcpAgentDefinition } from "../../../src/engine/acp/agent/agent-definition.ts";
 import { AcpContentExternalizer } from "../../../src/engine/acp/content/content-externalizer.ts";
 import type { AdapterResolver } from "../../../src/engine/acp/native-history/preview-contract.ts";
-import { RuntimeAgentDependencies } from "../../../src/engine/agent/runtime-agents.ts";
-import { createRuntimeConfig, RuntimeLocalContext } from "../../../src/engine/runtime/config.ts";
+import {
+    createRuntimeConfig,
+    RuntimeAgentDependencies,
+    RuntimeLocalContext,
+} from "../../../src/engine/runtime/config.ts";
 import { NullSessionObserver } from "../../../src/engine/session/api/session-api.ts";
 import { NativeSessionService } from "../../../src/engine/session/native/native-session-browser.ts";
 import { SessionCreations } from "../../../src/engine/session/record/session-creations.ts";
@@ -16,6 +18,7 @@ import { WorkspaceDirectoryService } from "../../../src/engine/session/workspace
 import { SessionCreationTable } from "../../../src/engine/storage/session/session-creation-table.ts";
 import { openAcpSessionDatabase } from "../../../src/engine/storage/sqlite/local-databases.ts";
 import { systemTimer } from "../../../src/engine/util/timer.ts";
+import { testAgentDefinition } from "../agent-definition.ts";
 import { memoryComputerCredentials } from "../computer-credentials.ts";
 import { FakeOpenAiProvider } from "../llm/openai.ts";
 import { SessionRuntimeFixture as SessionManager } from "../session-runtime.ts";
@@ -32,13 +35,15 @@ export async function codexFixture(
     await mkdir(workspace);
     const provider = await FakeOpenAiProvider.start("morty-test-model", answer, providerOptions);
     const codex = await CodexFixture.create(provider);
-    const agent = new AcpAgentDefinition("codex", "Codex", codex.executable, codex.environment);
+    const agent = testAgentDefinition("codex", "Codex", codex.executable, codex.environment);
     const store = new MemorySessionStore();
     const sessions = new SessionManager({
         observer: new NullSessionObserver(),
         store,
         adapters,
-        onSessionStatusChanged: () => undefined,
+        onSessionClosed: () => undefined,
+        lastTurn: () => undefined,
+        settledTurns: () => [],
         contentExternalizer: new AcpContentExternalizer((sessionTarget, content, signal) =>
             new UnretainedExternalContentStore().put({
                 bytes: content.bytes,

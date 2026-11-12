@@ -30,7 +30,7 @@ export async function forwardToComputer(
         request.signal.throwIfAborted();
         logger.error(
             {
-                event: "project_relay_request_failed",
+                event: "computer_relay_request_failed",
                 durableObjectClass: "ComputerRelay",
                 durableObjectId: stub.id.toString(),
                 computerId,
@@ -42,7 +42,7 @@ export async function forwardToComputer(
             "Computer request failed",
         );
         throw new ComputerManagementError(
-            deadline.signal.aborted ? "PROJECT_OBJECT_TIMEOUT" : "PROJECT_OBJECT_UNAVAILABLE",
+            deadline.signal.aborted ? "COMPUTER_OBJECT_TIMEOUT" : "COMPUTER_OBJECT_UNAVAILABLE",
             "Morty storage is unavailable.",
             deadline.signal.aborted ? 504 : 503,
             { cause },
@@ -55,11 +55,11 @@ export async function forwardToComputer(
 export function computerObject(bindings: CloudBindings, computerId: string) {
     const parsed = v.safeParse(durableObjectNamespaceBindingSchema(), bindings.COMPUTER_RELAY);
     if (!parsed.success) {
-        throw new ComputerManagementError("PROJECT_OBJECT_UNAVAILABLE", "Morty storage is unavailable.", 503);
+        throw new ComputerManagementError("COMPUTER_OBJECT_UNAVAILABLE", "Morty storage is unavailable.", 503);
     }
     const placement = decodeComputerPlacement(computerId);
     if (placement === null) {
-        throw new ComputerManagementError("INVALID_ACCOUNT_ID", "The Project ID is invalid.", 400);
+        throw new ComputerManagementError("INVALID_ACCOUNT_ID", "The Computer ID is invalid.", 400);
     }
     const namespace = parsed.output;
     return namespace.get(namespace.idFromName(computerId), { locationHint: placement.locationHint });

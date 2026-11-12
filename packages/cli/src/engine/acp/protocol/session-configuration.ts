@@ -1,17 +1,10 @@
 import type { SessionConfigOption, SessionConfigValue } from "@morty-build/client/protocol";
+import { isRecord, readString } from "../../util/value-utils.ts";
 export const MAXIMUM_CONFIG_OPTIONS = 100;
 
 export type SessionConfigurationSelection =
     | { readonly type: "boolean"; readonly configId: string; readonly booleanValue: boolean }
     | { readonly type: "select"; readonly configId: string; readonly value: string };
-
-function isRecord(value: unknown): value is Readonly<Record<string, unknown>> {
-    return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-function readString(value: unknown, fallback = ""): string {
-    return typeof value === "string" ? value : fallback;
-}
 
 function truncate(value: string, maximum: number): string {
     return value.length <= maximum ? value : value.slice(0, maximum);

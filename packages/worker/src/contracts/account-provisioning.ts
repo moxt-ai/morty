@@ -1,8 +1,8 @@
-import type { ProjectLocationHint } from "@morty-build/client/protocol";
+import type { ComputerLocationHint } from "./computer-location.ts";
 import type { ComputerManagement } from "./computer-management.ts";
 
 export type AccountProvisioner = (
     reference: string,
-    location: ProjectLocationHint,
+    location: ComputerLocationHint,
     signal: AbortSignal,
 ) => Promise<ComputerManagement>;

@@ -32,13 +32,11 @@ it("Given an explicit data directory, When a host saves a connection and reopens
         );
         const reopened = await RuntimeInstallationStore.open(params.dataDirectory, signal);
         expect(await reopened.readConnection(connection.pairingGeneration, signal)).toEqual(connection);
-        expect(await reopened.listConnections(signal)).toEqual([connection]);
+        expect(await reopened.currentConnection(signal)).toEqual(connection);
         await reopened.setConnectionActivation(connection.pairingGeneration, "stopped", signal);
         expect(await store.readConnection(connection.pairingGeneration, signal)).toMatchObject({
             activation: "stopped",
         });
-        await reopened.removeConnection(connection.pairingGeneration, signal);
-        expect(await store.listConnections(signal)).toEqual([]);
     } finally {
         await rm(directory, { recursive: true, force: true });
     }
@@ -62,12 +60,11 @@ it("Given a fresh installation, When a host concurrently saves connections, Then
                 ),
             ),
         );
-        const saved = await manager.listConnections(signal);
-        expect(saved).toHaveLength(1);
+        const saved = await manager.currentConnection(signal);
         expect(
             results.some(
                 (result) =>
-                    result.status === "fulfilled" && result.value.pairingGeneration === saved[0]?.pairingGeneration,
+                    result.status === "fulfilled" && result.value.pairingGeneration === saved?.pairingGeneration,
             ),
         ).toBe(true);
         for (const result of results) {
@@ -142,7 +139,6 @@ it("Given a saved connection with an opaque credential, When a host serves and c
         );
         const shutdown = new AbortController();
         let online = false;
-        const counts: number[] = [];
         await engine.runLoop({
             pairingGeneration: saved.pairingGeneration,
             signal: AbortSignal.any([deadline, shutdown.signal]),
@@ -152,20 +148,19 @@ it("Given a saved connection with an opaque credential, When a host serves and c
                     shutdown.abort();
                 }
             },
-            onExecutionCountChange: (count) => counts.push(count),
         });
         await disconnected.promise;
         expect(online).toBe(true);
-        expect(counts.at(-1)).toBe(0);
         expect(requests).toHaveLength(1);
         expect(authorizations).toEqual([`Bearer ${"a".repeat(73)}`]);
         expect(catalogs).toHaveLength(1);
         expect(catalogs).toEqual([expect.objectContaining({ agents: [] })]);
         const [savedSuccessor] = successors;
         expect(savedSuccessor).toMatch(/^[A-Za-z0-9_-]{73}$/u);
-        expect(await manager.listConnections(deadline)).toEqual([
-            { ...saved, credentials: { current: savedSuccessor, successor: null } },
-        ]);
+        expect(await manager.currentConnection(deadline)).toEqual({
+            ...saved,
+            credentials: { current: savedSuccessor, successor: null },
+        });
 
         disconnected = Promise.withResolvers<void>();
         revoke = true;

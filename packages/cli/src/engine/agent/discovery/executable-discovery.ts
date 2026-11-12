@@ -21,10 +21,10 @@ async function resolveSpecificationExecutables(
         if (override.length === 0 || !isAbsolute(override)) {
             return [];
         }
-        const executable = await resolveExecutablePath(override, context.platform);
+        const executable = await resolveExecutablePath(override);
         return executable === null ? [] : [executable];
     }
-    const external = await findExecutableOnPath(executableName, context.environment, context.platform);
+    const external = await findExecutableOnPath(executableName, context.environment);
     const installed = await resolveInstalled();
     const executables: ResolvedExecutable[] = [];
     const paths = new Set<string>();
@@ -55,22 +55,20 @@ export async function resolveAgentExecutables(
 
 export async function probeVersion(
     executable: ResolvedExecutable,
-    arguments_: readonly string[],
     environment: Readonly<NodeJS.ProcessEnv>,
     defaultWorkspace: string,
     signal: AbortSignal,
     timeoutMilliseconds: number,
-    normalize: (output: string) => string = normalizeVersionOutput,
 ): Promise<string> {
     const result = await runBoundedProcess({
-        arguments: arguments_,
+        arguments: ["--version"],
         command: executable.path,
         cwd: defaultWorkspace,
         environment,
         signal,
         timeoutMilliseconds,
     });
-    const version = normalize(result.stdout || result.stderr);
+    const version = normalizeVersionOutput(result.stdout || result.stderr);
     if (version.length === 0) {
         throw new ProcessExecutionError("process_exit_failed", "The executable did not report a version", {
             diagnosticDetails: {

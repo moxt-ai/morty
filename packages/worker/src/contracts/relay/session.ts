@@ -8,7 +8,6 @@ function sessionRuntimeErrorStatus(code: string): number {
     if (
         code === "session_busy" ||
         code === SESSION_CLOSED_ERROR_CODE ||
-        code === "session_conflict" ||
         code === "idempotency_conflict" ||
         // An operation the Computer started but cannot tell the end of: repeating it cannot answer differently.
         code === "session_creation_outcome_unknown" ||
@@ -21,7 +20,7 @@ function sessionRuntimeErrorStatus(code: string): number {
     ) {
         return 409;
     }
-    if (code === "invalid_cursor" || code === "invalid_request") {
+    if (code === "invalid_request") {
         return 400;
     }
     if (code === "unsupported_operation") {

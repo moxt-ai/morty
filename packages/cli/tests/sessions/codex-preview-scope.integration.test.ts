@@ -2,8 +2,8 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { expect, test } from "vitest";
-import { AcpAgentDefinition } from "../../src/engine/acp/agent/agent-definition.ts";
 import type { SessionEventPage } from "../../src/engine/acp/native-history/preview-contract.ts";
+import { testAgentDefinition } from "../support/agent-definition.ts";
 import { codexHistoryAdapter } from "../support/codex-history-preview.ts";
 
 async function previewFixture() {
@@ -28,7 +28,7 @@ createInterface({ input: process.stdin }).on("line", (line) => {
 `,
         { mode: 0o700 },
     );
-    const agent = new AcpAgentDefinition("codex", "Codex", command, { CODEX_HOME: "catalog" });
+    const agent = testAgentDefinition("codex", "Codex", command, { CODEX_HOME: "catalog" });
     const { adapter, processes } = codexHistoryAdapter(agent);
     return {
         adapter,

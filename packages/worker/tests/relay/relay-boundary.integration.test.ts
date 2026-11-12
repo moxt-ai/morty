@@ -20,7 +20,6 @@ import {
     encodeSessionOperationFailedEvent,
     encodeSessionPromptAcceptedEvent,
     encodeSessionRenamedEvent,
-    encodeSessionStatusChangedEvent,
     encodeSessionTurnStoppedEvent,
     MORTY_API_PREFIX,
     type NativeSessionTarget,
@@ -28,7 +27,6 @@ import {
 } from "@morty-build/client/protocol";
 import { afterAll, afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import { createTestMortyRelayApp } from "../../../relay-test-support/src/app.ts";
-import { DurableComputerAccount } from "../../src/computer-relay/components/management/storage/durable-computer-account.ts";
 import { DaemonWebSocketRoutes } from "../../src/computer-relay/components/runtime/daemon-websocket-routes.ts";
 import { createRuntimeContext } from "../../src/computer-relay/components/runtime/runtime-context.ts";
 import { createRelayDurableObjectContext } from "../../src/computer-relay/composition/relay-durable-object-context.ts";
@@ -38,7 +36,7 @@ import { RelayAuthenticationConfiguration } from "../../src/contracts/relay/comp
 import type { RelayBindings } from "../../src/contracts/relay-bindings.ts";
 import { browserOperationHeaders, closeBrowserSocket, requestBrowserOperation } from "./browser-session.ts";
 import { computerBackend, createOwner, issueSession, ownerRequest } from "./owner-fixture.ts";
-import { computerManagementStore, revokeTestComputer } from "./registered-computer.ts";
+import { computerAccess, revokeTestComputer } from "./registered-computer.ts";
 
 const nativeTarget = (sessionId: string): NativeSessionTarget => ({ harness: "codex", sessionId });
 
@@ -391,13 +389,6 @@ describe.sequential("Relay Session-only boundary", () => {
                 throw new Error("Expected history loading without a preceding Session query");
             }
 
-            daemon.send(
-                encodeSessionStatusChangedEvent({
-                    kind: "session.status.changed",
-                    target: nativeTarget(sessionId),
-                    status: { commandId: "command-1", kind: "working" },
-                }),
-            );
             const historyPage = JSON.stringify({
                 events: {
                     events: {
@@ -917,15 +908,11 @@ it.each(["text", "binary"])(
             runInDurableObject(env.COMPUTER_RELAY.getByName(runtime.computerId), async (_instance, state) => {
                 const pending: Promise<void>[] = [];
                 const database = new DurableObjectDatabase(state.storage);
-                const context = createRelayDurableObjectContext(state, {
-                    accounts: new DurableComputerAccount(state.storage),
-                    database,
-                    storeFor: (computerId) => computerManagementStore(computerId, state.storage),
-                });
+                const { access } = computerAccess(runtime.computerId, state.storage);
+                const context = createRelayDurableObjectContext(state, { database, access: () => access });
                 const relay = new DaemonWebSocketRoutes(
                     createRuntimeContext({
                         doDatabase: database,
-                        storages: context.storages,
                         services: context.services,
                         gateways: context.gateways,
                         utilities: {
@@ -1606,7 +1593,7 @@ describe.sequential("Relay Turn submission", () => {
     );
     // @no-uc: Technical regression; issuance tolerance must remain bounded and never extend expiry.
     it.each([
-        { offset: -30_001, code: "project_credential_invalid" },
+        { offset: -30_001, code: "credential_invalid" },
         { offset: 900_000, code: "credential_expired" },
     ])("refuses a credential at verifier offset $offset with $code", async ({ offset, code }) => {
         const runtime = await connectComputerDaemon(`clock-rejected-${Math.abs(offset)}`);
@@ -1627,7 +1614,7 @@ describe.sequential("Relay Turn submission", () => {
             vi.setSystemTime(Date.now() - 900);
             expect(
                 await responseJson(await runtime.submitComputerTurn("invalid-lifetime", () => credential), 401),
-            ).toMatchObject({ error: { code: "project_credential_invalid" } });
+            ).toMatchObject({ error: { code: "credential_invalid" } });
         } finally {
             runtime.daemon.close(1000, "Test complete");
         }
@@ -1679,13 +1666,13 @@ describe.sequential("Relay Turn submission", () => {
                     await runtime.submitComputerTurn("forged", (credential) => `${credential.slice(0, -6)}AAAAAA`),
                     401,
                 ),
-            ).toMatchObject({ error: { code: "project_credential_invalid" } });
+            ).toMatchObject({ error: { code: "credential_invalid" } });
             expect(
                 await responseJson(
                     await runtime.submitComputerTurn("wrong-session", (credential) => credential, "different-session"),
                     403,
                 ),
-            ).toMatchObject({ error: { code: "project_permission_denied" } });
+            ).toMatchObject({ error: { code: "session_permission_denied" } });
             vi.setSystemTime(new Date("2026-09-18T00:16:00.000Z"));
             expect(await responseJson(await runtime.submitComputerTurn("expired"), 401)).toMatchObject({
                 error: { code: "credential_expired" },
@@ -1700,7 +1687,7 @@ describe.sequential("Relay Turn submission", () => {
             const forged = await runtime.resignCredential(storedDigestSigner);
             expect(
                 await responseJson(await runtime.submitComputerTurn("stored-digest", () => forged), 401),
-            ).toMatchObject({ error: { code: "project_credential_invalid" } });
+            ).toMatchObject({ error: { code: "credential_invalid" } });
         } finally {
             runtime.daemon.close(1000, "Test complete");
         }

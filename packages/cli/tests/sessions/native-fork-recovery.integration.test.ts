@@ -13,17 +13,17 @@ test.each(["request", "result"] as const)(
         vi.useFakeTimers({ now: new Date("2026-10-28T02:00:00Z"), toFake: ["Date"] });
         await using relay = await startTestRelay();
         const signal = new AbortController().signal;
-        const project = await relay.createOwner();
+        const owner = await relay.createOwner();
         await using proxy = await createForkLossProxy(relay.baseUrl, loss);
         const disconnected = Promise.withResolvers<void>();
         const connected = Promise.withResolvers<void>();
         const reconnected = Promise.withResolvers<void>();
         let wasDisconnected = false;
         await using runtime = await createFakeAgentHarnessRuntime({
-            credential: project.token,
+            credential: owner.token,
             origin: relay.baseUrl,
             relayOrigin: proxy.origin,
-            computerId: project.computerId,
+            computerId: owner.computerId,
             server: relay.app,
             signal,
             sessionIds: new Set(["native-fork-source"]),
@@ -86,9 +86,9 @@ test("Given a Fork succeeds but its response is lost, When the same operation is
     vi.useFakeTimers({ now: new Date("2026-10-27T12:00:00Z"), toFake: ["Date"] });
     await using relay = await startTestRelay();
     const signal = new AbortController().signal;
-    const project = await relay.createOwner();
+    const owner = await relay.createOwner();
     const runtime = await relay.connectAgent(
-        project.computerId,
+        owner.computerId,
         undefined,
         new Set(["recovery-native-source", "another-native-source"]),
     );
@@ -123,11 +123,11 @@ test("Given a Fork succeeds but its response is lost, When the same operation is
     });
     await listen(proxy);
     try {
-        const url = `http://127.0.0.1:${port(proxy)}/morty/api/chat/computers/${project.computerId}/native-session-forks/${crypto.randomUUID()}`;
+        const url = `http://127.0.0.1:${port(proxy)}/morty/api/chat/computers/${owner.computerId}/native-session-forks/${crypto.randomUUID()}`;
         const send = () =>
             fetch(url, {
                 method: "POST",
-                headers: { authorization: `Bearer ${project.token}`, "content-type": "application/json" },
+                headers: { authorization: `Bearer ${owner.token}`, "content-type": "application/json" },
                 body,
                 signal,
             });
@@ -149,7 +149,7 @@ test("Given a Fork succeeds but its response is lost, When the same operation is
         }
         const conflict = await fetch(url, {
             method: "POST",
-            headers: { authorization: `Bearer ${project.token}`, "content-type": "application/json" },
+            headers: { authorization: `Bearer ${owner.token}`, "content-type": "application/json" },
             body: JSON.stringify({
                 harness: "claude",
                 directory: ".",

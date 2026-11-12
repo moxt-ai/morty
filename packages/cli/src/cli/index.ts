@@ -21,7 +21,6 @@ function createProgram(cliContext: CliContext): Command {
             "\nPairing grants this browser access to the computer with your user account's permissions.\nNew conversations default to this Morty installation's private workspace; choose other directories in the browser.\n",
         );
 
-    program.action(() => program.outputHelp());
     registerVersionHandler(program, cliContext);
     registerAgentsHandler(program, cliContext);
     registerLogsCommand(program, cliContext);

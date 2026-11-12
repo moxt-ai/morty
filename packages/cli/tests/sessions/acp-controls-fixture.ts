@@ -17,7 +17,9 @@ export async function createControlledSession() {
         observer,
         store: new MemorySessionStore(),
         adapters: acpAdapters,
-        onSessionStatusChanged: () => undefined,
+        onSessionClosed: () => undefined,
+        lastTurn: () => undefined,
+        settledTurns: () => [],
         contentExternalizer: new AcpContentExternalizer((sessionTarget, content, signal) =>
             new UnretainedExternalContentStore().put({
                 bytes: content.bytes,

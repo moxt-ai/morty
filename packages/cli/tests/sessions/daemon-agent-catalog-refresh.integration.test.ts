@@ -25,11 +25,10 @@ import {
 import { listen, port, sendText } from "@morty-build/relay-test-support/websocket";
 import { expect, test, vi } from "vitest";
 import { discoverLocalAgentInventory } from "../../src/engine/agent/discovery/discover-local-agents.ts";
-import { RuntimeAgentDependencies } from "../../src/engine/agent/runtime-agents.ts";
 import type { LocalAgentSpecification } from "../../src/engine/agent/specification/agent-specification.ts";
 import { publishAgentCatalog } from "../../src/engine/runtime/catalog/publish-agent-catalog.ts";
 import { createCatalogAgentResolver } from "../../src/engine/runtime/catalog/resolve-catalog-agent.ts";
-import { createRuntimeConfig, RuntimeLocalContext } from "../../src/engine/runtime/config.ts";
+import { createRuntimeConfig, RuntimeAgentDependencies, RuntimeLocalContext } from "../../src/engine/runtime/config.ts";
 import { runRuntime } from "../../src/engine/runtime/run.ts";
 import { acpAdapters } from "../support/acp-adapters.ts";
 import { ControlledAcpSpecification } from "../support/agents/controlled-acp-specification.ts";

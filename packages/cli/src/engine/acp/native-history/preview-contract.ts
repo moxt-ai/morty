@@ -124,7 +124,7 @@ export interface Adapter {
     ) => Promise<AdapterPromptResult>;
     readonly steer: (params: AdapterSessionOperation & { readonly content: PromptContent }) => Promise<
         // An Agent that reports it names the user message the steering recorded in the turn it joined.
-        { readonly outcome: "injected"; readonly messageId?: string } | { readonly outcome: "startedNewTurn" }
+        { readonly outcome: "injected"; readonly messageId?: string }
     >;
     readonly renameSession: (params: AdapterSessionOperation & { readonly title: string }) => Promise<void>;
     readonly configureSession: (

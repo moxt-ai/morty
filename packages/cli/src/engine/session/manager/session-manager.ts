@@ -9,7 +9,6 @@ import {
     type SessionEventPayload,
     type SessionInteractionSnapshot,
     type SessionStatus,
-    type SessionStatusChangedEvent,
 } from "@morty-build/client/protocol";
 import { AcpExecutionError } from "../../acp/acp-error.ts";
 import type { NativeSessionOrigin } from "../../acp/protocol/native-session.ts";
@@ -85,22 +84,20 @@ export class SessionManager {
         observer,
         store,
         processes,
-        onSessionStatusChanged,
-        onSessionClosed = () => undefined,
-        lastTurn = () => undefined,
-        settledTurns = () => [],
+        onSessionClosed,
+        lastTurn,
+        settledTurns,
         timer,
     }: {
         readonly observer: SessionObserver;
         readonly store: SessionStore;
         readonly processes: AgentProcessPool;
-        readonly onSessionStatusChanged: (event: SessionStatusChangedEvent) => void;
         /** Called once each time a Session becomes closed, so every client learns of it. */
-        readonly onSessionClosed?: (event: SessionCloseNoticeEvent) => void;
+        readonly onSessionClosed: (event: SessionCloseNoticeEvent) => void;
         /** How the Session's most recent started command ended, as the execution receipts retain it. */
-        readonly lastTurn?: (target: NativeSessionTarget) => LastTurnOutcome | undefined;
+        readonly lastTurn: (target: NativeSessionTarget) => LastTurnOutcome | undefined;
         /** The Session's settled turns the execution receipts retain, which a replayed history places. */
-        readonly settledTurns?: (target: NativeSessionTarget) => readonly SettledTurn[];
+        readonly settledTurns: (target: NativeSessionTarget) => readonly SettledTurn[];
         readonly timer: Timer;
     }) {
         this.#observer = observer;
@@ -108,13 +105,7 @@ export class SessionManager {
         this.#store = store;
         this.#lastTurn = lastTurn;
         this.#settledTurns = settledTurns;
-        this.#executions = new ActiveExecutions((target, status) =>
-            onSessionStatusChanged({
-                kind: "session.status.changed",
-                target,
-                status: this.#reported(target, status),
-            }),
-        );
+        this.#executions = new ActiveExecutions();
         this.#onSessionClosed = onSessionClosed;
         this.#timer = timer;
     }

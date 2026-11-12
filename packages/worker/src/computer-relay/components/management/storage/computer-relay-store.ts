@@ -7,17 +7,18 @@ import type {
     PairingClaimRow,
     PairingComputerRow,
     PairingScopeRow,
-    RevokeComputer,
 } from "../../../../contracts/relay/pairing-records.ts";
+import type { DurableObjectDatabase } from "../../../infra/durable-object-database.ts";
+import { ComputerCredentialStorage } from "./computer-credential-storage.ts";
+import { ComputerDirectoryStorage } from "./computer-directory-storage.ts";
+import { credentialMatches } from "./pairing-identity-storage.ts";
 
 interface RequestComputerPairing {
-    readonly computerId: string;
     readonly codeHash: string;
     readonly pollHash: string;
     readonly now: number;
     readonly expiresAt: number;
     readonly idempotencyKey: string;
-    readonly ownerId: string;
 }
 
 /** The pairing request stored under the idempotency key, or the quota that refused a new one. */
@@ -27,7 +28,6 @@ type ComputerPairingRequest =
     | { readonly kind: "quota_exceeded" };
 
 interface ClaimPairing {
-    readonly computerId: string;
     readonly codeHash: string;
     readonly daemonHash: string;
     readonly now: number;
@@ -37,51 +37,90 @@ interface ClaimPairing {
 }
 
 /**
- * The operations on one computer's storage. The storage owner executes each operation as one unit, so the
- * preconditions it checks and the writes it makes are evaluated together; no caller composes queries against computer
- * tables. A null or false result means the precondition did not hold and nothing was written.
+ * The operations on the computer's own SQLite storage. Only its ComputerRelay constructs this; each operation runs
+ * there as one unit, so the preconditions it checks and the writes it makes are evaluated together. A null or false
+ * result means the precondition did not hold and nothing was written.
  */
-export interface ComputerRelayStore {
-    readonly updateAgentCatalog: (
-        computerId: string,
-        tokenHash: string,
-        agents: string,
-        signal: AbortSignal,
-    ) => Promise<boolean>;
+export class ComputerRelayStore {
+    readonly #database: DurableObjectDatabase;
+    readonly #computers: ComputerDirectoryStorage;
+    readonly #credentials: ComputerCredentialStorage;
+
+    constructor(computerId: string, database: DurableObjectDatabase) {
+        this.#database = database;
+        this.#computers = new ComputerDirectoryStorage(computerId, database);
+        this.#credentials = new ComputerCredentialStorage(computerId, database);
+    }
+
+    readonly updateAgentCatalog = async (tokenHash: string, agents: string, signal: AbortSignal): Promise<boolean> =>
+        (await this.#computers.updateAgents(tokenHash, agents, signal)).meta.changes === 1;
+
     /** The pairing generation whose daemon may act for the computer now; null while none may. */
-    readonly readActiveGeneration: (computerId: string, signal: AbortSignal) => Promise<number | null>;
-    readonly readComputer: (computerId: string, signal: AbortSignal) => Promise<ComputerPairingDirectoryRow | null>;
-    readonly listComputers: (signal: AbortSignal) => Promise<readonly ComputerDirectoryRow[]>;
-    /**
-     * Returns the pairing request created under the idempotency key, or creates one within the Computer quota.
-     */
-    readonly requestComputerPairing: (
+    readonly readActiveGeneration = async (signal: AbortSignal): Promise<number | null> =>
+        await this.#credentials.readActiveGeneration(signal);
+
+    readonly readComputer = async (signal: AbortSignal): Promise<ComputerPairingDirectoryRow | null> =>
+        await this.#computers.readComputer(signal);
+
+    readonly listComputers = async (signal: AbortSignal): Promise<readonly ComputerDirectoryRow[]> =>
+        await this.#computers.listComputers(signal);
+
+    /** Returns the pairing request created under the idempotency key, or creates one within the Computer quota. */
+    readonly requestComputerPairing = async (
         value: RequestComputerPairing,
         signal: AbortSignal,
-    ) => Promise<ComputerPairingRequest>;
-    readonly readComputerPairing: (computerId: string, signal: AbortSignal) => Promise<PairingComputerRow | null>;
-    readonly readPairingCode: (codeHash: string, signal: AbortSignal) => Promise<PairingClaimRow | null>;
+    ): Promise<ComputerPairingRequest> => {
+        const existing = await this.#computers.readComputerPairingRequest(value.idempotencyKey, signal);
+        if (existing !== null) {
+            return { kind: "existing", request: existing };
+        }
+        if (await this.#computers.createComputerPairing(value, signal)) {
+            return { kind: "created" };
+        }
+        return { kind: "quota_exceeded" };
+    };
+
+    readonly readComputerPairing = async (signal: AbortSignal): Promise<PairingComputerRow | null> =>
+        await this.#computers.readCurrentPairing(signal);
+
+    readonly readPairingCode = async (codeHash: string, signal: AbortSignal): Promise<PairingClaimRow | null> =>
+        await this.#computers.readPairingCode(codeHash, signal);
+
     /**
      * Claims a pairing for a daemon. A replay with the credential it committed succeeds while the pairing is
      * unexpired; any other failed claim returns false.
      */
-    readonly claimPairing: (value: ClaimPairing, signal: AbortSignal) => Promise<boolean>;
+    readonly claimPairing = async (value: ClaimPairing, signal: AbortSignal): Promise<boolean> => {
+        if (await this.#computers.claim(value, signal)) {
+            return true;
+        }
+        // Replays prove possession of the original code and must match the committed credential. Never rotate an
+        // retired credential, extend the pairing deadline, or resurrect a revoked Computer.
+        const pairing = await this.#computers.readCurrentPairing(signal);
+        return (
+            pairing !== null &&
+            pairing.expires_at > value.now &&
+            (await this.#computers.readDaemon(value.daemonHash, signal)) !== null
+        );
+    };
+
     /**
-     * Revokes a Computer and returns its committed revocation; null when the storage has no such Computer. Ending its
-     * pairing generation also ends the Session credentials issued under it.
+     * Revokes the Computer and returns its committed revocation; null when it was never paired. Ending its pairing
+     * generation also ends the Session credentials issued under it.
      */
-    readonly revokeComputer: (
-        value: RevokeComputer,
-        signal: AbortSignal,
-    ) => Promise<ComputerPairingDirectoryRow | null>;
+    readonly revokeComputer = async (now: number, signal: AbortSignal): Promise<ComputerPairingDirectoryRow | null> =>
+        await this.#computers.revokeComputer(now, signal);
+
     /** The computer scopes whose stored credential matches; the caller decides what a match authorizes. */
-    readonly findCredential: (
+    readonly findCredential = async (
         credential: ComputerIdentityCredential,
         signal: AbortSignal,
-    ) => Promise<readonly PairingScopeRow[]>;
-    readonly rotateComputerCredential: (
+    ): Promise<readonly PairingScopeRow[]> => await credentialMatches(this.#database, credential, signal);
+
+    readonly rotateComputerCredential = async (
         presentedHash: string,
         successorHash: string,
         signal: AbortSignal,
-    ) => Promise<ComputerCredentialRotation>;
+    ): Promise<ComputerCredentialRotation> =>
+        await this.#computers.rotateDaemonCredential(presentedHash, successorHash, signal);
 }

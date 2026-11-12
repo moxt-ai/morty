@@ -82,7 +82,6 @@ test.each(["current", "another service origin", "retired configuration"] as cons
         const saved = v.parse(savedIdentity, JSON.parse(await readFile(configurationPath, "utf8")));
         const identity = saved.identity;
         expect(identity.computer_id).toBe(first.computerId);
-        expect(JSON.parse(await readFile(configurationPath, "utf8")).identity).not.toHaveProperty("project_id");
         if (stateKind === "retired configuration") {
             // The representation setup wrote before its saved state was versioned.
             await writeFile(configurationPath, JSON.stringify({ base_url: saved.base_url, ...identity }));

@@ -47,7 +47,6 @@ export function createFakeDaemon(options: FakeAgentHarnessOptions) {
                 process.execPath,
                 {},
                 "controlled-harness",
-                undefined,
                 fakeHarnessCapabilities,
             ),
         ),

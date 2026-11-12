@@ -1,6 +1,6 @@
 import { join, relative, resolve } from "node:path";
 
-import { findLogDirectories, listLogFiles, readOwnedLogFile } from "../../../../storage/logs/log-files.ts";
+import { findLogDirectory, listLogFiles, readOwnedLogFile } from "../../../../storage/logs/log-files.ts";
 import { readStateDirectory } from "../../../../storage/state-directory.ts";
 
 export interface LocalLogEntry {
@@ -43,8 +43,8 @@ export async function collectLocalDaemonLogs(
     const root = resolve(stateDirectory);
     const entries: LocalLogEntry[] = [];
     const unreadable: string[] = [];
-    const directories = await findLogDirectories(root, unreadable, signal);
-    for (const directory of directories) {
+    const directory = await findLogDirectory(root, unreadable, signal);
+    if (directory !== null) {
         const names = await listLogFiles(directory, root, unreadable);
         for (const name of names) {
             const path = join(directory, name);

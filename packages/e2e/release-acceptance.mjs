@@ -15,7 +15,7 @@ process.once("SIGTERM", () => interrupted.abort());
 const signal = AbortSignal.any([interrupted.signal, AbortSignal.timeout(12 * 60_000)]);
 const [origin, archiveArgument, label] = process.argv.slice(2);
 assert.ok(origin && archiveArgument && /^[a-z0-9-]+$/.test(label));
-const output = resolve(process.env.MORTY_RELEASE_ACCEPTANCE_OUTPUT ?? ".release/acceptance");
+const output = resolve(".release/acceptance");
 await mkdir(output, { recursive: true });
 const archive = resolve(archiveArgument);
 const archiveSha256 = createHash("sha256")
@@ -117,7 +117,7 @@ try {
             identity = JSON.parse(await readFile(join(state, "config.json"), "utf8")).identity;
             receipt.computerId = identity.computer_id;
             await writeFile(
-                join(output, `${label}-owned-project.json`),
+                join(output, `${label}-owned-computer.json`),
                 `${JSON.stringify({ computerId: identity.computer_id, origin })}\n`,
             );
         } catch {

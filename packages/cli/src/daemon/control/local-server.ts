@@ -1,6 +1,6 @@
 import { createServer, type Socket } from "node:net";
 import type { InstallationDirectory } from "../../engine/storage/installation/installation-files.ts";
-import { platformSupportFor } from "../../engine/util/platform/index.ts";
+import { hostPlatform as platform } from "../../engine/util/platform/index.ts";
 import { readOrCreateControlToken } from "../../storage/daemon/control-token.ts";
 import { controlSocketPath, readSocketMessage } from "./local-client.ts";
 
@@ -13,7 +13,6 @@ export async function serveLocalControl(
 ): Promise<void> {
     signal.throwIfAborted();
     const token = await readOrCreateControlToken(stateDirectory);
-    const platform = platformSupportFor(process.platform);
     const path = controlSocketPath(stateDirectory);
     const secured = Promise.withResolvers<void>();
     void secured.promise.catch(() => undefined);

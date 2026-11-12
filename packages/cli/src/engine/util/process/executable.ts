@@ -9,14 +9,12 @@ import { stat } from "node:fs/promises";
 import { join, resolve } from "node:path";
 
 import type { ProcessLaunch, ProcessTreeIdentity, SpawnedProcess } from "./platform/contracts.ts";
-import { processPlatformSupportFor } from "./platform/index.ts";
+import { hostProcessPlatform as hostPlatform } from "./platform/index.ts";
 
 import { ProcessExecutionError } from "./process-error.ts";
 
 export type { ProcessTreeIdentity } from "./platform/contracts.ts";
 export { ProcessExecutionError } from "./process-error.ts";
-
-const hostPlatform = processPlatformSupportFor(process.platform);
 
 const DEFAULT_OUTPUT_LIMIT_BYTES = 16 * 1024;
 const PROCESS_GRACEFUL_STOP_TIMEOUT_MILLISECONDS = 1_000;
@@ -88,13 +86,10 @@ export interface RunProcessOptions {
     readonly timeoutMilliseconds: number;
 }
 
-export async function resolveExecutablePath(
-    requestedPath: string,
-    platform: NodeJS.Platform = process.platform,
-): Promise<ResolvedExecutable | null> {
+export async function resolveExecutablePath(requestedPath: string): Promise<ResolvedExecutable | null> {
     const absoluteRequestedPath = resolve(requestedPath);
     try {
-        const resolvedPath = await processPlatformSupportFor(platform).resolveExecutableTarget(absoluteRequestedPath);
+        const resolvedPath = await hostPlatform.resolveExecutableTarget(absoluteRequestedPath);
         const metadata = await stat(resolvedPath);
         if (!metadata.isFile()) {
             return null;
@@ -117,19 +112,17 @@ export async function resolveExecutablePath(
 export async function findExecutableOnPath(
     executableName: string,
     environment: Readonly<NodeJS.ProcessEnv>,
-    platform: NodeJS.Platform = process.platform,
 ): Promise<ResolvedExecutable | null> {
-    const support = processPlatformSupportFor(platform);
-    const encodedPath = support.environmentValue(environment, "PATH") ?? "";
-    const separator = support.pathDelimiter;
-    const extensions = support.executableExtensions(executableName, environment);
+    const encodedPath = hostPlatform.environmentValue(environment, "PATH") ?? "";
+    const separator = hostPlatform.pathDelimiter;
+    const extensions = hostPlatform.executableExtensions(executableName, environment);
     for (const entry of encodedPath.split(separator)) {
         if (entry.length === 0) {
             continue;
         }
         for (const extension of extensions) {
             const requestedPath = resolve(join(entry, `${executableName}${extension}`));
-            const executable = await resolveExecutablePath(requestedPath, platform);
+            const executable = await resolveExecutablePath(requestedPath);
             if (executable !== null) {
                 return executable;
             }
@@ -138,11 +131,8 @@ export async function findExecutableOnPath(
     return null;
 }
 
-export async function revalidateExecutable(
-    identity: ExecutableIdentity,
-    platform: NodeJS.Platform = process.platform,
-): Promise<boolean> {
-    const current = await resolveExecutablePath(identity.requestedPath, platform);
+export async function revalidateExecutable(identity: ExecutableIdentity): Promise<boolean> {
+    const current = await resolveExecutablePath(identity.requestedPath);
     return current !== null && identity.matches(current.identity);
 }
 

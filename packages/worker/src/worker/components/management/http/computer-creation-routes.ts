@@ -4,7 +4,7 @@ import * as v from "valibot";
 import type { AccountProvisioner } from "../../../../contracts/account-provisioning.ts";
 import type { CloudBindings } from "../../../../contracts/cloud-bindings.ts";
 import { anonymousCreationKey } from "../../../../contracts/computer-bootstrap.ts";
-import { projectLocationHint } from "../../../../contracts/project-location.ts";
+import { computerLocationHint } from "../../../../contracts/computer-location.ts";
 import { readJsonBody } from "../../../../http/body-parser.ts";
 import { RequestDeadline } from "../../../../http/request-deadline.ts";
 import { accountProvisioner } from "../../../gateway/account-provisioning.ts";
@@ -33,18 +33,18 @@ export const computerCreationRoutes = new Hono<{
         signal.throwIfAborted();
         await admitAnonymousCreation(request, context.env);
         signal.throwIfAborted();
-        const project = await context.var.provisionAccount(
+        const computer = await context.var.provisionAccount(
             crypto.randomUUID(),
-            projectLocationHint(request) ?? "apac",
+            computerLocationHint(request) ?? "apac",
             signal,
         );
-        const response = await computerObject(context.env, project.computerId).fetch(
+        const response = await computerObject(context.env, computer.computerId).fetch(
             new Request("https://computer.internal/__computer/bootstrap", {
                 method: "POST",
                 headers: { "content-type": "application/json" },
                 signal,
                 body: JSON.stringify({
-                    computer: project,
+                    computer,
                     origin: { kind: "created", creationKey: input.creationKey },
                 }),
             }),

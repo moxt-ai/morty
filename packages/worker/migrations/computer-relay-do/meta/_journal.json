@@ -407,6 +407,13 @@
             "when": 1794456459332,
             "tag": "0069_loose_wildside",
             "breakpoints": true
+        },
+        {
+            "idx": 70,
+            "version": "6",
+            "when": 1794466482936,
+            "tag": "0070_striped_dark_beast",
+            "breakpoints": true
         }
     ]
 }

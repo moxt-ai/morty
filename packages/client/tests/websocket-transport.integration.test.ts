@@ -4,15 +4,21 @@ import { once } from "node:events";
 import { createServer } from "node:http";
 import { afterEach, expect, it, onTestFinished, vi } from "vitest";
 import { WebSocketServer } from "ws";
-import { MortyClient, MortyConnectionError, type MortyWebSocketConnector, WsTransport } from "../src/index.ts";
+import {
+    MortyClient,
+    MortyConnectionError,
+    type MortyTransportCall,
+    type MortyWebSocketConnector,
+    WsTransport,
+} from "../src/index.ts";
 
-// The transport routes by the claims it decodes; only the Relay verifies the signature.
+// Only the Relay verifies the credential; routing uses the explicit endpoint target.
 const sessionClaims = btoa(
     JSON.stringify({
         issuedAtEpochMilliseconds: 0,
         expiresAtEpochMilliseconds: 900000,
         purpose: "session-access",
-        computerId: "project-1",
+        computerId: "computer-1",
         grant: { holder: { kind: "credential", credentialId: "owner-1" }, generation: 1 },
         target: { harness: "claude", sessionId: "session-1" },
     }),
@@ -22,16 +28,32 @@ const sessionClaims = btoa(
     .replace(/=+$/u, "");
 const sessionCredential = `msession_${sessionClaims}.${"A".repeat(43)}`;
 
-function computerRequest(address: string, init?: RequestInit): Request {
+function computerRequest(
+    address: string,
+    init?: { readonly body?: string; readonly headers?: HeadersInit; readonly method?: "GET" | "POST" | "PUT" },
+    computerId = "computer-1",
+): MortyTransportCall {
     const url = new URL(address);
     if (!url.pathname.startsWith("/morty/api/v1/computers/")) {
-        url.pathname = `/morty/api/v1/computers/project-1/harnesses/claude/sessions/session-1${url.pathname}`;
+        url.pathname = `/morty/api/v1/computers/computer-1/harnesses/claude/sessions/session-1${url.pathname}`;
     } else {
-        url.pathname = url.pathname.replace("/computers/project/", "/computers/project-1/");
+        url.pathname = url.pathname.replace("/computers/computer/", "/computers/computer-1/");
     }
     const headers = new Headers(init?.headers);
     headers.set("authorization", `Bearer ${sessionCredential}`);
-    return new Request(url, { ...init, headers });
+    return {
+        endpoint: {
+            computerId,
+            method: init?.method ?? "GET",
+            path: `${url.pathname}${url.search}`,
+            transport: { kind: "websocket", cancellation: "local" },
+            timeoutMilliseconds: 10_000,
+        },
+        origin: url,
+        headers: Object.fromEntries(headers.entries()),
+        body: init?.body ?? null,
+        signal: new AbortController().signal,
+    };
 }
 
 class BrowserWebSocket extends EventTarget implements WebSocket {
@@ -214,15 +236,17 @@ it("Given a browser bound to one computer, When it opens another Session or addr
         await transport.fetch(computerRequest("https://relay.example.test/first"));
         const events = await transport.openSessionLiveEvents(
             computerRequest(
-                "https://relay.example.test/morty/api/v1/computers/project-1/harnesses/claude/sessions/session-2/events-v2",
+                "https://relay.example.test/morty/api/v1/computers/computer-1/harnesses/claude/sessions/session-2/events-v2",
             ),
         );
         expect(connector.sockets).toHaveLength(1);
-        expect(connector.sockets[0]?.url).toBe("wss://relay.example.test/morty/api/v1/computers/project-1/transport");
+        expect(connector.sockets[0]?.url).toBe("wss://relay.example.test/morty/api/v1/computers/computer-1/transport");
         await expect(
             transport.fetch(
                 computerRequest(
-                    "https://relay.example.test/morty/api/v1/computers/project-2/harnesses/claude/sessions/session-1/configuration",
+                    "https://relay.example.test/morty/api/v1/computers/computer-2/harnesses/claude/sessions/session-1/configuration",
+                    undefined,
+                    "computer-2",
                 ),
             ),
         ).rejects.toThrow("cannot connect to multiple computers");
@@ -299,7 +323,7 @@ it("Given a Unicode JSON request and response, When the browser uses the WebSock
 
     const response = await transport.fetch(
         computerRequest(
-            "https://relay.example.test/morty/api/v1/computers/project/harnesses/claude/sessions/session-1/turns",
+            "https://relay.example.test/morty/api/v1/computers/computer/harnesses/claude/sessions/session-1/turns",
             {
                 body: requestBody,
                 headers: { "content-type": "application/json" },
@@ -330,7 +354,7 @@ it("Given a replacement WebSocket carries a live subscription, When the old sock
     }
     const events = await transport.openSessionLiveEvents(
         computerRequest(
-            "https://relay.example.test/morty/api/v1/computers/project/harnesses/claude/sessions/session/events-v2",
+            "https://relay.example.test/morty/api/v1/computers/computer/harnesses/claude/sessions/session/events-v2",
         ),
     );
     const subscriptionId = second.subscriptionIds[0];
@@ -375,7 +399,7 @@ it("Given a live Session stream, When it disconnects, Then the subscription fail
             },
         },
         endpoint: peer.endpoint,
-        computerId: "project-1",
+        computerId: "computer-1",
     });
     try {
         const subscription = await client.events.subscribeLive(
@@ -406,7 +430,7 @@ it("Given a live Session stream, When its peer stops answering heartbeats, Then 
             },
         },
         endpoint: peer.endpoint,
-        computerId: "project-1",
+        computerId: "computer-1",
     });
     try {
         const subscription = await client.events.subscribeLive(

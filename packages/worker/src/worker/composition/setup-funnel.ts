@@ -24,7 +24,7 @@ const funnelSteps = [
 
 /**
  * Records a successful setup step as one structured log line, so launch traffic can be counted step by step in
- * Workers Logs. Events carry no user, project, or network identifiers: only the step and who made the request.
+ * Workers Logs. Events carry no user, Computer, or network identifiers: only the step and who made the request.
  */
 function recordSetupFunnelStep(logger: Logger, request: Request, response: Response, client: SetupClient) {
     if (!response.ok) {

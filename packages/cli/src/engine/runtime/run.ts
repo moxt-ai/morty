@@ -1,5 +1,5 @@
 import { styleText } from "node:util";
-import { createRuntimeAdapterRegistry } from "../agent/runtime-agents.ts";
+import { createRuntimeAdapterRegistry } from "../acp/adapter/adapter-registry.ts";
 import { buildSessionLayer } from "../session/api/session-layer.ts";
 import { LocalExternalContentStore } from "../session/content/external-content-store.ts";
 import { AgentProcessPool } from "../session/process/agent-process-pool.ts";
@@ -66,7 +66,6 @@ async function publishAgentCatalogUntilAvailable(
 export interface RunRuntimeOptions {
     /** The pool the Runtime's Agent processes run in; the daemon keeps it to release idle processes on request. */
     readonly processes?: AgentProcessPool;
-    readonly onExecutionCountChange?: (count: number) => void;
     readonly onConnectionStatus?: (status: "online" | "reconnecting") => void;
 }
 
@@ -87,7 +86,7 @@ export async function runRuntime(
     const publisher = new RuntimeSessionEventPublisher(timer);
     // Dispose media only after session and adapter operations have drained.
     await using externalContent = new LocalExternalContentStore(stateDirectory);
-    const processes = options.processes ?? new AgentProcessPool(config.localContext.maxAcpProcesses, timer);
+    const processes = options.processes ?? new AgentProcessPool(undefined, timer);
     const { adapters, externalizeSessionUpdate } = createRuntimeAdapterRegistry(
         config.adapters,
         processes,
@@ -110,7 +109,6 @@ export async function runRuntime(
         sink: publisher,
         stateDirectory: config.localContext.stateDirectory,
         timer,
-        onExecutionCountChange: options.onExecutionCountChange ?? (() => undefined),
     });
     const {
         activeSessions,

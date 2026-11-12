@@ -4,8 +4,7 @@ import { join } from "node:path";
 import type { AcpSessionUpdate, NativeSessionCommand, SessionLiveEvent } from "@morty-build/client/protocol";
 import { AcpContentExternalizer } from "../../src/engine/acp/content/content-externalizer.ts";
 import type { AdapterResolver } from "../../src/engine/acp/native-history/preview-contract.ts";
-import { RuntimeAgentDependencies } from "../../src/engine/agent/runtime-agents.ts";
-import { createRuntimeConfig, RuntimeLocalContext } from "../../src/engine/runtime/config.ts";
+import { createRuntimeConfig, RuntimeAgentDependencies, RuntimeLocalContext } from "../../src/engine/runtime/config.ts";
 import { NullSessionObserver } from "../../src/engine/session/api/session-api.ts";
 import { NativeSessionService } from "../../src/engine/session/native/native-session-browser.ts";
 import { SessionCreations } from "../../src/engine/session/record/session-creations.ts";
@@ -112,7 +111,9 @@ export async function fixture(
         observer,
         store,
         adapters,
-        onSessionStatusChanged: () => undefined,
+        onSessionClosed: () => undefined,
+        lastTurn: () => undefined,
+        settledTurns: () => [],
         contentExternalizer: new AcpContentExternalizer((sessionTarget, content, signal) =>
             new UnretainedExternalContentStore().put({
                 bytes: content.bytes,
@@ -163,7 +164,9 @@ export async function fixture(
             observer: new NullSessionObserver(),
             store: new MemorySessionStore(),
             adapters: acpAdapters,
-            onSessionStatusChanged: () => undefined,
+            onSessionClosed: () => undefined,
+            lastTurn: () => undefined,
+            settledTurns: () => [],
             contentExternalizer: new AcpContentExternalizer((sessionTarget, content, signal) =>
                 new UnretainedExternalContentStore().put({
                     bytes: content.bytes,
@@ -239,7 +242,9 @@ export async function fixture(
                 observer,
                 store,
                 adapters,
-                onSessionStatusChanged: () => undefined,
+                onSessionClosed: () => undefined,
+                lastTurn: () => undefined,
+                settledTurns: () => [],
                 contentExternalizer: new AcpContentExternalizer((sessionTarget, content, signal) =>
                     new UnretainedExternalContentStore().put({
                         bytes: content.bytes,

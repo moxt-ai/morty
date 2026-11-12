@@ -61,6 +61,8 @@ class ControllableDaemonTask implements ScheduledTask {
         this.#cancelled = true;
     };
 
+    readonly isPending = (): boolean => !this.#cancelled;
+
     readonly run = (): void => {
         if (!this.#cancelled) {
             this.#cancelled = true;
@@ -91,7 +93,11 @@ class ControllableTimer implements Timer {
 
     readonly nextBatch = (signal: AbortSignal): Promise<ControllableDaemonTask> => {
         signal.throwIfAborted();
-        const task = this.#scheduled.shift();
+        // A flush cancels the batch it sends early; only a pending batch can still deliver events.
+        let task = this.#scheduled.shift();
+        while (task !== undefined && !task.isPending()) {
+            task = this.#scheduled.shift();
+        }
         if (task !== undefined) {
             return Promise.resolve(task);
         }

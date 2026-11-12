@@ -672,7 +672,6 @@ export const decodeKnownSessionEventPayload = (value: unknown): SessionEventPayl
     const decoded = sessionEventPayloadSchema.safeParse(inputValue(value));
     return decoded.success ? decoded.data : null;
 };
-export const encodeSessionEvent = (value: SessionEvent): string => encode(value, sessionEventSchema);
 export const decodeSessionLiveEvent = (value: unknown): SessionLiveEvent => decode(value, sessionLiveEventSchema);
 export const decodeSessionWireEnvelope = (value: unknown): SessionWireEnvelope =>
     decode(value, sessionWireEnvelopeSchema);
@@ -686,8 +685,6 @@ export const decodeSessionEventEnvelope = (value: unknown): SessionEventEnvelope
 export const encodeSessionEventEnvelope = (value: SessionEventEnvelope): string =>
     encode(value, sessionEventEnvelopeSchema);
 export const decodeAcpSessionUpdate = (value: unknown): AcpSessionUpdate => decode(value, acpSessionUpdateSchema);
-export const decodeSessionEventLogPage = (value: unknown): SessionEventLogPage =>
-    decode(value, sessionEventLogPageSchema);
 export const decodeKnownSessionEventLogPage = (value: unknown): SessionEventLogPage =>
     decode(sanitizeConsumableSessionEventLogPage(value), sessionEventLogPageSchema);
 export const decodeNativeSessionEvents = (value: unknown): NativeSessionEvents =>

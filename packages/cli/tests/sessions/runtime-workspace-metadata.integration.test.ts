@@ -13,8 +13,8 @@ it("describes a selected directory without browsing its children and still rejec
         const directory = canonical;
         await using relay = await startTestRelay();
         const signal = AbortSignal.timeout(30_000);
-        const project = await relay.createOwner();
-        const runtime = await relay.connectAgent(project.computerId);
+        const owner = await relay.createOwner();
+        const runtime = await relay.connectAgent(owner.computerId);
         const listing = await runtime.api.directory(directory, signal);
         expect(listing.entries.map((entry) => entry.name)).toContain("child");
 

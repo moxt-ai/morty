@@ -14,7 +14,16 @@ export function createOwnerApi(options: {
         sessionTransport: () => transport.computerTransport(options.computerId),
         origin: options.origin,
         computerId: options.computerId,
-        fetchRequest: options.request,
+        fetchRequest: (call) =>
+            options.request(
+                new Request(call.endpoint.url, {
+                    method: call.endpoint.method,
+                    headers: call.headers,
+                    body: call.body ?? null,
+                    redirect: call.redirect ?? "follow",
+                    signal: call.signal,
+                }),
+            ),
         getToken: async (signal) => {
             signal.throwIfAborted();
             return options.credential;

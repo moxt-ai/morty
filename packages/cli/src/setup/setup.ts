@@ -33,7 +33,8 @@ export interface SetupAgentReport {
 /** The Morty installation in a state directory, as setup drives it. */
 export interface SetupRuntime {
     /** The Computers the installation keeps a connection for. */
-    readonly computers: (directory: string, signal: AbortSignal) => Promise<readonly string[]>;
+    /** The Computer this computer's saved pairing serves, if any. */
+    readonly computer: (directory: string, signal: AbortSignal) => Promise<string | null>;
     /** Redeems a pairing, saves its connection, and has the daemon serve it. */
     readonly pair: (directory: string, pairing: SetupPairing, signal: AbortSignal) => Promise<void>;
     /** Has the daemon serve the saved connection, starting one when none runs. */
@@ -269,16 +270,16 @@ interface VerifiedIdentity {
 }
 
 /**
- * What setup did to this computer's Project. `replaced` ended every link and browser from the previous
- * Project, so the agent must tell the user; the saved replacement keeps that owed until a finished
- * setup reports it, even when the run that replaced the Project stopped first.
+ * What setup did to the Computer saved here. `replaced` ended every link and browser from the previous
+ * one, so the agent must tell the user; the saved replacement keeps that owed until a finished
+ * setup reports it, even when the run that replaced it stopped first.
  */
-type ProjectOutcome = "created" | "reused" | "replaced";
+type ComputerOutcome = "created" | "reused" | "replaced";
 
 interface SetupIdentity {
     readonly kind: "setup";
     readonly context: Context;
-    readonly project: Exclude<ProjectOutcome, "replaced">;
+    readonly computer: Exclude<ComputerOutcome, "replaced">;
 }
 
 interface SetupOptions {
@@ -288,8 +289,8 @@ interface SetupOptions {
     readonly cwd: string;
     readonly harness: string;
     readonly sessionId: string;
-    /** Explicit local approval applies only to this Project, never to a later replacement. */
-    readonly replaceProject: string | null;
+    /** Explicit local approval applies only to this Computer, never to a later replacement. */
+    readonly replaceComputer: string | null;
 }
 
 type ReplacementAccess =
@@ -299,8 +300,8 @@ type ReplacementAccess =
 
 type ReplacementReason = "managed_computer_missing" | "replacement_result_unknown";
 
-class ProjectReplacementRequiredError extends Error {
-    readonly code = "PROJECT_REPLACEMENT_REQUIRED";
+class ComputerReplacementRequiredError extends Error {
+    readonly code = "COMPUTER_REPLACEMENT_REQUIRED";
     readonly computerId: string;
     readonly reason: ReplacementReason;
 
@@ -308,9 +309,9 @@ class ProjectReplacementRequiredError extends Error {
         super(
             reason === "managed_computer_missing"
                 ? "The saved connection is missing. Replacing it will revoke earlier sharing links and browser access."
-                : "An earlier replacement has an unknown result. Continue only with approval for that same Project.",
+                : "An earlier replacement has an unknown result. Continue only with approval for that same Computer.",
         );
-        this.name = "ProjectReplacementRequiredError";
+        this.name = "ComputerReplacementRequiredError";
         this.computerId = computerId;
         this.reason = reason;
     }
@@ -368,22 +369,6 @@ class RuntimeStartError extends Error {
     }
 
     readonly diagnostic = () => ({ nextStep: this.nextStep });
-}
-
-class RuntimePreflightError extends Error {
-    readonly code = "RUNTIME_PREFLIGHT_FAILED";
-    readonly nextStep = "Use Node.js 22.19+ or 24.20+ and repair the installed Morty release before rerunning setup.";
-
-    constructor(message: string, cause?: unknown) {
-        super(message, { cause });
-        this.name = "RuntimePreflightError";
-    }
-
-    readonly diagnostic = () => ({
-        nodeVersion: process.versions.node,
-        nodeExecutable: process.execPath,
-        nextStep: this.nextStep,
-    });
 }
 
 /** Morty refused this shell's state root; setup must not continue against a state it cannot see. */
@@ -897,7 +882,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         return value;
     }
 
-    /** Sends a request as the saved identity, to its Project unless the route names one. */
+    /** Sends a request as the saved identity, to its Computer unless the route names one. */
     async function request(context: Context, route: string, body?: unknown) {
         const headers: Record<string, string> = { authorization: `Bearer ${context.identity.computerToken}` };
         if (route === "/management/computer/replacement") {
@@ -916,9 +901,9 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     }
 
     /**
-     * Ends the local identity of a Project this computer replaced. Setup keeps it with the successor's identity until
+     * Ends the local identity of a Computer this computer replaced. Setup keeps it with the successor's identity until
      * then, so a run that stops on the way ends it next time instead of leaving a credential that opens the replaced
-     * Project. Nothing else from that Project opens it: its replacement ended everything shared from it.
+     * Computer. Nothing else from that Computer opens it: its replacement ended everything shared from it.
      */
     async function retireReplacedIdentity<Retiring extends Context>(context: Retiring): Promise<Retiring> {
         const replacement = context.identity.replacement;
@@ -1008,7 +993,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         return {
             base: origin(values["base-url"]),
             deviceAccess: values["device-access"] ?? null,
-            replaceProject: values["replace-computer"] === undefined ? null : identifier(values["replace-computer"]),
+            replaceComputer: values["replace-computer"] === undefined ? null : identifier(values["replace-computer"]),
             cwd: text(values.cwd),
             harness,
             sessionId: currentSessionId(harness, values["session-id"]),
@@ -1061,7 +1046,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     async function prepareIdentity(location: StateLocation, saved: IdentityState): Promise<SetupIdentity> {
         if (saved.kind === "ready") {
             progress("identity", "Reusing the saved identity.");
-            return { kind: "setup", context: { ...location, identity: saved }, project: "reused" };
+            return { kind: "setup", context: { ...location, identity: saved }, computer: "reused" };
         }
         progress("identity", "Creating the standalone identity and Computer.");
         // Keep the creation secret across failures. Until a reply supplies the computerId, each attempt
@@ -1089,7 +1074,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             computerId: identifier(created["computerId"]),
         });
         await writeSavedState(location, identity);
-        return { kind: "setup", context: { ...location, identity }, project: "created" };
+        return { kind: "setup", context: { ...location, identity }, computer: "created" };
     }
 
     async function verifyIdentityAndComputer(context: Context): Promise<VerifiedIdentity> {
@@ -1117,7 +1102,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             relayUrl: origin(pairing["relayUrl"]),
         };
         if (selection.computerId !== context.identity.computerId) {
-            fail("PROJECT_CONFLICT");
+            fail("COMPUTER_CONFLICT");
         }
         const expiresAt = Date.parse(text(pairing["expiresAt"], /^\d{4}-\d{2}-\d{2}T[\d:.]+Z$/u));
         if (!Number.isFinite(expiresAt)) {
@@ -1127,7 +1112,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         return { computer: selection, expiresAt };
     }
 
-    async function replaceProject(context: Context): Promise<Context> {
+    async function replaceComputer(context: Context): Promise<Context> {
         const previousComputerId = context.identity.computerId;
         // Save before the request: a timeout or interrupted process cannot prove that access was not revoked.
         const prepared = await commit(context, withReplacementRequested(context.identity));
@@ -1151,7 +1136,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 computerId,
             }),
         );
-        emit({ status: "project_replaced", computerId: saved.identity.computerId });
+        emit({ status: "computer_replaced", computerId: saved.identity.computerId });
         return await retireReplacedIdentity(saved);
     }
 
@@ -1161,49 +1146,44 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         confirmedComputerId: string | null,
     ): Promise<{ readonly context: Context; readonly computer: ComputerSelection }> {
         progress("pairing", "Preparing the Computer connection.");
-        const replaceWithApproval = async (reason: ReplacementReason, managedConnectionCount: number | null) => {
+        const replaceWithApproval = async (reason: ReplacementReason) => {
             const computerId = context.identity.computerId;
             emit({
                 status: "replacement_check",
                 reason,
                 computerId,
                 expectedComputerId: computerPairing === "unpaired" ? null : computerId,
-                managedConnectionCount,
                 approved: confirmedComputerId === computerId,
                 platform: process.platform,
                 nodeVersion: process.versions.node,
                 runtimeStateSource: process.env["MORTY_STATE_DIRECTORY"]?.trim() ? "environment" : "default",
             });
             if (confirmedComputerId !== computerId) {
-                throw new ProjectReplacementRequiredError(computerId, reason);
+                throw new ComputerReplacementRequiredError(computerId, reason);
             }
-            return await pairComputer(await replaceProject(context));
+            return await pairComputer(await replaceComputer(context));
         };
         // A restored local pairing cannot settle whether a previous request revoked shared access.
         // Finish that idempotent operation with its original approval before reporting setup ready.
         if (context.identity.replacement.kind === "unknown") {
-            return await replaceWithApproval("replacement_result_unknown", null);
+            return await replaceWithApproval("replacement_result_unknown");
         }
-        // Computer IDs are unique, so the Computer's own connection list names the connection that serves one.
-        const reusable = async (computerId: string) => {
-            const connections = await host.runtime.computers(context.directory, signal);
-            const existing = connections.includes(computerId) ? { computerId } : undefined;
-            if (existing !== undefined) {
-                emit({
-                    status: "computer_reused",
-                    computerId: existing.computerId,
-                });
+        // Whether this computer's saved pairing already serves the Computer.
+        const computerId = context.identity.computerId;
+        const reused = async (): Promise<boolean> => {
+            if ((await host.runtime.computer(context.directory, signal)) !== computerId) {
+                return false;
             }
-            return { existing, managedConnectionCount: connections.length };
+            emit({ status: "computer_reused", computerId });
+            return true;
         };
         switch (computerPairing) {
             case "paired": {
-                const { existing, managedConnectionCount } = await reusable(context.identity.computerId);
-                if (existing !== undefined) {
-                    return { context, computer: { kind: "existing", ...existing, paired: true } };
+                if (await reused()) {
+                    return { context, computer: { kind: "existing", computerId, paired: true } };
                 }
                 // Losing the local pairing does not itself authorize ending shared access.
-                return await replaceWithApproval("managed_computer_missing", managedConnectionCount);
+                return await replaceWithApproval("managed_computer_missing");
             }
             case "revoked":
                 // Morty disconnected this computer because a copy of its connection key was used. The Computer and the
@@ -1218,9 +1198,8 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             case "unpaired": {
                 // A Computer an earlier run started for this computer may still be waiting for its pairing, so continue
                 // on it while this computer still manages its connection.
-                const { existing } = await reusable(context.identity.computerId);
-                if (existing !== undefined) {
-                    return { context, computer: { kind: "existing", ...existing, paired: false } };
+                if (await reused()) {
+                    return { context, computer: { kind: "existing", computerId, paired: false } };
                 }
                 return await pairComputer(context);
             }
@@ -1527,7 +1506,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         computer: ComputerSelection,
         options: SetupOptions,
         workingDirectory: string,
-        identity: SetupIdentity["project"],
+        identity: SetupIdentity["computer"],
     ) {
         await waitForReadiness(context, computer, options.harness);
         const transfer = await request(context, "/identity/transfers", {
@@ -1568,7 +1547,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 message: "The QR image is unavailable. Use the handoff link instead.",
             });
         }
-        const project: ProjectOutcome = context.identity.replacement.kind === "revoked" ? "replaced" : identity;
+        const outcome: ComputerOutcome = context.identity.replacement.kind === "revoked" ? "replaced" : identity;
         emit({
             status: "ready",
             computerId: context.identity.computerId,
@@ -1577,14 +1556,14 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             accessExpiresAt: text(transfer["accessExpiresAt"]),
             workspace: workingDirectory,
             qrPath: qr.kind === "available" ? qr.path : null,
-            project,
+            computer: outcome,
             message:
                 qr.kind === "available"
                     ? "Open the link or scan the QR code to chat. Keep the Computer online."
                     : "Open the link to chat. Keep the Computer online.",
         });
         setupReady = true;
-        if (project === "replaced") {
+        if (outcome === "replaced") {
             // Cleared only after ready reported it, so a run that stops earlier leaves the notice owed.
             await commit(context, withReplacementReported(context.identity));
         }
@@ -1615,12 +1594,6 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
 
     async function preflightRuntime(directory: string) {
         progress("preflight", "Verifying the Morty CLI before creating an identity.");
-        const [major = 0, minor = 0] = process.versions.node.split(".").map(Number);
-        if (!((major === 22 && minor >= 19) || (major === 24 && minor >= 20))) {
-            throw new RuntimePreflightError(
-                `Node.js 22.19+ or 24.20+ is required; found ${process.versions.node} at ${process.execPath}.`,
-            );
-        }
         try {
             await validateStateRoot({ ...process.env, MORTY_STATE_DIRECTORY: directory });
         } catch (cause) {
@@ -1651,12 +1624,12 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         );
         let computer = verified.context;
         emit({ status: "identity_ready", computerId: computer.identity.computerId });
-        const prepared = await prepareComputer(computer, verified.computerPairing, options.replaceProject);
+        const prepared = await prepareComputer(computer, verified.computerPairing, options.replaceComputer);
         computer = prepared.context;
         await startRuntime(computer, prepared.computer, cwd, options.harness);
         await waitForComputer(computer, prepared.computer, options.harness);
         computer = await bindAgent(computer, options.harness);
-        await finishSetup(computer, prepared.computer, options, cwd, identity.project);
+        await finishSetup(computer, prepared.computer, options, cwd, identity.computer);
     }
 
     try {
@@ -1688,12 +1661,12 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 cause: serializeErrorCause(cause),
                 ...(cause instanceof MortyStateRootError
                     ? { runtime: cause.diagnostic(replacementAccess) }
-                    : cause instanceof RuntimeStartError || cause instanceof RuntimePreflightError
+                    : cause instanceof RuntimeStartError
                       ? { runtime: cause.diagnostic() }
                       : {}),
                 ...(cause instanceof AgentBindingError ? { binding: cause.diagnostic() } : {}),
                 ...(cause instanceof HarnessUnavailableError ? { harness: cause.diagnostic() } : {}),
-                ...(cause instanceof ProjectReplacementRequiredError ? { replacement: cause.diagnostic() } : {}),
+                ...(cause instanceof ComputerReplacementRequiredError ? { replacement: cause.diagnostic() } : {}),
                 ...(cause instanceof SavedIdentityOriginError ? { savedIdentity: cause.diagnostic() } : {}),
                 ...replacementFailure(replacementAccess),
             },

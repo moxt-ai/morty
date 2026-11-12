@@ -1,4 +1,4 @@
-import type { ProjectLocationHint } from "@morty-build/client/protocol";
+import type { ComputerLocationHint } from "../computer-location.ts";
 import { ComputerManagementError } from "../computer-management.ts";
 
 export class RelayAuthenticationConfiguration {
@@ -12,7 +12,7 @@ export class RelayAuthenticationConfiguration {
 }
 
 export interface ComputerManagementPlacement {
-    readonly locationHint: ProjectLocationHint;
+    readonly locationHint: ComputerLocationHint;
 }
 
 function validOrigin(value: string): boolean {

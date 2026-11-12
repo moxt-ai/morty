@@ -8,10 +8,13 @@ import {
     type HarnessReplyPlan,
 } from "@morty-build/runtime-test-support/fake-daemon";
 import * as v from "valibot";
-import { RuntimeAgentDependencies } from "../../../packages/cli/src/engine/agent/runtime-agents.ts";
-import { createRuntimeConfig, RuntimeLocalContext } from "../../../packages/cli/src/engine/runtime/config.ts";
+import {
+    createRuntimeConfig,
+    RuntimeAgentDependencies,
+    RuntimeLocalContext,
+} from "../../../packages/cli/src/engine/runtime/config.ts";
 import type { ComputerCredentials } from "../../../packages/cli/src/engine/runtime/connection/computer-credentials.ts";
-import { RuntimeLoop } from "../../../packages/cli/src/engine/runtime/runtime-loop.ts";
+import { runRuntime } from "../../../packages/cli/src/engine/runtime/run.ts";
 import { acpAdapters } from "../../../packages/cli/tests/support/acp-adapters.ts";
 import { memoryComputerCredentials } from "../../../packages/cli/tests/support/computer-credentials.ts";
 import { createOwnerApi } from "../owner-api.ts";
@@ -68,7 +71,12 @@ function controlledRuntime(
     agents: ReturnType<typeof createMortyFakeDaemon>["agents"],
     connection: RuntimeConnectionOptions,
     directory: string,
-): { readonly start: (onConnectionStatus: (status: "online" | "reconnecting") => void) => RuntimeLoop } {
+): {
+    readonly start: (
+        signal: AbortSignal,
+        onConnectionStatus: (status: "online" | "reconnecting") => void,
+    ) => Promise<void>;
+} {
     const config = createRuntimeConfig(
         connection,
         new RuntimeAgentDependencies(agents, acpAdapters),
@@ -76,7 +84,7 @@ function controlledRuntime(
         async (agent) => agent,
     );
     return {
-        start: (onConnectionStatus) => new RuntimeLoop(async () => config, { onConnectionStatus }),
+        start: (signal, onConnectionStatus) => runRuntime(config, signal, undefined, { onConnectionStatus }),
     };
 }
 
@@ -183,12 +191,11 @@ export async function connectControlledAgentRuntime(options: {
         const cancellation = new AbortController();
         const signal = AbortSignal.any([options.signal, cancellation.signal]);
         const ready = Promise.withResolvers<void>();
-        const engine = runtime.start((status) => {
+        const daemon = runtime.start(signal, (status) => {
             if (status === "online") {
                 ready.resolve();
             }
         });
-        const daemon = engine.run(signal);
         const failure = daemon.then<never>(() => {
             throw new Error("The production daemon stopped unexpectedly");
         });

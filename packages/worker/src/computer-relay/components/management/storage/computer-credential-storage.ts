@@ -2,19 +2,18 @@ import { relayDrizzle } from "../../../../infra/drizzle-database.ts";
 import type { DurableObjectDatabase } from "../../../infra/durable-object-database.ts";
 import { activeGeneration } from "./computer-generation.ts";
 
-/** Which pairing generation of a Computer is active in the Project's own storage. */
+/** Which pairing generation of the computer is active in its own storage. */
 export class ComputerCredentialStorage {
+    readonly #computerId: string;
     readonly #database: DurableObjectDatabase;
 
-    constructor(database: DurableObjectDatabase) {
+    constructor(computerId: string, database: DurableObjectDatabase) {
+        this.#computerId = computerId;
         this.#database = database;
     }
 
-    readonly readActiveGeneration = async (
-        identity: { readonly computerId: string },
-        signal: AbortSignal,
-    ): Promise<number | null> => {
-        const active = activeGeneration(identity.computerId).as("active_generation");
+    readonly readActiveGeneration = async (signal: AbortSignal): Promise<number | null> => {
+        const active = activeGeneration(this.#computerId).as("active_generation");
         const rows = await relayDrizzle(this.#database, signal)
             .select({ generation: active.generation })
             .from(active)

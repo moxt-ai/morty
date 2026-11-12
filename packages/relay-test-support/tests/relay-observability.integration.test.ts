@@ -250,14 +250,14 @@ it("identifies the failing Computer Durable Object through the public pairing an
     });
     expect(response.status).toBe(503);
     expect(await response.json()).toEqual({
-        error: { code: "PROJECT_OBJECT_UNAVAILABLE", message: "Morty storage is unavailable." },
+        error: { code: "COMPUTER_OBJECT_UNAVAILABLE", message: "Morty storage is unavailable." },
     });
     await expect
-        .poll(() => logs.slice(start).find((log) => log["event"] === "project_relay_request_failed"))
+        .poll(() => logs.slice(start).find((log) => log["event"] === "computer_relay_request_failed"))
         .toBeDefined();
     expect(logs.slice(start)).toContainEqual(
         expect.objectContaining({
-            event: "project_relay_request_failed",
+            event: "computer_relay_request_failed",
             durableObjectId: expect.any(String),
             computerId,
             path: "/morty/api/v1/computers/connect",
@@ -276,7 +276,7 @@ it.each([
     async ({ method, path }) => {
         const response = await api(path, { method, headers: { "x-test-routing-failure": "1" } }, 503);
         expect(response).toEqual({
-            error: { code: "PROJECT_OBJECT_UNAVAILABLE", message: "Morty storage is unavailable." },
+            error: { code: "COMPUTER_OBJECT_UNAVAILABLE", message: "Morty storage is unavailable." },
         });
     },
 );
@@ -291,11 +291,11 @@ it("identifies a Computer Relay overload through the public HTTP API", async () 
         503,
     );
     await expect
-        .poll(() => logs.slice(start).find((log) => log["event"] === "project_relay_request_failed"))
+        .poll(() => logs.slice(start).find((log) => log["event"] === "computer_relay_request_failed"))
         .toBeDefined();
     expect(logs.slice(start)).toContainEqual(
         expect.objectContaining({
-            event: "project_relay_request_failed",
+            event: "computer_relay_request_failed",
             durableObjectClass: "ComputerRelay",
             durableObjectId: expect.any(String),
             computerId,

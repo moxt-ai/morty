@@ -1,13 +1,10 @@
-import { computerRequestTarget } from "@morty-build/client";
 import { decodeFileReadCommand, MORTY_API_PREFIX } from "@morty-build/client/protocol";
 import { Hono, type MiddlewareHandler } from "hono";
-import { bodyLimit } from "hono/body-limit";
 import * as v from "valibot";
 import { decodeSessionRequest } from "../../contracts/agent-api/session-requests.ts";
 import { COMPUTER_INTERNAL_PREFIX } from "../../contracts/computer-relay-http.ts";
 import { validateIdentifier } from "../../contracts/relay/pairing.ts";
-import { readJsonBody } from "../../http/body-parser.ts";
-import { computerIdFromApiPath } from "../../http/computer-api-target.ts";
+import { computerIdFromApiPath, matchesComputerApiTarget } from "../../http/computer-api-target.ts";
 import { computerFromPath, computerFromRuntimeCredential } from "../../http/computer-target.ts";
 import { errorHandler } from "../../http/error-middleware.ts";
 import { json } from "../../http/json.ts";
@@ -36,57 +33,20 @@ export function createComputerHttpRoutes(
 ) {
     const filePath = `${MORTY_API_PREFIX}/v1/computers/:computerId/harnesses/:harness/sessions/:sessionId/files/content`;
     const timeout = requestTimeoutMiddleware<ComputerRouteHttpEnvironment>(30_000);
-    const sizeLimit = bodyLimit({ maxSize: 3 * 1_024 * 1_024 });
     const cors = createBrowserCors(["GET"], ["authorization"]);
     const applicationRoutes = createApplicationRoutes(ctx);
     return new Hono<ComputerRouteHttpEnvironment>()
         .use("*", errorMiddleware)
-        .get(
-            `${COMPUTER_INTERNAL_PREFIX}/:computerId/account`,
-            timeout,
-            computerFromPath,
-            initializeInternal,
-            sizeLimit,
-            async (context) => context.json(await context.var.computerInternal.readAccount(context.req.raw.signal)),
-        )
         .post(
             `${COMPUTER_INTERNAL_PREFIX}/:computerId/account`,
             timeout,
             computerFromPath,
             initializeInternal,
-            sizeLimit,
-            async (context) =>
-                context.json(
-                    await context.var.computerInternal.createAccount(
-                        await readJsonBody(context.req.raw),
-                        context.req.raw.signal,
-                    ),
-                ),
-        )
-        .get(
-            `${COMPUTER_INTERNAL_PREFIX}/:computerId/active-generation`,
-            timeout,
-            computerFromPath,
-            initializeInternal,
-            sizeLimit,
-            async (context) =>
-                context.json({
-                    generation: await context.var.computerInternal.readActiveGeneration(context.req.raw.signal),
-                }),
-        )
-        .post(
-            `${COMPUTER_INTERNAL_PREFIX}/:computerId/access-check`,
-            timeout,
-            computerFromPath,
-            initializeInternal,
-            sizeLimit,
-            async (context) =>
-                context.json({
-                    holdsAccess: await context.var.computerInternal.holdsAccess(
-                        await readJsonBody(context.req.raw),
-                        context.req.raw.signal,
-                    ),
-                }),
+            async (context) => {
+                const computerId = context.var.computerId;
+                await context.var.computerAccount.create(computerId, context.req.raw.signal);
+                return context.json({ computerId });
+            },
         )
         .route(
             "/",
@@ -127,12 +87,7 @@ export function createComputerHttpRoutes(
                         const authorized = await authorizeSessionContentUpload(operation, sessionAccess);
                         return authorized instanceof Response ? authorized : new Response(null, { status: 204 });
                     },
-                    validateTarget: (operation) => {
-                        const target = computerRequestTarget(operation);
-                        const targetId =
-                            target?.kind === "operation" ? target.computerId : computerIdFromApiPath(operation);
-                        return targetId === computerId;
-                    },
+                    validateTarget: (operation) => matchesComputerApiTarget(operation, computerId),
                 });
             },
         )
@@ -158,7 +113,7 @@ export function createComputerHttpRoutes(
                 v.pipe(v.number(), v.safeInteger(), v.minValue(1), v.maxValue(128 * 1024 * 1024)),
                 Number(context.req.query("maxBytes") ?? String(32 * 1024 * 1024)),
             );
-            return context.var.sessionOperations.readProjectSessionFile(
+            return context.var.sessionOperations.readSessionFile(
                 access.computerId,
                 decodeFileReadCommand(
                     JSON.stringify({

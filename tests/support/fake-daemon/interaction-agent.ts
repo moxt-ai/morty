@@ -315,7 +315,6 @@ export function createInteractionAgent(onBackgroundPermissionReady?: (request: (
         process.execPath,
         {},
         "controlled-harness",
-        undefined,
         fakeDaemonCapabilities,
     );
 }

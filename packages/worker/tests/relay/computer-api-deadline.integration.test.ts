@@ -2,19 +2,16 @@ import { abortAllDurableObjects, runInDurableObject } from "cloudflare:test";
 import { env } from "cloudflare:workers";
 import { Hono } from "hono";
 import { afterAll, expect, it, vi } from "vitest";
-import { DurableComputerAccount } from "../../src/computer-relay/components/management/storage/durable-computer-account.ts";
 import { SessionAccessSigner } from "../../src/computer-relay/components/runtime/entity/session-access-credential.ts";
 import { acceptWebSocketHttpTransport } from "../../src/computer-relay/components/runtime/http/websocket-http-transport.ts";
 import { createLocalSessionOperations } from "../../src/computer-relay/components/runtime/service/local-session-operations.ts";
 import { SessionAccessService } from "../../src/computer-relay/components/runtime/service/session-access-service.ts";
 import { createBrowserWebSocketRoutes } from "../../src/computer-relay/components/runtime/websocket/browser-websocket-routes.ts";
-import { computerDirectory } from "../../src/computer-relay/composition/computer-directory.ts";
 import { createRelayDurableObjectContext } from "../../src/computer-relay/composition/relay-durable-object-context.ts";
-import { ComputerRelayGateway } from "../../src/computer-relay/gateway/computer-relay.ts";
 import { DurableObjectDatabase } from "../../src/computer-relay/infra/durable-object-database.ts";
 import { RequestDeadline } from "../../src/http/request-deadline.ts";
 import { createOwner, ownerOrigin } from "./owner-fixture.ts";
-import { computerManagementStore } from "./registered-computer.ts";
+import { computerAccess } from "./registered-computer.ts";
 
 /** A stateful downstream application boundary whose response is released by the scenario. */
 class PendingComputerApiBoundary {
@@ -35,17 +32,17 @@ it("Given a Computer API with a 120-second deadline mounted beside Session route
     vi.useFakeTimers({ now: new Date("2026-11-12T00:00:00.000Z") });
     try {
         await runInDurableObject(env.COMPUTER_RELAY.getByName(owner.computerId), async (_instance, state) => {
+            const { access } = computerAccess(owner.computerId, state.storage);
             const runtime = createRelayDurableObjectContext(state, {
-                accounts: new DurableComputerAccount(state.storage),
                 database: new DurableObjectDatabase(state.storage),
-                storeFor: (computerId) => computerManagementStore(computerId, state.storage),
+                access: () => access,
             });
             const api = new PendingComputerApiBoundary();
             const router = createBrowserWebSocketRoutes({
                 computerId: owner.computerId,
                 services: {
                     sessions: new SessionAccessService(
-                        computerDirectory(env, (id) => new ComputerRelayGateway(env, id)),
+                        access,
                         new SessionAccessSigner(env.MORTY_SESSION_SIGNING_SECRET),
                     ),
                     operations: createLocalSessionOperations(runtime, owner.computerId),

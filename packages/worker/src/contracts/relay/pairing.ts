@@ -89,7 +89,6 @@ function pairingDirectoryErrorStatus(code: string): number {
             return 401;
         case "computer_access_denied":
             return 403;
-        case "computer_unavailable":
         case "idempotency_conflict":
             return 409;
         case "pairing_timeout":

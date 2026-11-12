@@ -18,8 +18,8 @@ test("Given a saved setup handoff, When its Computer reconnects, Then setup retu
     const connected = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
     const statuses = connected.events.map((event) => event["status"]);
 
-    expect(original.events).toContainEqual(expect.objectContaining({ status: "ready", project: "created" }));
-    expect(connected.events).toContainEqual(expect.objectContaining({ status: "ready", project: "reused" }));
+    expect(original.events).toContainEqual(expect.objectContaining({ status: "ready", computer: "created" }));
+    expect(connected.events).toContainEqual(expect.objectContaining({ status: "ready", computer: "reused" }));
     expect(connected.computerId).toBe(original.computerId);
     expect(statuses).not.toContain("prepared");
     expect(statuses).toEqual(
@@ -69,11 +69,11 @@ test("Given a saved Computer the manager no longer manages, When the user approv
     expect(connected.computerId).not.toBe(original.computerId);
     const statuses = connected.events.map((event) => event["status"]);
     expect(statuses).toContain("prepared");
-    // The agent reads this to tell the user that links from the replaced Project stopped working.
-    expect(connected.events).toContainEqual(expect.objectContaining({ status: "ready", project: "replaced" }));
+    // The agent reads this to tell the user that links from the replaced Computer stopped working.
+    expect(connected.events).toContainEqual(expect.objectContaining({ status: "ready", computer: "replaced" }));
 });
 
-test("Given a browser opened the saved Computer's link, When the user approves replacing its Project, Then earlier access ends and the new link works in the same tab", async ({
+test("Given a browser opened the saved Computer's link, When the user approves replacing it, Then earlier access ends and the new link works in the same tab", async ({
     runtime,
 }) => {
     const original = await runtime.followInstructions("/setup.md", "setup-reconnect-session");

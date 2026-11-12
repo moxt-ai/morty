@@ -13,13 +13,10 @@ export function assertRequiredKeys(value: Readonly<Record<string, unknown>>, req
     }
 }
 
-export async function parseJsonBody(
-    request: Request,
-    maximumLength = MAX_REQUEST_BODY_LENGTH,
-): Promise<Readonly<Record<string, unknown>>> {
+export async function parseJsonBody(request: Request): Promise<Readonly<Record<string, unknown>>> {
     let encoded: string;
     try {
-        encoded = await readBoundedUtf8Body(request, maximumLength);
+        encoded = await readBoundedUtf8Body(request, MAX_REQUEST_BODY_LENGTH);
     } catch (cause) {
         if (cause instanceof RequestBodyError) {
             throw new PairingDirectoryError(
@@ -48,7 +45,7 @@ export async function parseJsonBody(
 export function bearerToken(request: Request): string {
     const authorization = request.headers.get("authorization") ?? "";
     if (!authorization.startsWith("Bearer ")) {
-        throw new PairingDirectoryError("unauthorized", "A project bearer token is required");
+        throw new PairingDirectoryError("unauthorized", "A bearer token is required");
     }
     return authorization.slice("Bearer ".length);
 }

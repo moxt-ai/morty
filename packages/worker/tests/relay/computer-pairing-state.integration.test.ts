@@ -122,7 +122,6 @@ it("Given a delayed claim, When newer requests have reused expired capacity, The
     const claimed = await app.storage(async (storage) =>
         new ComputerDirectoryStorage(app.computerId, new DurableObjectDatabase(storage)).claim(
             {
-                computerId: pairing.computerId,
                 codeHash,
                 daemonHash: await hashPairingCredential("delayed-computer-credential"),
                 now: claimTime,

@@ -3,9 +3,9 @@ import { PairingDirectoryError, validateIdentifier } from "../../../../contracts
 import type { ComputerIdentityCredential } from "../../../../contracts/relay/pairing-identity.ts";
 import { DatabaseError } from "../../../../infra/sql-database.ts";
 import type { ComputerRelayStore } from "../storage/computer-relay-store.ts";
-import type { ComputerManagementService } from "./computer-management-service.ts";
+import type { ComputerAccessService } from "./computer-access-service.ts";
 
-/** A credential that matches nothing, including one stored for a Project that is no longer served. */
+/** A credential that matches nothing, including one stored for a Computer that is no longer served. */
 function unmatchedCredential(credential: ComputerIdentityCredential): PairingDirectoryError {
     const code = credential.kind === "pairing-code" ? "invalid_pairing_code" : "unauthorized";
     return new PairingDirectoryError(code, "A valid pairing or channel credential is required");
@@ -17,8 +17,8 @@ function unmatchedCredential(credential: ComputerIdentityCredential): PairingDir
 export class ComputerIdentityService {
     readonly #computerId: string;
     readonly #store: ComputerRelayStore;
-    readonly #accounts: Pick<ComputerManagementService, "isActive">;
-    constructor(computerId: string, store: ComputerRelayStore, accounts: Pick<ComputerManagementService, "isActive">) {
+    readonly #accounts: Pick<ComputerAccessService, "isActive">;
+    constructor(computerId: string, store: ComputerRelayStore, accounts: Pick<ComputerAccessService, "isActive">) {
         this.#computerId = computerId;
         this.#store = store;
         this.#accounts = accounts;
@@ -34,7 +34,7 @@ export class ComputerIdentityService {
     };
 
     /**
-     * Presents a daemon credential with its successor. The Project store rotates the credential; a retired credential
+     * Presents a daemon credential with its successor. The Computer store rotates the credential; a retired credential
      * presented with another successor is reported as reused, for the caller to end the Computer's access, and one of a
      * Computer whose access already ended as revoked.
      */
@@ -106,9 +106,11 @@ export class ComputerIdentityService {
                 throw cause;
             }
             if (cause instanceof DatabaseError && cause.code === "database_timeout") {
-                throw new PairingDirectoryError("directory_timeout", "The Project directory timed out", { cause });
+                throw new PairingDirectoryError("directory_timeout", "The Computer directory timed out", { cause });
             }
-            throw new PairingDirectoryError("directory_unavailable", "The Project directory is unavailable", { cause });
+            throw new PairingDirectoryError("directory_unavailable", "The Computer directory is unavailable", {
+                cause,
+            });
         }
     };
 }

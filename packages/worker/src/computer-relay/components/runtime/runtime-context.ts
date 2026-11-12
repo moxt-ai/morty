@@ -1,7 +1,5 @@
 import type { DurableObjectDatabase } from "../../infra/durable-object-database.ts";
 import type { ComputerAccessService } from "../management/service/computer-access-service.ts";
-import type { ComputerManagementService } from "../management/service/computer-management-service.ts";
-import type { ComputerRelayStore } from "../management/storage/computer-relay-store.ts";
 import { ComputerCredentialService } from "./service/computer-credential-service.ts";
 import { ComputerRelayActor } from "./service/computer-relay-actor.ts";
 import { type ComputerPeers, ComputerService } from "./service/computer-service.ts";
@@ -14,12 +12,8 @@ export type RuntimeContext = ReturnType<typeof createRuntimeContext>;
 
 export function createRuntimeContext(cx: {
     readonly doDatabase: DurableObjectDatabase;
-    readonly storages: {
-        readonly projectStore: Pick<ComputerRelayStore, "readActiveGeneration">;
-    };
     readonly services: {
-        readonly computerAccounts: Pick<ComputerManagementService, "isActive">;
-        readonly projectAccess: Pick<ComputerAccessService, "grantsSessionCredential">;
+        readonly access: (computerId: string) => ComputerAccessService;
     };
     readonly gateways: {
         readonly peers: Omit<ComputerPeers, "operations">;
@@ -38,11 +32,7 @@ export function createRuntimeContext(cx: {
         viewers: source.viewers,
         operations: requests.routes,
     };
-    const credentials = new ComputerCredentialService(
-        cx.storages.projectStore,
-        cx.services.computerAccounts,
-        cx.services.projectAccess,
-    );
+    const credentials = new ComputerCredentialService(cx.services.access);
     const connections = new DaemonConnectionService(new ComputerConnectionStorage(cx.doDatabase));
     const runtime = new ComputerService({
         services: {
@@ -56,7 +46,6 @@ export function createRuntimeContext(cx: {
     return {
         doDatabase: cx.doDatabase,
         gateways: { ...cx.gateways, peers, requests },
-        storages: cx.storages,
         utilities: cx.utilities,
         services: {
             ...cx.services,

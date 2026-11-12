@@ -17,19 +17,16 @@ import {
 import { activeGeneration, currentGeneration } from "./computer-generation.ts";
 
 const registrationFields = {
-    claimed_at: computerRegistration.claimedAt,
     computer_name: computerRegistration.computerName,
     workspace_name: computerRegistration.workspaceName,
     agents_json: computerRegistration.agentsJson,
 };
 interface CreateComputerPairing {
-    readonly computerId: string;
     readonly codeHash: string;
     readonly pollHash: string;
     readonly now: number;
     readonly expiresAt: number;
     readonly idempotencyKey: string;
-    readonly ownerId: string;
 }
 
 /** A bound value selected as a column, for rows an INSERT ... SELECT writes. */
@@ -70,12 +67,9 @@ export class ComputerDirectoryStorage {
     };
 
     /** The computer's current generation; null before it was ever paired. */
-    readonly readProjectPairing = async (computerId: string, signal: AbortSignal): Promise<PairingClaimRow | null> => {
-        if (computerId !== this.#computerId) {
-            return null;
-        }
+    readonly readCurrentPairing = async (signal: AbortSignal): Promise<PairingClaimRow | null> => {
         const rows = await this.generationQuery(relayDrizzle(this.#database, signal))
-            .where(inArray(computerPairing.generation, currentGeneration(computerId)))
+            .where(inArray(computerPairing.generation, currentGeneration(this.#computerId)))
             .limit(1);
         return rows[0] ?? null;
     };
@@ -90,7 +84,6 @@ export class ComputerDirectoryStorage {
                 pairing_code_hash: computerPairing.pairingCodeHash,
                 poll_token_hash: computerPairing.pollTokenHash,
                 expires_at: computerPairing.expiresAt,
-                created_by_owner_credential_id: computerPairing.createdByOwnerCredentialId,
             })
             .from(computerPairing)
             .where(
@@ -134,7 +127,6 @@ export class ComputerDirectoryStorage {
                     pollTokenHash: bound(value.pollHash, "poll_token_hash"),
                     expiresAt: bound(value.expiresAt, "expires_at"),
                     creationIdempotencyKey: bound(value.idempotencyKey, "creation_idempotency_key"),
-                    createdByOwnerCredentialId: bound(value.ownerId, "created_by_owner_credential_id"),
                 })
                 .from(openGenerations)
                 .where(eq(openGenerations.open, 0)),
@@ -145,7 +137,6 @@ export class ComputerDirectoryStorage {
     /** Registers the daemon that presented the current generation's unexpired pairing code. */
     readonly claim = async (
         value: {
-            readonly computerId: string;
             readonly codeHash: string;
             readonly daemonHash: string;
             readonly now: number;
@@ -162,7 +153,7 @@ export class ComputerDirectoryStorage {
             .where(
                 and(
                     eq(computerPairing.computerId, this.#computerId),
-                    inArray(computerPairing.generation, currentGeneration(value.computerId)),
+                    inArray(computerPairing.generation, currentGeneration(this.#computerId)),
                     eq(computerPairing.pairingCodeHash, value.codeHash),
                     gt(computerPairing.expiresAt, value.now),
                     notInArray(
@@ -189,7 +180,6 @@ export class ComputerDirectoryStorage {
             database
                 .select({
                     generation: daemonCredential.generation,
-                    claimedAt: bound(value.now, "claimed_at"),
                     computerName: bound(value.computerName, "computer_name"),
                     workspaceName: bound(value.workspaceName, "workspace_name"),
                     agentsJson: bound(value.agents, "agents_json"),
@@ -207,17 +197,14 @@ export class ComputerDirectoryStorage {
     };
 
     /** The computer's current generation as a Computer: its registration and revocation, if they happened. */
-    readonly readComputer = async (
-        computerId: string,
-        signal: AbortSignal,
-    ): Promise<ComputerPairingDirectoryRow | null> => {
-        const row = await this.readProjectPairing(computerId, signal);
+    readonly readComputer = async (signal: AbortSignal): Promise<ComputerPairingDirectoryRow | null> => {
+        const row = await this.readCurrentPairing(signal);
         return row === null
             ? null
             : { computer_id: row.computer_id, revoked_at: row.revoked_at, registration: row.registration };
     };
 
-    readonly readDaemon = async (computerId: string, tokenHash: string, signal: AbortSignal) => {
+    readonly readDaemon = async (tokenHash: string, signal: AbortSignal) => {
         const rows = await relayDrizzle(this.#database, signal)
             .select({ computer_id: computerPairing.computerId })
             .from(daemonCredential)
@@ -226,7 +213,7 @@ export class ComputerDirectoryStorage {
                 and(
                     eq(computerPairing.computerId, this.#computerId),
                     eq(daemonCredential.tokenHash, tokenHash),
-                    inArray(daemonCredential.generation, activeGeneration(computerId)),
+                    inArray(daemonCredential.generation, activeGeneration(this.#computerId)),
                 ),
             )
             .limit(1);
@@ -305,45 +292,31 @@ export class ComputerDirectoryStorage {
     };
 
     /** Ends the current generation's access, once; a repeated revocation returns the first one. */
-    readonly revokeComputer = async (
-        value: {
-            readonly computerId: string;
-            readonly now: number;
-        },
-        signal: AbortSignal,
-    ): Promise<ComputerPairingDirectoryRow | null> => {
-        if (value.computerId !== this.#computerId) {
-            return null;
-        }
+    readonly revokeComputer = async (now: number, signal: AbortSignal): Promise<ComputerPairingDirectoryRow | null> => {
         const database = relayDrizzle(this.#database, signal);
-        const current = currentGeneration(value.computerId);
+        const current = currentGeneration(this.#computerId);
         const revocation = database
             .insert(computerRevocation)
             .select(
                 database
-                    .select({ generation: computerPairing.generation, revokedAt: bound(value.now, "revoked_at") })
+                    .select({ generation: computerPairing.generation, revokedAt: bound(now, "revoked_at") })
                     .from(computerPairing)
                     .where(inArray(computerPairing.generation, current)),
             )
             .onConflictDoNothing();
         this.#database.run(revocation, signal);
         // Reading the committed fact makes overlapping retries return the first revocation time.
-        return await this.readComputer(value.computerId, signal);
-    };
-
-    readonly readRegisteredComputer = async (computerId: string, signal: AbortSignal) => {
-        const row = await this.readComputer(computerId, signal);
-        return row?.registration && row.revoked_at === null
-            ? { computer_id: row.computer_id, ...row.registration }
-            : null;
+        return await this.readComputer(signal);
     };
 
     readonly listComputers = async (signal: AbortSignal) => {
-        const computer = await this.readRegisteredComputer(this.#computerId, signal);
-        return computer === null ? [] : [computer];
+        const row = await this.readComputer(signal);
+        return row?.registration && row.revoked_at === null
+            ? [{ computer_id: row.computer_id, ...row.registration }]
+            : [];
     };
 
-    readonly updateAgents = async (computerId: string, tokenHash: string, agents: string, signal: AbortSignal) => {
+    readonly updateAgents = async (tokenHash: string, agents: string, signal: AbortSignal) => {
         const database = relayDrizzle(this.#database, signal);
         return this.#database.run(
             database
@@ -358,7 +331,7 @@ export class ComputerDirectoryStorage {
                             .where(
                                 and(
                                     eq(daemonCredential.tokenHash, tokenHash),
-                                    inArray(daemonCredential.generation, activeGeneration(computerId)),
+                                    inArray(daemonCredential.generation, activeGeneration(this.#computerId)),
                                 ),
                             ),
                     ),

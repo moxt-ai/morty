@@ -3,7 +3,7 @@ import { and, eq, exists, gt, inArray, isNull, max, ne, notExists, or, type SQL,
 import { alias, type SQLiteColumn } from "drizzle-orm/sqlite-core";
 import type { Credential, SharedLinkTerms } from "../../../../contracts/authentication/credential.ts";
 import type { ClientLocation } from "../../../../contracts/client-location.ts";
-import { readProjectCredential } from "../../../../contracts/project-credential.ts";
+import { readTransferCredential } from "../../../../contracts/transfer-credential.ts";
 import type { DurableObjectDatabase } from "../../../infra/durable-object-database.ts";
 import {
     browserCredential,
@@ -162,7 +162,6 @@ export class IdentityStorage {
 
     readonly createComputer = async (
         computerId: string,
-        now: number,
         signal: AbortSignal,
         token: string,
     ): Promise<AnonymousIdentity | null> => {
@@ -176,7 +175,7 @@ export class IdentityStorage {
         const database = requireIdentityDatabase(this.#database);
         await database
             .insert(ownerCredential)
-            .values({ id: credentialId, tokenHash, createdAt: now })
+            .values({ id: credentialId, tokenHash })
             .onConflictDoNothing({ target: ownerCredential.tokenHash })
             .run();
         signal.throwIfAborted();
@@ -364,9 +363,7 @@ export class IdentityStorage {
                         database
                             .select({
                                 id: sql<string>`${`cred_${crypto.randomUUID()}`}`.as("id"),
-                                retainedOwnerReference: sql<null>`null`.as("user_id"),
                                 tokenHash: sql<string>`${successorHash}`.as("token_hash"),
-                                createdAt: sql<number>`${now}`.as("created_at"),
                                 revokedAt: sql<null>`null`.as("revoked_at"),
                             })
                             .from(ownerCredential)
@@ -465,7 +462,6 @@ export class IdentityStorage {
             id: sql<string>`${`transfer_${crypto.randomUUID()}`}`.as("id"),
             codeHash: sql<string>`${codeHash}`.as("code_hash"),
             requestHash: sql<string>`${operation.requestHash}`.as("request_hash"),
-            retainedOwnerReference: sql<null>`null`.as("user_id"),
             expiresAt: sql<number>`${terms.expiresAt}`.as("expires_at"),
             accessExpiresAt: sql<number>`${terms.accessExpiresAt}`.as("access_expires_at"),
             createdAt: sql<number>`${now}`.as("created_at"),
@@ -517,7 +513,7 @@ export class IdentityStorage {
     };
 
     /**
-     * Opens a link in a browser. `replaces` is the credential the browser already holds for this Project: a browser
+     * Opens a link in a browser. `replaces` is the credential the browser already holds for this Computer: a browser
      * keeps one credential, so the new one replaces it at once and belongs to the same device while that device still
      * holds access; the device keeps the later of its term and this link's. A browser holding none, or whose device's
      * access ended, becomes a new device, described by this joining.
@@ -534,7 +530,7 @@ export class IdentityStorage {
         now: number,
         signal: AbortSignal,
     ): Promise<AnonymousIdentity | null> => {
-        const parsed = readProjectCredential(code);
+        const parsed = readTransferCredential(code);
         if (parsed?.kind !== "morty_transfer_v1" || parsed.computerId !== this.#computerId) {
             return null;
         }
@@ -578,7 +574,7 @@ export class IdentityStorage {
         const replaced = eq(browserCredential.tokenHash, replacedHash ?? "");
         // The replaced credential may already be replaced by a concurrent or retried redemption in the same browser;
         // the device it belongs to is kept while that device holds access. The read and the writes below run with no
-        // other request in between: the Project's Durable Object runs its SQL synchronously.
+        // other request in between: the Computer's Durable Object runs its SQL synchronously.
         const kept =
             replacedHash === null
                 ? undefined
@@ -597,11 +593,9 @@ export class IdentityStorage {
             database
                 .select({
                     id: sql<string>`${credentialId}`.as("id"),
-                    retainedOwnerReference: sql<null>`null`.as("user_id"),
                     tokenHash: sql<string>`${tokenHash}`.as("token_hash"),
                     deviceId: sql<string>`${deviceId}`.as("device_id"),
                     transferId: continueLink.id,
-                    createdAt: sql<number>`${now}`.as("created_at"),
                     replacedAt: sql<null>`null`.as("replaced_at"),
                 })
                 .from(continueLink)
@@ -611,7 +605,6 @@ export class IdentityStorage {
             database
                 .select({
                     id: sql<string>`${newDeviceId}`.as("id"),
-                    retainedOwnerReference: sql<null>`null`.as("user_id"),
                     joinedAt: sql<number>`${now}`.as("joined_at"),
                     label: sql<string | null>`${joining.label}`.as("label"),
                     joinedCity: sql<string | null>`${joining.location?.city ?? null}`.as("joined_city"),

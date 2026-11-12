@@ -3,7 +3,7 @@ import { createServer } from "node:http";
 import { expect, it, onTestFinished, vi } from "vitest";
 import { WebSocketServer } from "ws";
 import { z } from "zod";
-import { WsTransport } from "../src/index.ts";
+import { type MortyEndpointCall, type MortyTransportCall, WsTransport } from "../src/index.ts";
 
 const operation = z.object({
     kind: z.literal("http.request"),
@@ -114,12 +114,26 @@ async function computerPeer() {
         origin,
         pending: pending.promise,
         cancelled: cancelled.promise,
-        request: (path: string, init: RequestInit = {}) =>
-            new Request(`${origin}/morty/api${path}`, {
-                ...init,
-                headers: { authorization: "Bearer owner" },
-                signal: init.signal ?? AbortSignal.timeout(10_000),
-            }),
+        request: (
+            path: string,
+            init: {
+                readonly method?: MortyEndpointCall["method"];
+                readonly signal?: AbortSignal;
+                readonly transport?: "http" | "websocket";
+            } = {},
+        ): MortyTransportCall => ({
+            endpoint: {
+                computerId: "computer-1",
+                method: init.method ?? "GET",
+                path: `/morty/api${path}`,
+                transport: init.transport === "http" ? { kind: "http" } : { kind: "websocket", cancellation: "remote" },
+                timeoutMilliseconds: 10_000,
+            },
+            origin: new URL(origin),
+            headers: { authorization: "Bearer owner" },
+            body: null,
+            signal: init.signal ?? AbortSignal.timeout(10_000),
+        }),
     };
 }
 
@@ -142,12 +156,18 @@ it("Given a Computer credential, When a client reads access and ends browser acc
     const rejected = await transport.fetch(peer.request("/computers/computer-1/session"));
     expect(rejected.status).toBe(401);
     expect(await rejected.json()).toMatchObject({ error: { code: "UNAUTHENTICATED" } });
-    const bootstrap = await transport.fetch(peer.request("/identity/transfers/redeem", { method: "POST" }));
+    const bootstrap = await transport.fetch(
+        peer.request("/identity/transfers/redeem", { method: "POST", transport: "http" }),
+    );
     expect(await bootstrap.json()).toEqual({ computerId: "computer-1", computerToken: "owner" });
-    const setup = await transport.fetch(peer.request("/chat/computers/computer-1/setup", { method: "POST" }));
+    const setup = await transport.fetch(
+        peer.request("/chat/computers/computer-1/setup", { method: "POST", transport: "http" }),
+    );
     expect(setup.status).toBe(202);
     const download = await transport.fetch(
-        peer.request("/v1/computers/computer-1/harnesses/codex/sessions/session-1/files/content"),
+        peer.request("/v1/computers/computer-1/harnesses/codex/sessions/session-1/files/content", {
+            transport: "http",
+        }),
     );
     expect(download.headers.get("content-disposition")).toBe("attachment; filename=notes.txt");
     expect(await download.text()).toBe("Downloaded over HTTP");

@@ -22,10 +22,9 @@ import {
 import { listen, port } from "@morty-build/relay-test-support/websocket";
 import { expect, test } from "vitest";
 import { type WebSocket, WebSocketServer } from "ws";
-import { AcpAgentDefinition } from "../../src/engine/acp/agent/agent-definition.ts";
-import { RuntimeAgentDependencies } from "../../src/engine/agent/runtime-agents.ts";
-import { createRuntimeConfig, RuntimeLocalContext } from "../../src/engine/runtime/config.ts";
+import { createRuntimeConfig, RuntimeAgentDependencies, RuntimeLocalContext } from "../../src/engine/runtime/config.ts";
 import { runRuntime } from "../../src/engine/runtime/run.ts";
+import { testAgentDefinition } from "../support/agent-definition.ts";
 import { CodexFixture } from "../support/agents/codex.ts";
 import { memoryComputerCredentials } from "../support/computer-credentials.ts";
 import { FakeOpenAiProvider } from "../support/llm/openai.ts";
@@ -91,7 +90,7 @@ test("Given real Codex dispatches and waits for a subagent, When the turn runs t
     const relayUrl = new URL(
         `ws://127.0.0.1:${port(relay).toString()}${MORTY_API_PREFIX}/channels/real-codex-collaboration/daemon`,
     );
-    const agent = new AcpAgentDefinition("codex", "Codex", codex.executable, codex.environment);
+    const agent = testAgentDefinition("codex", "Codex", codex.executable, codex.environment);
     const config = createRuntimeConfig(
         {
             credentials: memoryComputerCredentials("r".repeat(43)),

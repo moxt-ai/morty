@@ -36,16 +36,16 @@ export class ComputerBackendService {
 
     // Pairing retries derive the same code without storing or transporting a service credential.
     readonly createPairing = async (idempotencyKey: string, signal: AbortSignal) =>
-        await this.#context.services.computerPairings.createProjectComputerPairing(
+        await this.#context.services.computerPairings.createComputerPairing(
             this.computerId,
             await hashSecret(`morty.internal.pairing.v1:${this.#pairingRoot}`),
             idempotencyKey,
             signal,
         );
     readonly readPairing = async (signal: AbortSignal) =>
-        await this.#context.services.computerPairings.readProjectComputerPairing(this.computerId, signal);
+        await this.#context.services.computerPairings.readComputerPairing(this.computerId, signal);
     readonly computers = async (signal: AbortSignal) =>
-        await this.#context.services.computerPairings.listProjectComputers(this.computerId, signal);
+        await this.#context.services.computerPairings.listComputers(this.computerId, signal);
     readonly agents = async (signal: AbortSignal) =>
         await this.#context.services.computerPairings.getComputerAgents(this.computerId, signal);
     readonly issueSessionAccess = async (
@@ -69,32 +69,29 @@ export class ComputerBackendService {
         );
     readonly latency = async (signal: AbortSignal): Promise<number> => {
         const command: ComputerControlCommand = { kind: "computer.ping", requestId: `ping_${crypto.randomUUID()}` };
-        const access = await this.#context.services.pairings.authorizeProject(this.computerId, signal);
+        const access = await this.#context.services.pairings.authorizeComputer(this.computerId, signal);
         const started = performance.now();
         await this.operations.requestControl(access.computerId, command, signal);
         return Math.max(0, Math.round(performance.now() - started));
     };
     readonly control = async (command: ComputerControlCommand, signal: AbortSignal) => {
-        const access = await this.#context.services.pairings.authorizeProject(this.computerId, signal);
+        const access = await this.#context.services.pairings.authorizeComputer(this.computerId, signal);
         return await this.operations.requestControl(access.computerId, command, signal);
     };
     readonly workspace = async (command: WorkspaceListCommand, signal: AbortSignal) => {
-        const access = await this.#context.services.pairings.authorizeProject(this.computerId, signal);
+        const access = await this.#context.services.pairings.authorizeComputer(this.computerId, signal);
         return await this.operations.requestWorkspace(access.computerId, command, signal);
     };
     readonly settings = async (command: AgentSettingsDiscoverCommand, signal: AbortSignal) => {
-        const computers = await this.#context.services.pairings.listProjectComputers(this.computerId, signal);
+        const computers = await this.#context.services.pairings.listComputers(this.computerId, signal);
         if (!computers.some((computer) => computer.computerId === this.computerId)) {
-            throw new PairingDirectoryError(
-                "computer_access_denied",
-                "The project credential cannot access this Computer",
-            );
+            throw new PairingDirectoryError("computer_access_denied", "This credential cannot access this Computer");
         }
-        const access = await this.#context.services.pairings.authorizeProject(this.computerId, signal);
+        const access = await this.#context.services.pairings.authorizeComputer(this.computerId, signal);
         return await this.operations.requestAgentSettings(access.computerId, command, signal);
     };
     readonly fork = async (operationId: string, input: ForkMortyNativeSessionRequest, signal: AbortSignal) => {
-        const access = await this.#context.services.pairings.authorizeProject(this.computerId, signal);
+        const access = await this.#context.services.pairings.authorizeComputer(this.computerId, signal);
         return await this.operations.forkNativeSession(access.computerId, operationId, input, signal);
     };
     readonly session = (target: NativeSessionTarget, signal: AbortSignal) =>

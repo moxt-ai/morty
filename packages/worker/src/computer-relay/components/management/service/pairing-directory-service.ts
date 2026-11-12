@@ -1,5 +1,6 @@
 import { isComputerCredentialSuccessor } from "@morty-build/client/protocol";
-import { computerRevokedAt, projectComputerPairingStatus } from "../../../../contracts/relay/computer-pairing-state.ts";
+import type { ComputerAccess } from "../../../../contracts/relay/computer-authentication.ts";
+import { computerPairingStatus, computerRevokedAt } from "../../../../contracts/relay/computer-pairing-state.ts";
 import type {
     AgentDescriptor,
     ClaimedPairing,
@@ -19,9 +20,8 @@ import {
 } from "../../../../contracts/relay/pairing.ts";
 import type { ComputerIdentityCredential } from "../../../../contracts/relay/pairing-identity.ts";
 import type { ComputerPairingRow } from "../../../../contracts/relay/pairing-records.ts";
-import type { ComputerAccess } from "../../../../contracts/relay/project-authentication.ts";
 import type { ComputerRelayStore } from "../storage/computer-relay-store.ts";
-import type { ComputerManagementService } from "./computer-management-service.ts";
+import type { ComputerAccessService } from "./computer-access-service.ts";
 import { deriveComputerDaemonToken, deriveComputerPairingSecrets } from "./computer-pairing-secrets.ts";
 import type { ComputerIdentityService } from "./pairing-identity-service.ts";
 
@@ -30,10 +30,7 @@ export interface PairingDirectoryInfrastructure {
     readonly store: ComputerRelayStore;
     readonly services: {
         readonly identities: ComputerIdentityService;
-        readonly computerAccounts: Pick<
-            ComputerManagementService,
-            "authorizeProject" | "requireActiveAccount" | "isActive"
-        >;
+        readonly computerAccounts: Pick<ComputerAccessService, "authorizeComputer" | "isActive">;
     };
 }
 
@@ -44,14 +41,11 @@ export class PairingDirectoryService {
         this.#cx = cx;
     }
 
-    private readonly projectStorage = async (computerId: string, signal: AbortSignal) => {
+    private readonly activeStorage = async (computerId: string, signal: AbortSignal) => {
         const active = await this.#cx.services.computerAccounts.isActive(computerId, signal);
         signal.throwIfAborted();
         if (!active) {
-            throw new PairingDirectoryError("unauthorized", "The Project is no longer active");
-        }
-        if (computerId !== this.#cx.computerId) {
-            throw new PairingDirectoryError("invalid_directory_record", "The Project storage locator is invalid");
+            throw new PairingDirectoryError("unauthorized", "The Computer is no longer active");
         }
         return this.#cx.store;
     };
@@ -83,19 +77,13 @@ export class PairingDirectoryService {
         }
         // Only the daemon that saved a successor can present the retired credential with it. Another successor means
         // a copy of the credential connected first, so neither copy may keep the Computer.
-        const storage = await this.projectStorage(rotation.access.computerId, signal);
-        await storage.revokeComputer(
-            {
-                computerId: rotation.access.computerId,
-                now: Date.now(),
-            },
-            signal,
-        );
+        const storage = await this.activeStorage(rotation.access.computerId, signal);
+        await storage.revokeComputer(Date.now(), signal);
         return rotation;
     };
 
-    readonly authorizeProject = async (computerId: string, signal: AbortSignal): Promise<ComputerAccess> =>
-        await this.#cx.services.computerAccounts.authorizeProject(computerId, signal);
+    readonly authorizeComputer = async (computerId: string, signal: AbortSignal): Promise<ComputerAccess> =>
+        await this.#cx.services.computerAccounts.authorizeComputer(computerId, signal);
 
     private readonly decodeCreatedComputerPairing = async (
         row: ComputerPairingRow,
@@ -104,12 +92,6 @@ export class PairingDirectoryService {
         idempotencyKey: string,
         signal: AbortSignal,
     ) => {
-        if (row.computer_id !== owner.computerId || row.created_by_owner_credential_id !== owner.computerId) {
-            throw new PairingDirectoryError(
-                "idempotency_conflict",
-                "The Computer pairing idempotency key belongs to another authorized request",
-            );
-        }
         const secrets = await deriveComputerPairingSecrets(pairingKey, owner.computerId, idempotencyKey);
         const codeHash = await hashPairingCredential(secrets.pairingCode);
         const pollHash = await hashPairingCredential(secrets.pollToken);
@@ -124,7 +106,7 @@ export class PairingDirectoryService {
     };
 
     /** Replays retain the original identity, secrets and deadline; retries keep the same key after an ambiguous failure. */
-    readonly createProjectComputerPairing = async (
+    readonly createComputerPairing = async (
         computerId: string,
         pairingKey: string,
         idempotencyKey: string,
@@ -132,8 +114,8 @@ export class PairingDirectoryService {
     ): Promise<CreatedComputerPairing> => {
         const normalizedComputerId = validateIdentifier(computerId, "computer_id");
         const normalizedKey = validateIdentifier(idempotencyKey, "idempotency_key");
-        const owner = await this.authorizeProject(normalizedComputerId, signal);
-        const storage = await this.projectStorage(owner.computerId, signal);
+        const owner = await this.authorizeComputer(normalizedComputerId, signal);
+        const storage = await this.activeStorage(owner.computerId, signal);
         // The secrets derive from the request, so a retry presents the same hashes as the request it repeats.
         const secrets = await deriveComputerPairingSecrets(pairingKey, owner.computerId, normalizedKey);
         const now = Date.now();
@@ -142,13 +124,11 @@ export class PairingDirectoryService {
         try {
             stored = await storage.requestComputerPairing(
                 {
-                    computerId,
                     codeHash: await hashPairingCredential(secrets.pairingCode),
                     pollHash: await hashPairingCredential(secrets.pollToken),
                     now,
                     expiresAt,
                     idempotencyKey: normalizedKey,
-                    ownerId: owner.computerId,
                 },
                 signal,
             );
@@ -175,14 +155,14 @@ export class PairingDirectoryService {
         }
     };
 
-    readonly readProjectComputerPairing = async (computerId: string, signal: AbortSignal): Promise<PairingStatus> => {
-        const owner = await this.authorizeProject(computerId, signal);
-        const storage = await this.projectStorage(owner.computerId, signal);
-        const row = await storage.readComputerPairing(validateIdentifier(computerId, "computer_id"), signal);
+    readonly readComputerPairing = async (computerId: string, signal: AbortSignal): Promise<PairingStatus> => {
+        const owner = await this.authorizeComputer(computerId, signal);
+        const storage = await this.activeStorage(owner.computerId, signal);
+        const row = await storage.readComputerPairing(signal);
         if (row === null) {
             throw new PairingDirectoryError("pairing_not_found", "The Computer pairing request was not found");
         }
-        return projectComputerPairingStatus(row, Date.now());
+        return computerPairingStatus(row, Date.now());
     };
 
     private readonly redeemPairing = async (
@@ -200,11 +180,10 @@ export class PairingDirectoryService {
         if (pairing === null || pairing.computer_id !== expectedComputerId) {
             throw new PairingDirectoryError("invalid_pairing_code", "The pairing code is invalid or expired");
         }
-        await this.#cx.services.computerAccounts.requireActiveAccount(pairing.computer_id, signal);
+        await this.#cx.services.computerAccounts.authorizeComputer(pairing.computer_id, signal);
         const daemonToken = await deriveComputerDaemonToken(pairingCode, pairing.computer_id, pairing.poll_token_hash);
         const claimed = await storage.claimPairing(
             {
-                computerId: pairing.computer_id,
                 codeHash,
                 daemonHash: await hashPairingCredential(daemonToken),
                 now: Date.now(),
@@ -237,12 +216,12 @@ export class PairingDirectoryService {
             signal,
         );
 
-    readonly listProjectComputers = async (
+    readonly listComputers = async (
         computerId: string,
         signal: AbortSignal,
     ): Promise<readonly ComputerDescriptor[]> => {
-        const access = await this.authorizeProject(computerId, signal);
-        const storage = await this.projectStorage(access.computerId, signal);
+        const access = await this.authorizeComputer(computerId, signal);
+        const storage = await this.activeStorage(access.computerId, signal);
         const runtimes = await storage.listComputers(signal);
         return runtimes.map(
             (row) =>
@@ -255,10 +234,10 @@ export class PairingDirectoryService {
         );
     };
 
-    readonly isProjectComputerRevoked = async (computerId: string, signal: AbortSignal): Promise<boolean> => {
-        const access = await this.authorizeProject(computerId, signal);
-        const storage = await this.projectStorage(access.computerId, signal);
-        const row = await storage.readComputer(validateIdentifier(computerId, "computer_id"), signal);
+    readonly isComputerRevoked = async (computerId: string, signal: AbortSignal): Promise<boolean> => {
+        const access = await this.authorizeComputer(computerId, signal);
+        const storage = await this.activeStorage(access.computerId, signal);
+        const row = await storage.readComputer(signal);
         return row !== null && computerRevokedAt(row.revoked_at) !== null;
     };
 
@@ -282,7 +261,7 @@ export class PairingDirectoryService {
                 }
                 throw cause;
             }
-            if (await storage.updateAgentCatalog(computerId, tokenHash, JSON.stringify(agents), signal)) {
+            if (await storage.updateAgentCatalog(tokenHash, JSON.stringify(agents), signal)) {
                 return;
             }
         }

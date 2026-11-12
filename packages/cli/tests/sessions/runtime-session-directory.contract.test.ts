@@ -10,8 +10,8 @@ for (const client of ["SDK", "HTTP"] as const) {
         const cancellation = new AbortController();
         await using relay = await startTestRelay();
         try {
-            const project = await relay.createOwner();
-            const runtime = await relay.connectAgent(project.computerId);
+            const owner = await relay.createOwner();
+            const runtime = await relay.connectAgent(owner.computerId);
             const request = {
                 harness: "claude",
                 configurations: [],
@@ -24,10 +24,10 @@ for (const client of ["SDK", "HTTP"] as const) {
                     ? await runtime.createSession(request, cancellation.signal)
                     : await (async () => {
                           const response = await relay.app.request(
-                              new Request(`${relay.baseUrl}/morty/api/chat/computers/${project.computerId}/access`, {
+                              new Request(`${relay.baseUrl}/morty/api/chat/computers/${owner.computerId}/access`, {
                                   method: "POST",
                                   headers: {
-                                      authorization: `Bearer ${project.token}`,
+                                      authorization: `Bearer ${owner.token}`,
                                       "content-type": "application/json",
                                   },
                                   body: JSON.stringify({
@@ -82,8 +82,8 @@ for (const client of ["SDK", "HTTP"] as const) {
 it("Given long ASCII and multibyte directory references, When the SDK browses them, Then the local filesystem remains the authority for directory availability", async () => {
     await using relay = await startTestRelay();
     const signal = AbortSignal.timeout(30_000);
-    const project = await relay.createOwner();
-    const runtime = await relay.connectAgent(project.computerId);
+    const owner = await relay.createOwner();
+    const runtime = await relay.connectAgent(owner.computerId);
     for (const segment of ["a".repeat(220), "\u00e9".repeat(110)]) {
         const path = join(
             tmpdir(),
@@ -109,8 +109,8 @@ it("Given a deeply nested multibyte project path, When the SDK browses it and ru
         const canonical = await realpath(path);
         await using relay = await startTestRelay();
         const signal = AbortSignal.timeout(30_000);
-        const project = await relay.createOwner();
-        const runtime = await relay.connectAgent(project.computerId);
+        const owner = await relay.createOwner();
+        const runtime = await relay.connectAgent(owner.computerId);
         const directory = canonical;
         const listing = await runtime.api.directory(directory, signal);
         expect(listing.directory).toBe(directory);
@@ -164,8 +164,8 @@ it("Given a Session in a selected workspace, When the App prompts it and reads i
         const directory = directoryLabel;
         await using relay = await startTestRelay();
         const signal = AbortSignal.timeout(30_000);
-        const project = await relay.createOwner();
-        const runtime = await relay.connectAgent(project.computerId);
+        const owner = await relay.createOwner();
+        const runtime = await relay.connectAgent(owner.computerId);
         const { target: sessionTarget } = await runtime.createSession(
             {
                 harness: "claude",

@@ -11,7 +11,6 @@ import type {
     SessionElicitationResolvedEvent,
     SessionLiveEvent,
     SessionPermissionResolvedEvent,
-    SessionStatusChangedEvent,
 } from "@morty-build/client/protocol";
 import type { AcpAgentDefinition } from "../../acp/agent/agent-definition.ts";
 import type { BackgroundActivity } from "../../acp/agent/agent-lifecycle.ts";
@@ -187,5 +186,4 @@ export type ReportFailure = (event: string, requestId: string, details: Readonly
 export interface SessionEventSink {
     readonly publish: (event: SessionLiveEvent) => void;
     readonly publishClosed: (event: SessionCloseNoticeEvent) => void;
-    readonly publishStatus: (event: SessionStatusChangedEvent) => void;
 }

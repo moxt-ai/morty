@@ -8,12 +8,12 @@ function isAbsent(cause: unknown): boolean {
     return typeof cause === "object" && cause !== null && Reflect.get(cause, "code") === "ENOENT";
 }
 
-/** Collect logs only inside Morty's private computer directory. */
-export async function findLogDirectories(
+/** Morty's private log directory, or null when it is absent or unreadable; an unreadable one joins `unreadable`. */
+export async function findLogDirectory(
     root: string,
     unreadable: string[],
     signal: AbortSignal,
-): Promise<readonly string[]> {
+): Promise<string | null> {
     const computer = join(root, "computer");
     signal.throwIfAborted();
     const logs = join(computer, "logs");
@@ -23,10 +23,10 @@ export async function findLogDirectories(
             if (status === "unreadable") {
                 unreadable.push(relative(root, path));
             }
-            return [];
+            return null;
         }
     }
-    return [logs];
+    return logs;
 }
 
 /** The log file names in a log directory. An unreadable directory is added to `unreadable`, relative to `root`. */

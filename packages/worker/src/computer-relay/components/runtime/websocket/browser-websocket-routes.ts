@@ -246,7 +246,7 @@ async function uploadContent(
         throw new PairingDirectoryError("invalid_request", "The content name is invalid", { cause });
     }
     name = decodeSessionRequest(v.pipe(v.string(), v.minLength(1), v.maxLength(500)), name);
-    const available = await dependencies.operations.writeProjectSessionContent(
+    const available = await dependencies.operations.writeSessionContent(
         access.computerId,
         decodeContentWriteCommand(
             JSON.stringify({

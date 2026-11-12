@@ -137,7 +137,7 @@ for (const viewport of [
         const scope = new URL(secondAddress).searchParams.get("identity");
         const computerId = scope?.split("~")[0];
         if (computerId === undefined) {
-            throw new Error("Expected the computer's project in its address");
+            throw new Error("Expected the computer ID in its address");
         }
         await page.goto(
             new URL(`/continue#code=morty_transfer_v1.${computerId}.${"a".repeat(43)}`, secondAddress).href,

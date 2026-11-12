@@ -1,15 +1,15 @@
-import type { VerifiedComputerConnection } from "../../src/engine/runtime/connection/computer-connection.ts";
+import type { SavedComputerConnection } from "../../src/engine/runtime/connection/computer-connection.ts";
 import { RuntimeInstallationStore } from "../../src/engine/runtime/connection/runtime-installation-store.ts";
 import {
     type MortyComputerPairingOptions,
     pairComputerConnection,
     prepareComputerConnection,
 } from "../../src/engine/runtime/pairing.ts";
-import { RuntimeLoop, type RuntimeLoopOptions } from "../../src/engine/runtime/runtime-loop.ts";
+import { type RunRuntimeOptions, runRuntime } from "../../src/engine/runtime/run.ts";
 
 /**
  * Pairs and serves a Computer from an explicit data directory through the production pairing, preparation and
- * Runtime loop the daemon composes, for tests that drive a Runtime without a daemon process.
+ * Runtime the daemon composes, for tests that drive a Runtime without a daemon process.
  */
 export class TestComputerHost {
     readonly #dataDirectory: string;
@@ -29,27 +29,17 @@ export class TestComputerHost {
         return this.#installation;
     };
 
-    readonly pair = async (
-        input: MortyComputerPairingOptions,
-        signal: AbortSignal,
-    ): Promise<VerifiedComputerConnection> =>
+    readonly pair = async (input: MortyComputerPairingOptions, signal: AbortSignal): Promise<SavedComputerConnection> =>
         await pairComputerConnection(await this.#open(signal), input, signal, this.#agentLaunchEnvironment);
 
     readonly runLoop = async ({
         pairingGeneration,
         signal,
         ...options
-    }: RuntimeLoopOptions & { readonly pairingGeneration: string; readonly signal: AbortSignal }): Promise<void> => {
-        const loop = new RuntimeLoop(async (preparationSignal) => {
-            const installation = await this.#open(preparationSignal);
-            const saved = await installation.readConnection(pairingGeneration, preparationSignal);
-            return await prepareComputerConnection(
-                installation,
-                saved,
-                preparationSignal,
-                this.#agentLaunchEnvironment,
-            );
-        }, options);
-        await loop.run(signal);
+    }: RunRuntimeOptions & { readonly pairingGeneration: string; readonly signal: AbortSignal }): Promise<void> => {
+        const installation = await this.#open(signal);
+        const saved = await installation.readConnection(pairingGeneration, signal);
+        const config = await prepareComputerConnection(installation, saved, signal, this.#agentLaunchEnvironment);
+        await runRuntime(config, signal, undefined, options);
     };
 }

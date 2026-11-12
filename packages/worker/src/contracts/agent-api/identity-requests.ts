@@ -5,7 +5,7 @@ import * as v from "valibot";
 export const transferRedemptionInput = v.pipe(
     v.object({
         code: v.pipe(v.string(), v.description("The `code` from the continue link's URL fragment.")),
-        /** The credential this browser already holds for the link's Project, which the new one replaces. */
+        /** The credential this browser already holds for the link's Computer, which the new one replaces. */
         replaces: v.optional(v.pipe(v.string(), v.maxLength(512))),
         /** How the browser describes itself, such as "iPhone · Safari"; shown to the owner's other devices. */
         device: v.optional(

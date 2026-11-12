@@ -208,7 +208,6 @@ test.each(["fresh", "unknown", "revoked"] as const)(
             expect(code, output).toBe(1);
             expect(output).toContain('"code":"MORTY_STATE_ROOT_INVALID"');
             expect(output).toContain("Rerun setup with MORTY_STATE_DIRECTORY set to the owning state root");
-            expect(output).not.toContain("RUNTIME_PREFLIGHT_FAILED");
             expect(output).not.toContain('"status":"identity_ready"');
             if (saved === null) {
                 await expect(readFile(join(state, "config.json"))).rejects.toMatchObject({ code: "ENOENT" });
@@ -574,8 +573,8 @@ async function setupComputer(
     deadline?: (milliseconds: number) => AbortSignal,
     run: {
         readonly harness?: string;
-        /** The Project whose replacement the user explicitly approved. */
-        readonly replaceProject?: string;
+        /** The Computer whose replacement the user explicitly approved. */
+        readonly replaceComputer?: string;
         /** The `--session-id` the agent passes; `null` passes none. */
         readonly sessionArgument?: string | null;
         /** The calling agent's shell environment, where a harness exposes its current session. */
@@ -600,7 +599,7 @@ async function setupComputer(
             paths.workspace,
             "--harness",
             run.harness ?? "settings-test",
-            ...(run.replaceProject === undefined ? [] : ["--replace-computer", run.replaceProject]),
+            ...(run.replaceComputer === undefined ? [] : ["--replace-computer", run.replaceComputer]),
             ...(run.sessionArgument === null ? [] : ["--session-id", run.sessionArgument ?? "native-upgrade-project"]),
         ],
         {
@@ -691,7 +690,7 @@ test("Given setup was stopped after pairing its Computer, When the user runs set
     timeout: 120_000,
 }, async () => {
     await withSetupComputer(async (runtime, paths) => {
-        // A Project holds at most eight Computers; each stopped run must not leave another one behind.
+        // Pairing stops at eight Computers; each stopped run must not leave another one behind.
         for (let attempt = 1; attempt <= 8; attempt += 1) {
             const stopped = await setupComputer(runtime, paths, undefined, { interruptAt: "computer_paired" });
             expect(stopped.code, JSON.stringify(stopped.events)).not.toBe(0);
@@ -702,7 +701,7 @@ test("Given setup was stopped after pairing its Computer, When the user runs set
     });
 });
 
-test("Given a shared Computer whose local pairing was removed, When setup has no matching replacement approval, Then shared access stays valid until the user approves that Project", {
+test("Given a shared Computer whose local pairing was removed, When setup has no matching replacement approval, Then shared access stays valid until the user approves that Computer", {
     timeout: 120_000,
 }, async () => {
     await withSetupComputer(async (runtime, paths) => {
@@ -730,14 +729,14 @@ test("Given a shared Computer whose local pairing was removed, When setup has no
             });
         await runtime.forgetConnections();
 
-        for (const replaceProject of [undefined, "another-project"]) {
+        for (const replaceComputer of [undefined, "another-computer"]) {
             const blocked = await setupComputer(runtime, paths, undefined, {
-                ...(replaceProject === undefined ? {} : { replaceProject }),
+                ...(replaceComputer === undefined ? {} : { replaceComputer }),
             });
             expect(blocked.code).toBe(1);
             expect(blocked.events.at(-1)).toMatchObject({
                 error: {
-                    code: "PROJECT_REPLACEMENT_REQUIRED",
+                    code: "COMPUTER_REPLACEMENT_REQUIRED",
                     replacement: { computerId: config.computer_id, reason: "managed_computer_missing" },
                 },
             });
@@ -745,12 +744,12 @@ test("Given a shared Computer whose local pairing was removed, When setup has no
             expect(await readFile(join(paths.state, "config.json"), "utf8")).toBe(saved);
         }
 
-        const approved = await setupComputer(runtime, paths, undefined, { replaceProject: config.computer_id });
+        const approved = await setupComputer(runtime, paths, undefined, { replaceComputer: config.computer_id });
         expect(approved.code, JSON.stringify(approved.events)).toBe(0);
         expect(approved.events).toContainEqual(
             expect.objectContaining({ status: "replacement_access_revoked", previousComputerId: config.computer_id }),
         );
-        expect(approved.events.at(-1)).toMatchObject({ status: "ready", project: "replaced" });
+        expect(approved.events.at(-1)).toMatchObject({ status: "ready", computer: "replaced" });
         const retired = await fetch(`${paths.origin}/morty/api/computers/${config.computer_id}/session`, {
             headers: { authorization: `Bearer ${config.computer_token}` },
             signal: AbortSignal.timeout(10000),
@@ -766,15 +765,15 @@ test("Given a shared Computer whose local pairing was removed, When setup has no
         expect(JSON.stringify(diagnostics)).not.toContain(url);
 
         await runtime.forgetConnections();
-        const stale = await setupComputer(runtime, paths, undefined, { replaceProject: config.computer_id });
+        const stale = await setupComputer(runtime, paths, undefined, { replaceComputer: config.computer_id });
         expect(stale.code).toBe(1);
         expect(stale.events.at(-1)).toMatchObject({
-            error: { code: "PROJECT_REPLACEMENT_REQUIRED", replacement: { computerId: current.computer_id } },
+            error: { code: "COMPUTER_REPLACEMENT_REQUIRED", replacement: { computerId: current.computer_id } },
         });
     });
 });
 
-test("Given an approved replacement request times out, When setup is retried without approval, Then it reports the uncertain access state and does not silently replace the Project", {
+test("Given an approved replacement request times out, When setup is retried without approval, Then it reports the uncertain access state and does not silently replace the Computer", {
     timeout: 120_000,
 }, async () => {
     await withSetupComputer(async (runtime, paths) => {
@@ -783,7 +782,7 @@ test("Given an approved replacement request times out, When setup is retried wit
         const config = await savedIdentity(paths.state);
         await runtime.forgetConnections();
         const uncertain = await setupComputer(runtime, paths, undefined, {
-            replaceProject: config.computer_id,
+            replaceComputer: config.computer_id,
             stallFromStage: "replacement",
         });
         expect(uncertain.code).toBe(1);
@@ -793,11 +792,11 @@ test("Given an approved replacement request times out, When setup is retried wit
         const retry = await setupComputer(runtime, paths);
         expect(retry.events.at(-1)).toMatchObject({
             error: {
-                code: "PROJECT_REPLACEMENT_REQUIRED",
+                code: "COMPUTER_REPLACEMENT_REQUIRED",
                 replacementAccess: { kind: "unknown", previousComputerId: config.computer_id },
             },
         });
-        const finished = await setupComputer(runtime, paths, undefined, { replaceProject: config.computer_id });
+        const finished = await setupComputer(runtime, paths, undefined, { replaceComputer: config.computer_id });
         expect(finished.code, JSON.stringify(finished.events)).toBe(0);
     });
 });
@@ -823,17 +822,17 @@ test("Given a saved uncertain replacement and a restored local pairing, When set
         expect(blocked.code).toBe(1);
         expect(blocked.events.at(-1)).toMatchObject({
             error: {
-                code: "PROJECT_REPLACEMENT_REQUIRED",
+                code: "COMPUTER_REPLACEMENT_REQUIRED",
                 replacement: { computerId, reason: "replacement_result_unknown" },
                 replacementAccess: { kind: "unknown" },
             },
         });
         expect(blocked.events).not.toContainEqual(expect.objectContaining({ status: "ready" }));
-        expect((await setupComputer(runtime, paths, undefined, { replaceProject: computerId })).code).toBe(0);
+        expect((await setupComputer(runtime, paths, undefined, { replaceComputer: computerId })).code).toBe(0);
     });
 });
 
-test.each(["replacement_access_revoked", "project_replaced"])(
+test.each(["replacement_access_revoked", "computer_replaced"])(
     "Given an approved replacement was stopped at %s, When the user retries with the same approval, Then both the failure and the finished setup report that earlier access was revoked",
     {
         timeout: 120_000,
@@ -841,12 +840,12 @@ test.each(["replacement_access_revoked", "project_replaced"])(
     async (interruptAt) => {
         await withSetupComputer(async (runtime, paths) => {
             const first = await setupComputer(runtime, paths);
-            expect(first.events.at(-1)).toMatchObject({ status: "ready", project: "created" });
+            expect(first.events.at(-1)).toMatchObject({ status: "ready", computer: "created" });
             const config = await savedIdentity(paths.state);
             await runtime.forgetConnections();
 
             const stopped = await setupComputer(runtime, paths, undefined, {
-                replaceProject: config.computer_id,
+                replaceComputer: config.computer_id,
                 interruptAt,
             });
             expect(stopped.code, JSON.stringify(stopped.events)).not.toBe(0);
@@ -872,12 +871,12 @@ test.each(["replacement_access_revoked", "project_replaced"])(
                 });
             }
 
-            const finished = await setupComputer(runtime, paths, undefined, { replaceProject: config.computer_id });
+            const finished = await setupComputer(runtime, paths, undefined, { replaceComputer: config.computer_id });
             expect(finished.code, JSON.stringify(finished.events)).toBe(0);
-            expect(finished.events.at(-1)).toMatchObject({ status: "ready", project: "replaced" });
+            expect(finished.events.at(-1)).toMatchObject({ status: "ready", computer: "replaced" });
 
             const again = await setupComputer(runtime, paths);
-            expect(again.events.at(-1)).toMatchObject({ status: "ready", project: "reused" });
+            expect(again.events.at(-1)).toMatchObject({ status: "ready", computer: "reused" });
             expect((await savedIdentity(paths.state)).replacement).toEqual({ kind: "unchanged" });
         });
     },
@@ -1021,7 +1020,7 @@ test("Given two shared links and redeemed access, When the local owner revokes a
     }
 }, 30000);
 
-test("Given setup replaced the Project but stopped before ending the previous identity, When the user revokes all access, Then nothing opens the previous Project and only the replacement of the current identity setup saved opens the current one", async () => {
+test("Given setup replaced the Computer but stopped before ending the previous identity, When the user revokes all access, Then nothing opens the previous Project and only the replacement of the current identity setup saved opens the current one", async () => {
     const directory = await mkdtemp(join(tmpdir(), "morty-replaced-identity-"));
     const configurationDirectory = join(directory, "state");
     await mkdir(configurationDirectory, { recursive: true, mode: 0o700 });

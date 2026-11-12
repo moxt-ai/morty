@@ -43,7 +43,6 @@ const defineAgent = (
         process.execPath,
         {},
         version,
-        undefined,
         fakeDaemonCapabilities,
     );
 

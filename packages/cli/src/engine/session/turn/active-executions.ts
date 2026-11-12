@@ -30,12 +30,6 @@ interface Execution {
  */
 export class ActiveExecutions {
     readonly #entries = new NativeSessionMap<Execution>();
-    readonly #statusChanged: (sessionTarget: NativeSessionTarget, status: SessionStatus) => void;
-
-    constructor(statusChanged: (sessionTarget: NativeSessionTarget, status: SessionStatus) => void) {
-        this.#statusChanged = statusChanged;
-    }
-
     readonly status = (sessionTarget: NativeSessionTarget): SessionStatus => {
         const execution = this.#entries.get(sessionTarget);
         return execution === undefined ? { kind: "idle" } : { commandId: execution.commandId, kind: "working" };
@@ -85,7 +79,6 @@ export class ActiveExecutions {
             cancellation: { kind: "none" },
             preparation,
         });
-        this.#statusChanged(sessionTarget, this.status(sessionTarget));
         return preparation.signal;
     };
 
@@ -142,6 +135,5 @@ export class ActiveExecutions {
             return;
         }
         this.#entries.delete(sessionTarget);
-        this.#statusChanged(sessionTarget, this.status(sessionTarget));
     };
 }

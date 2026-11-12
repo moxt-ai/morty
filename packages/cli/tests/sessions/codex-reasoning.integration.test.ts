@@ -3,11 +3,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { SessionNotification } from "@agentclientprotocol/sdk/unstable";
 import { expect, it } from "vitest";
-import { AcpAgentDefinition } from "../../src/engine/acp/agent/agent-definition.ts";
 import type { CodexAppServerClient } from "../../src/engine/acp/harness/codex/app-server-client.ts";
 import { reasoningText } from "../../src/engine/acp/harness/codex/items.ts";
 import { CodexOwnedAcpAgent } from "../../src/engine/acp/harness/codex/owned-agent.ts";
 import type { CodexSettings } from "../../src/engine/acp/harness/codex/settings.ts";
+import { testAgentDefinition } from "../support/agent-definition.ts";
 import { previewCodexHistory } from "../support/codex-history-preview.ts";
 
 it("Given Codex streams detailed reasoning and a summary, When Morty forwards the turn, Then Thinking keeps the reasoning stream", async () => {
@@ -153,7 +153,7 @@ createInterface({ input: process.stdin }).on("line", (line) => {
 `,
         { mode: 0o700 },
     );
-    const agent = new AcpAgentDefinition("codex", "Codex", executable);
+    const agent = testAgentDefinition("codex", "Codex", executable);
     try {
         const page = await previewCodexHistory(agent, directory, sessionId);
         const updates = page.events.flatMap((event) => (event.type === "acp" ? [event.payload] : []));

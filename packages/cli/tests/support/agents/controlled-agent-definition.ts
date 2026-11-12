@@ -1,4 +1,5 @@
-import { AcpAgentDefinition } from "../../../src/engine/acp/agent/agent-definition.ts";
+import type { AcpAgentDefinition } from "../../../src/engine/acp/agent/agent-definition.ts";
+import { testAgentDefinition } from "../agent-definition.ts";
 import type { AgentConnection, AgentConnectionFactory, AgentConnectionOptions } from "./agent-connection.ts";
 
 // Environment copies and discovery's final definition retain the verified executable identity.
@@ -11,9 +12,9 @@ export function registerControlledConnection(agent: AcpAgentDefinition, factory:
 
 export function createControlledAgent(
     factory: AgentConnectionFactory,
-    ...parameters: ConstructorParameters<typeof AcpAgentDefinition>
+    ...parameters: Parameters<typeof testAgentDefinition>
 ): AcpAgentDefinition {
-    const agent = new AcpAgentDefinition(...parameters);
+    const agent = testAgentDefinition(...parameters);
     registerControlledConnection(agent, factory);
     return agent;
 }

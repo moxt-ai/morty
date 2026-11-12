@@ -6,8 +6,8 @@ import {
     type SessionAccessGrant,
     type SessionAccessHolder,
 } from "@morty-build/client/protocol";
-import { ProjectAuthenticationError } from "../../../../contracts/relay/project-authentication.ts";
-import type { ComputerManagementService } from "../../management/service/computer-management-service.ts";
+import { ComputerAuthenticationError } from "../../../../contracts/relay/computer-authentication.ts";
+import type { ComputerAccessService } from "../../management/service/computer-access-service.ts";
 import { SessionAccessCredentialExpiredError, type SessionAccessSigner } from "../entity/session-access-credential.ts";
 
 export type SessionAccessTarget =
@@ -26,10 +26,10 @@ export interface SessionAccess {
 }
 
 export class SessionAccessService {
-    readonly #control: ComputerManagementService;
+    readonly #control: ComputerAccessService;
     readonly #signer: SessionAccessSigner;
 
-    constructor(control: ComputerManagementService, signer: SessionAccessSigner) {
+    constructor(control: ComputerAccessService, signer: SessionAccessSigner) {
         this.#control = control;
         this.#signer = signer;
     }
@@ -50,16 +50,16 @@ export class SessionAccessService {
         readonly target: NativeSessionTarget;
     }> => {
         if (target.kind !== "session") {
-            throw new ProjectAuthenticationError("project_permission_denied", "A selected Session is required");
+            throw new ComputerAuthenticationError("session_permission_denied", "A selected Session is required");
         }
         const nativeTarget = decodeNativeSessionTarget(target.target);
         if (!Number.isSafeInteger(expiresInSeconds) || expiresInSeconds < 60 || expiresInSeconds > 900) {
-            throw new ProjectAuthenticationError("invalid_request", "The Session credential lifetime is invalid");
+            throw new ComputerAuthenticationError("invalid_request", "The Session credential lifetime is invalid");
         }
-        await this.#control.authorizeProject(target.computerId, signal);
+        await this.#control.authorizeComputer(target.computerId, signal);
         const generation = await this.#control.currentSessionGeneration(target.computerId, holder, signal);
         if (generation === null) {
-            throw new ProjectAuthenticationError("credential_revoked", "The Session access has ended");
+            throw new ComputerAuthenticationError("credential_revoked", "The Session access has ended");
         }
         const issuedAtEpochMilliseconds = Date.now();
         const expiresAtEpochMilliseconds = issuedAtEpochMilliseconds + expiresInSeconds * 1_000;
@@ -106,8 +106,8 @@ export class SessionAccessService {
         signal: AbortSignal,
     ): Promise<SessionAccess> => {
         if (target.kind !== "session") {
-            throw new ProjectAuthenticationError(
-                "project_permission_denied",
+            throw new ComputerAuthenticationError(
+                "session_permission_denied",
                 "The credential authorizes only a selected Session",
             );
         }
@@ -116,24 +116,20 @@ export class SessionAccessService {
             claims = await this.#signer.verify(credentialValue, Date.now());
         } catch (cause) {
             if (cause instanceof SessionAccessCredentialExpiredError) {
-                throw new ProjectAuthenticationError("credential_expired", "The Session credential has expired", {
+                throw new ComputerAuthenticationError("credential_expired", "The Session credential has expired", {
                     cause,
                 });
             }
             if (cause instanceof ProtocolMessageError) {
-                throw new ProjectAuthenticationError(
-                    "project_credential_invalid",
-                    "The Session credential is invalid",
-                    {
-                        cause,
-                    },
-                );
+                throw new ComputerAuthenticationError("credential_invalid", "The Session credential is invalid", {
+                    cause,
+                });
             }
             throw cause;
         }
         if (claims.computerId !== target.computerId || !sameNativeSession(claims.target, target.target)) {
-            throw new ProjectAuthenticationError(
-                "project_permission_denied",
+            throw new ComputerAuthenticationError(
+                "session_permission_denied",
                 "The credential authorizes only the selected Session",
             );
         }
@@ -146,7 +142,7 @@ export class SessionAccessService {
             expiresAtEpochMilliseconds: claims.expiresAtEpochMilliseconds,
             computerId: claims.computerId,
             authorize: async (authorizationSignal) => {
-                await this.#control.authorizeSessionCredentialRecord(computerId, claims.grant, authorizationSignal);
+                await this.#control.authorizeSession(computerId, claims.grant, authorizationSignal);
             },
         };
     };

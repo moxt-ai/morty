@@ -320,7 +320,6 @@ export function createToolLifecycleAgent(beforeCancellationApplied?: () => Promi
         process.execPath,
         {},
         "controlled-harness",
-        undefined,
         fakeDaemonCapabilities,
     );
 }
