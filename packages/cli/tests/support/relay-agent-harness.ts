@@ -160,7 +160,7 @@ export async function createFakeAgentHarnessRuntime(options: {
                     method: "POST",
                     signal,
                     headers: { authorization: `Bearer ${options.credential}`, "content-type": "application/json" },
-                    body: JSON.stringify({ computerId: pairing.computerId, harness: selected.harness }),
+                    body: JSON.stringify({ harness: selected.harness }),
                 }),
             );
             if (setup.status !== 202) {

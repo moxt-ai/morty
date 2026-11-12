@@ -712,7 +712,7 @@ async function connectComputerDaemon(slug: string, options: { readonly anchorClo
                     {
                         method: "POST",
                         headers: credentialHeaders(appCredential),
-                        body: JSON.stringify({ ...input, computerId }),
+                        body: JSON.stringify(input),
                     },
                 ),
             ),

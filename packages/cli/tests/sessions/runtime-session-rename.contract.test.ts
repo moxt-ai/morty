@@ -53,7 +53,6 @@ it("Given a prompted local conversation, When the Session is renamed, Then the d
         // The controlled Agent harness received the rename: its own native
         // Session listing reports the new title instead of the first prompt.
         const discovery = await runtime.api.nativeSessions(
-            runtime.computerId,
             {
                 action: "list",
                 harness: "claude",

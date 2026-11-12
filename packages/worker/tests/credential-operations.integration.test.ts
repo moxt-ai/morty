@@ -116,7 +116,6 @@ test("Given a browser that joined through a link, When it asks for a Computer pa
                 idempotencyKey: "shared-pairing",
             }),
             await request(`/chat/computers/${owner.computerId}/setup`, token, "POST", {
-                computerId: "shared-computer",
                 harness: "codex",
             }),
         ]) {

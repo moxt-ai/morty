@@ -125,8 +125,8 @@ export async function createTestRuntime(
                     },
                     journey.signal,
                 );
-                const paired = await chat.readPairedAgent(text(pairing["computerId"], "pairing ID"), harness);
-                await chat.bindAgent(paired.computerId, harness);
+                await chat.readPairedAgent(harness);
+                await chat.bindAgent(harness);
                 await chat.readBinding(harness);
                 await page.reload();
             },
@@ -154,7 +154,7 @@ export async function createTestRuntime(
                     },
                     journey.signal,
                 );
-                await unrelated.readPairedAgent(text(pairing["computerId"], "unrelated computerId"), harness);
+                await unrelated.readPairedAgent(harness);
             },
             followInstructions: async (
                 instructionUrl: string,

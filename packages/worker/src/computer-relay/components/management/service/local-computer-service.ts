@@ -162,7 +162,7 @@ export class LocalComputerService {
         );
     readonly discoverChatAgentSettings = async (
         computerId: string,
-        selection: { readonly computerId: string; readonly harness: string; readonly workspaceRef: string },
+        selection: { readonly harness: string; readonly workspaceRef: string },
         signal: AbortSignal,
     ) =>
         await this.#run(computerId, signal, (computer, signal) =>
@@ -215,7 +215,6 @@ export class LocalComputerService {
         signal: AbortSignal,
     ) => ({
         ...(await computer.issueSessionAccess(session.target, lifetime, holder, signal)),
-        endpoint: this.configuration().origin,
         computerId,
         target: session.target,
         ready,
@@ -358,10 +357,9 @@ export class LocalComputerService {
         holder: SessionAccessHolder,
         signal: AbortSignal,
     ) =>
-        await this.#run(computerId, signal, async (computer, signal) => ({
-            ...(await computer.issueSessionAccess(target, lifetime, holder, signal)),
-            endpoint: this.configuration().origin,
-        }));
+        await this.#run(computerId, signal, async (computer, signal) =>
+            computer.issueSessionAccess(target, lifetime, holder, signal),
+        );
     readonly nativeSessions = async (
         computerId: string,
         request:

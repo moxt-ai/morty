@@ -1448,14 +1448,10 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         }
     }
 
-    async function bindAgent(context: Context, computer: ComputerSelection, harness: string) {
+    async function bindAgent(context: Context, harness: string) {
         progress("binding", `Connecting the Computer to ${harness} in the default working directory.`);
-        const computerId = computer.computerId;
         try {
-            await request(context, `/chat/computers/${context.identity.computerId}/setup`, {
-                computerId,
-                harness,
-            });
+            await request(context, `/chat/computers/${context.identity.computerId}/setup`, { harness });
         } catch (cause) {
             // Cancellation and the setup budget keep their own codes.
             if (signal.aborted || !(cause instanceof Error)) {
@@ -1659,7 +1655,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         computer = prepared.context;
         await startRuntime(computer, prepared.computer, cwd, options.harness);
         await waitForComputer(computer, prepared.computer, options.harness);
-        computer = await bindAgent(computer, prepared.computer, options.harness);
+        computer = await bindAgent(computer, options.harness);
         await finishSetup(computer, prepared.computer, options, cwd, identity.project);
     }
 
