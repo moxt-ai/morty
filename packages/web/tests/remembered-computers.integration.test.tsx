@@ -559,7 +559,6 @@ test("Given the remembered conversation was closed elsewhere, When I return, The
         expect(document.body.textContent).toContain(
             'If you closed it in Morty, use "Open Session" to import or fork it again.',
         );
-        expect(queryByRole(document.body, "button", { name: "Reopen it" })).toBeNull();
     });
     expect(new URL(window.location.href).searchParams.get("sessionId")).toBe(sessionId);
 });

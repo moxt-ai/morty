@@ -1,15 +1,13 @@
 import {
     decodeDaemonToServiceMessage,
-    decodeSessionClosedEvent,
     decodeSessionCloseNoticeEvent,
     encodeDaemonToServiceMessage,
-    encodeSessionClosedEvent,
     SESSION_CLOSE_NOTICE_KIND,
 } from "@morty-build/client/protocol";
 import { describe, expect, it } from "vitest";
 
 describe("Session close notice contracts", () => {
-    it("Given a Computer reports that it closed a Session, When the notice crosses the daemon-to-service boundary, Then receivers decode the same notice with its reason", () => {
+    it("Given a Computer reports that it is archiving a Session, When the notice crosses the daemon-to-service boundary, Then receivers decode the same notice with its reason", () => {
         const notice = {
             kind: SESSION_CLOSE_NOTICE_KIND,
             reason: "This Session was closed on request.",
@@ -63,16 +61,5 @@ describe("Session close notice contracts", () => {
         for (const notice of invalid) {
             expect(() => decodeSessionCloseNoticeEvent(JSON.stringify(notice))).toThrow();
         }
-    });
-
-    it("Given a Computer answers a close request, When its reply crosses the boundary, Then the native pair is retained", () => {
-        const reply = {
-            kind: "session.closed",
-            requestId: "request-1",
-            target: { harness: "claude", sessionId: "session-1" },
-        } as const;
-
-        expect(decodeSessionClosedEvent(encodeSessionClosedEvent(reply))).toEqual(reply);
-        expect(decodeDaemonToServiceMessage(encodeSessionClosedEvent(reply))).toEqual(reply);
     });
 });

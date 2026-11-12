@@ -72,8 +72,7 @@ export function formatError(cause: unknown, fallback: string): string {
 }
 
 /**
- * Whether an operation failed because the Computer closed the Session and nobody reopened it. The Session is not
- * broken: reopening it makes its operations work again.
+ * Whether an operation failed because the Computer is archiving the Session, so it takes no more operations.
  */
 export function isSessionClosedFailure(cause: unknown): cause is MortyError {
     return cause instanceof MortyError && cause.code === SESSION_CLOSED_ERROR_CODE;

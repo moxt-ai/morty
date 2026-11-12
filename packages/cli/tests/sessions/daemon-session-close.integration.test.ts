@@ -12,11 +12,11 @@ import {
 import { sameNativeSession } from "@morty-build/client/native-session";
 import {
     decodeMessageKind,
-    decodeSessionClosedEvent,
+    decodeSessionArchivedEvent,
     decodeSessionCloseNoticeEvent,
     decodeSessionOperationFailedEvent,
     decodeSessionStatusChangedEvent,
-    encodeSessionCloseCommand,
+    encodeServiceToDaemonMessage,
     encodeSessionPromptCommand,
     SessionPromptDisposition,
 } from "@morty-build/client/protocol";
@@ -95,7 +95,7 @@ class ControlledCloseAgentSpecification extends ControlledReadinessSpecification
     readonly releaseClose = (): void => this.#closeGate.resolve();
 }
 
-test("Given retained Agent teardown does not finish, When the Session close deadline elapses, Then the daemon reports a typed timeout", async () => {
+test("Given retained Agent teardown does not finish, When the Session archive deadline elapses, Then the daemon reports a typed timeout", async () => {
     const agent = new ControlledCloseAgentSpecification();
     await withRealDaemon(agent, { MORTY_TEST_CONTROLLED_CLOSE_PATH: process.execPath }, async (peer) => {
         const sessionTarget = peer.target;
@@ -103,8 +103,8 @@ test("Given retained Agent teardown does not finish, When the Session close dead
         try {
             const requestId = crypto.randomUUID();
             peer.send(
-                encodeSessionCloseCommand({
-                    kind: "session.close",
+                encodeServiceToDaemonMessage({
+                    kind: "session.archive",
                     requestId,
                     target: sessionTarget,
                 }),
@@ -112,7 +112,7 @@ test("Given retained Agent teardown does not finish, When the Session close dead
             await agent.closeStarted.promise;
             expect(decodeSessionCloseNoticeEvent(await peer.nextMessage())).toEqual({
                 kind: "session.close.notice",
-                reason: "This Session was closed on request.",
+                reason: "This Session was archived.",
                 target: sessionTarget,
             });
             const response = peer.nextMessage();
@@ -132,7 +132,7 @@ test("Given retained Agent teardown does not finish, When the Session close dead
     });
 });
 
-test("Given an active Agent session holding an exclusive writer lock, When a public close command reaches the daemon, Then the process stops and releases the writer lock", async () => {
+test("Given an active Agent session holding an exclusive writer lock, When a public archive command reaches the daemon, Then the process stops and releases the writer lock", async () => {
     const directory = await mkdtemp(join(tmpdir(), "morty-session-close-"));
     const executableDirectory = join(directory, "bin");
     const executable = join(executableDirectory, "controlled-acp");
@@ -175,11 +175,11 @@ test("Given an active Agent session holding an exclusive writer lock, When a pub
                         break;
                     }
                 }
-                const closeRequestId = crypto.randomUUID();
+                const archiveRequestId = crypto.randomUUID();
                 peer.send(
-                    encodeSessionCloseCommand({
-                        kind: "session.close",
-                        requestId: closeRequestId,
+                    encodeServiceToDaemonMessage({
+                        kind: "session.archive",
+                        requestId: archiveRequestId,
                         target: sessionTarget,
                     }),
                 );
@@ -188,17 +188,17 @@ test("Given an active Agent session holding an exclusive writer lock, When a pub
                     const kind = decodeMessageKind(message);
                     if (kind === "session.operation.failed") {
                         const failure = decodeSessionOperationFailedEvent(message);
-                        if (failure.requestId === closeRequestId) {
+                        if (failure.requestId === archiveRequestId) {
                             throw new Error(JSON.stringify(failure));
                         }
                         continue;
                     }
-                    if (kind !== "session.closed") {
+                    if (kind !== "session.archived") {
                         continue;
                     }
-                    expect(decodeSessionClosedEvent(message)).toEqual({
-                        kind: "session.closed",
-                        requestId: closeRequestId,
+                    expect(decodeSessionArchivedEvent(message)).toEqual({
+                        kind: "session.archived",
+                        requestId: archiveRequestId,
                         target: sessionTarget,
                     });
                     break;

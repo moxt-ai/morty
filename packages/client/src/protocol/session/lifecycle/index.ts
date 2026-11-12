@@ -21,12 +21,10 @@ export const SESSION_QUERY_KIND = "session.query";
 export const SESSION_QUERIED_KIND = "session.queried";
 export const SESSION_RESTORE_KIND = "session.restore";
 export const SESSION_RESTORED_KIND = "session.restored";
-export const SESSION_CLOSE_KIND = "session.close";
-export const SESSION_CLOSED_KIND = "session.closed";
 export const SESSION_CLOSE_NOTICE_KIND = "session.close.notice";
 export const SESSION_ARCHIVE_KIND = "session.archive";
 export const SESSION_ARCHIVED_KIND = "session.archived";
-/** Failure code of an operation that needs a Session the Computer has closed and nobody has reopened. */
+/** Failure code of an operation on a Session the Computer is archiving. */
 export const SESSION_CLOSED_ERROR_CODE = "session_closed";
 export const SESSION_STATUS_CHANGED_KIND = "session.status.changed";
 export const SESSION_OPERATION_FAILED_KIND = "session.operation.failed";
@@ -110,16 +108,6 @@ const sessionRestoreCommandSchema = z
     .readonly();
 
 export type SessionRestoreCommand = z.infer<typeof sessionRestoreCommandSchema>;
-
-const sessionCloseCommandSchema = z
-    .object({
-        kind: z.literal(SESSION_CLOSE_KIND),
-        requestId: IDENTIFIER,
-        target: nativeSessionTargetSchema,
-    })
-    .readonly();
-
-export type SessionCloseCommand = z.infer<typeof sessionCloseCommandSchema>;
 
 /**
  * Removes a Session from the Sessions this Computer holds, which are Morty's directory of Sessions on the computer. The
@@ -225,16 +213,6 @@ const sessionRestoredEventSchema = z
 
 export type SessionRestoredEvent = z.infer<typeof sessionRestoredEventSchema>;
 
-const sessionClosedEventSchema = z
-    .object({
-        kind: z.literal(SESSION_CLOSED_KIND),
-        requestId: IDENTIFIER,
-        target: nativeSessionTargetSchema,
-    })
-    .readonly();
-
-export type SessionClosedEvent = z.infer<typeof sessionClosedEventSchema>;
-
 /** Answers `session.archive` once the Computer no longer holds the Session. */
 const sessionArchivedEventSchema = z
     .object({
@@ -247,9 +225,9 @@ const sessionArchivedEventSchema = z
 export type SessionArchivedEvent = z.infer<typeof sessionArchivedEventSchema>;
 
 /**
- * Tells every observer that the Computer closed a Session. Unlike `session.closed`, which answers one
- * `session.close` request, a notice is not tied to a request, so it also reaches clients that did not ask.
- * `reason` is a sentence a client can show its user as is, such as "This Session was closed on request.".
+ * Tells every observer that the Computer is archiving a Session. Unlike `session.archived`, which answers one
+ * `session.archive` request, a notice is not tied to a request, so it also reaches clients that did not ask.
+ * `reason` is a sentence a client can show its user as is, such as "This Session was archived.".
  * Show it as plain text and don't branch on it: its wording can change between Computer versions.
  */
 const sessionCloseNoticeEventSchema = z
@@ -315,14 +293,6 @@ export const decodeSessionRestoredEvent = (encoded: string): SessionRestoredEven
     decode(encoded, sessionRestoredEventSchema);
 export const encodeSessionRestoredEvent = (message: SessionRestoredEvent): string =>
     encode(message, sessionRestoredEventSchema);
-export const decodeSessionCloseCommand = (encoded: string): SessionCloseCommand =>
-    decode(encoded, sessionCloseCommandSchema);
-export const encodeSessionCloseCommand = (message: SessionCloseCommand): string =>
-    encode(message, sessionCloseCommandSchema);
-export const decodeSessionClosedEvent = (encoded: string): SessionClosedEvent =>
-    decode(encoded, sessionClosedEventSchema);
-export const encodeSessionClosedEvent = (message: SessionClosedEvent): string =>
-    encode(message, sessionClosedEventSchema);
 export const decodeSessionArchiveCommand = (encoded: string): SessionArchiveCommand =>
     decode(encoded, sessionArchiveCommandSchema);
 export const encodeSessionArchiveCommand = (message: SessionArchiveCommand): string =>

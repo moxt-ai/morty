@@ -46,7 +46,6 @@ test("Given a saved-session link, When the bridge drops during entry initializat
         expect(failure.textContent).toContain(
             'If you closed it in Morty, use "Open Session" to import or fork it again.',
         );
-        expect(queryByRole(document.body, "button", { name: "Reopen it" })).toBeNull();
         expect(new URL(window.location.href).searchParams.get("sessionId")).toBe("chat_unavailable_session");
     } finally {
         stopObserving();

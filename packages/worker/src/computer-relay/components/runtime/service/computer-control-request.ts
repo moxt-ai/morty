@@ -36,8 +36,6 @@ import {
     type SessionArchivedEvent,
     type SessionCancelBeforeStartCommand,
     type SessionCancelCommand,
-    type SessionCloseCommand,
-    type SessionClosedEvent,
     type SessionConfigReadCommand,
     type SessionConfigReadResult,
     type SessionConfigUpdatedEvent,
@@ -90,7 +88,6 @@ export type ComputerControlCommand =
     | SessionConfigureCommand
     | SessionConfigReadCommand
     | SessionRenameCommand
-    | SessionCloseCommand
     | SessionArchiveCommand
     | SessionCancelBeforeStartCommand
     | SessionCancelCommand
@@ -112,7 +109,6 @@ export type ComputerControlResult =
     | SessionConfigUpdatedEvent
     | SessionConfigReadResult
     | SessionRenamedEvent
-    | SessionClosedEvent
     | SessionArchivedEvent
     | SessionPromptAcceptedEvent
     | SessionPromptSteeredEvent

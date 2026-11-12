@@ -27,9 +27,7 @@ import { ActiveExecutions } from "../turn/active-executions.ts";
 import type { SettledTurn } from "../turn/execution-receipts.ts";
 import { RuntimeOperations, waitForSharedOperation } from "./operation-drain.ts";
 import {
-    type ClosedSessionHandling,
     type ImmediateSessionOperation,
-    type SessionEnding,
     SessionLifecycles,
     type WaitingSessionOperation,
 } from "./session-lifecycle.ts";
@@ -360,18 +358,11 @@ export class SessionManager {
     async #prepareSession(
         options: SessionPrepareOptions,
         recovery: SessionRecovery,
-        closed: ClosedSessionHandling,
         metrics: OperationMetrics = unmeasuredOperationMetrics,
     ): Promise<PreparedSession> {
         return await this.#executionProcesses.use(options.target, async () =>
             this.#operations.run(options, async (options) => {
-                await this.#admit(
-                    options.target,
-                    { kind: "prepare", closed },
-                    options.signal,
-                    // Preparing or restoring a Session is how a client reopens it.
-                    () => (closed === "reopen" ? this.#lifecycles.reopen(options.target) : undefined),
-                );
+                await this.#admit(options.target, { kind: "prepare" }, options.signal, () => undefined);
                 const pending = this.#executionProcesses.pending(options.target);
                 if (pending !== undefined) {
                     const runtime = await metrics.measure(
@@ -388,7 +379,7 @@ export class SessionManager {
                         }
                         return runtime.prepared();
                     }
-                    return await this.#prepareSession(options, recovery, closed, metrics);
+                    return await this.#prepareSession(options, recovery, metrics);
                 }
                 const existing = this.#executionProcesses.get(options.target);
                 if (existing !== undefined) {
@@ -418,8 +409,7 @@ export class SessionManager {
     readonly prepareSession = async (
         options: SessionPrepareOptions,
         metrics: OperationMetrics = unmeasuredOperationMetrics,
-        closed: ClosedSessionHandling = "reopen",
-    ): Promise<PreparedSession> => await this.#prepareSession(options, { kind: "interactive-only" }, closed, metrics);
+    ): Promise<PreparedSession> => await this.#prepareSession(options, { kind: "interactive-only" }, metrics);
 
     /**
      * Creates a Session with the initial settings `configure` applies, and answers with the configured snapshot. A
@@ -432,18 +422,17 @@ export class SessionManager {
         options: SessionPrepareOptions,
         configure: (prepared: PreparedSession, signal: AbortSignal) => Promise<void>,
         metrics: OperationMetrics = unmeasuredOperationMetrics,
-        closed: ClosedSessionHandling = "reopen",
     ): Promise<PreparedSession> =>
         this.#operations.run(options, async (options) => {
             const creation = Promise.withResolvers<void>();
-            const created = await this.#admit(options.target, { kind: "create", closed }, options.signal, () => {
+            const created = await this.#admit(options.target, { kind: "create" }, options.signal, () => {
                 const unknown = !this.#isKnownSession(options.target);
                 this.#lifecycles.beginCreation(options.target, creation.promise);
                 return unknown;
             });
             try {
-                await configure(await this.prepareSession(options, metrics, closed), options.signal);
-                return await this.prepareSession(options, metrics, closed);
+                await configure(await this.prepareSession(options, metrics), options.signal);
+                return await this.prepareSession(options, metrics);
             } catch (error) {
                 if (created) {
                     await this.#discardCreatedSession(options.target);
@@ -469,8 +458,7 @@ export class SessionManager {
     readonly restoreSession = async (
         options: SessionPrepareOptions,
         metrics: OperationMetrics = unmeasuredOperationMetrics,
-        closed: ClosedSessionHandling = "reopen",
-    ): Promise<PreparedSession> => await this.#prepareSession(options, { kind: "history-required" }, closed, metrics);
+    ): Promise<PreparedSession> => await this.#prepareSession(options, { kind: "history-required" }, metrics);
 
     /**
      * Opens a short-lived native ACP session only to read the local Agent's
@@ -593,7 +581,7 @@ export class SessionManager {
                 // Keep the same process borrowed through recovery and the acknowledged rename.
                 const existing = this.#executionProcesses.get(options.target);
                 if (existing === undefined) {
-                    await this.#prepareSession(options, { kind: "interactive-only" }, "keep-closed");
+                    await this.#prepareSession(options, { kind: "interactive-only" });
                 } else {
                     await this.#currentSessionProcess(existing, options, { kind: "interactive-only" });
                 }
@@ -776,38 +764,27 @@ export class SessionManager {
         await runtime.respondElicitation(options);
     };
 
-    readonly closeSession = async (target: NativeSessionTarget, signal: AbortSignal): Promise<void> =>
-        this.#operations.run({ target, signal }, async (options) => await this.#endSession(options, "close"));
-
     /**
-     * Removes the Session from the Sessions this Runtime holds: it closes like `closeSession`, and once its process has
-     * stopped the Runtime forgets its record and cached events, so it leaves the Session list and nothing reopens it.
+     * Removes the Session from the Sessions this Runtime holds: clients are told, its turn stops, and once its process
+     * has stopped the Runtime forgets its record and cached events, so it leaves the Session list.
      * The Agent's own history stays; importing the native session holds it again. A Session this Runtime does not hold
      * is already archived.
      */
     readonly archiveSession = async (target: NativeSessionTarget, signal: AbortSignal): Promise<void> =>
-        this.#operations.run({ target, signal }, async (options) => await this.#endSession(options, "archive"));
+        this.#operations.run({ target, signal }, async (options) => await this.#endSession(options));
 
-    async #endSession(
-        options: { readonly target: NativeSessionTarget; readonly signal: AbortSignal },
-        ending: SessionEnding,
-    ): Promise<void> {
+    async #endSession(options: { readonly target: NativeSessionTarget; readonly signal: AbortSignal }): Promise<void> {
         const settled = Promise.withResolvers<void>();
         const closing = await this.#admit(options.target, { kind: "end" }, options.signal, (): boolean => {
-            const closedReason = this.#lifecycles.closedReason(options.target);
-            if (closedReason === undefined && !this.#isKnownSession(options.target)) {
-                // A Session this Runtime neither holds nor runs has nothing to close.
+            if (!this.#isKnownSession(options.target)) {
+                // A Session this Runtime neither holds nor runs is already archived.
                 return false;
             }
-            const reason =
-                closedReason ??
-                (ending === "archive" ? "This Session was archived." : "This Session was closed on request.");
-            this.#lifecycles.beginClosing(options.target, ending, reason, settled.promise);
-            // Announce first, once for each closing: clients must learn of it while its process is still going down.
-            // Clients show `reason` to their users as is.
-            if (closedReason === undefined) {
-                this.#onSessionClosed({ kind: SESSION_CLOSE_NOTICE_KIND, reason, target: options.target });
-            }
+            const reason = "This Session was archived.";
+            this.#lifecycles.beginClosing(options.target, reason, settled.promise);
+            // Announce first: clients must learn of it while its process is still going down. Clients show `reason`
+            // to their users as is.
+            this.#onSessionClosed({ kind: SESSION_CLOSE_NOTICE_KIND, reason, target: options.target });
             return true;
         });
         if (!closing) {
@@ -833,10 +810,8 @@ export class SessionManager {
                     await this.#stopSessionProcess(options.target, runtime);
                 }
             }
-            if (ending === "archive") {
-                // Forgotten before the closing settles, so no operation waiting on it finds the record to reopen.
-                this.#store.remove(options.target);
-            }
+            // Forgotten before the closing settles, so no operation waiting on it finds the record.
+            this.#store.remove(options.target);
         })();
         const deadline = Promise.withResolvers<void>();
         const timeout = this.#timer.schedule(
@@ -976,7 +951,7 @@ export class SessionManager {
                 this.#executionProcesses.touch(options.target, runtime);
                 return runtime;
             }
-            await this.#prepareSession(options, options.recovery ?? { kind: "interactive-only" }, "reopen");
+            await this.#prepareSession(options, options.recovery ?? { kind: "interactive-only" });
             const started = this.#executionProcesses.get(options.target);
             if (started === undefined) {
                 throw new AcpExecutionError("ACP session did not start");
@@ -1037,7 +1012,7 @@ export class SessionManager {
             const source = { harness: options.agent.harness, sessionId: origin.sessionId };
             if (origin.kind === "import") {
                 // Importing opens the Session again, even when it was closed or archived.
-                await this.#admit(source, { kind: "import" }, options.signal, () => this.#lifecycles.reopen(source));
+                await this.#admit(source, { kind: "import" }, options.signal, () => undefined);
             }
             // These checks and the start of the native operation below are synchronous.
             this.#admitNow(source, { kind: "native-exclusive" });

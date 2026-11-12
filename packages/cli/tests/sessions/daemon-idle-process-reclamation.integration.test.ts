@@ -12,7 +12,6 @@ import {
     decodeSessionReadyEvent,
     decodeSessionsQueriedEvent,
     encodeNativeSessionCommand,
-    encodeSessionCloseCommand,
     encodeSessionConfigReadCommand,
     encodeSessionConfigureCommand,
     encodeSessionHistoryPageLoad,
@@ -357,19 +356,11 @@ test("Given a retained native session browser, When two idle hours pass, Then it
     });
 });
 
-test("Given an old retained process was closed and the daemon restarted, When its deadline passes, Then a newly prepared process gets its own full idle window", async () => {
+test("Given an old retained process and a daemon restart, When its deadline passes, Then a newly prepared process gets its own full idle window", async () => {
     await withIdleDaemon("resume", async (peer, native, timer) => {
         const sessionTarget = peer.target;
-        await prompt(peer, sessionTarget, "Before close");
+        await prompt(peer, sessionTarget, "Before restart");
         timer.advance(twoHours / 2);
-        peer.send(
-            encodeSessionCloseCommand({ kind: "session.close", requestId: crypto.randomUUID(), target: sessionTarget }),
-        );
-        for (;;) {
-            if (decodeMessageKind(await peer.nextMessage()) === "session.closed") {
-                break;
-            }
-        }
         await peer.restart();
         peer.send(
             encodeSessionPrepareCommand({
@@ -390,14 +381,8 @@ test("Given native history is loading in a retained process, When three hours pa
     await withIdleDaemon("resume", async (peer, native, timer) => {
         const sessionTarget = peer.target;
         await prompt(peer, sessionTarget, "History before a long load");
-        peer.send(
-            encodeSessionCloseCommand({ kind: "session.close", requestId: crypto.randomUUID(), target: sessionTarget }),
-        );
-        for (;;) {
-            if (decodeMessageKind(await peer.nextMessage()) === "session.closed") {
-                break;
-            }
-        }
+        // A restarted daemon starts the Session in a new process.
+        await peer.restart();
         peer.send(
             encodeSessionPrepareCommand({
                 kind: "session.prepare",

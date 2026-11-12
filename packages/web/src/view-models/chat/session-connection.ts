@@ -14,14 +14,10 @@ export type SessionConnection =
           readonly notice: "quiet" | "visible";
       }
     | {
-          /** The Computer closed the Session. Reopening it, which only the user chooses to do, resumes the connection. */
+          /** The Computer archived the Session, so nothing this page does connects to it again. */
           readonly kind: "closed";
           /** The Computer's explanation, or null when this page learned of the closing from a failed operation. */
           readonly reason: string | null;
-          readonly reopen:
-              | { readonly kind: "available" }
-              | { readonly kind: "reopening" }
-              | { readonly kind: "failed"; readonly message: string };
       }
     | { readonly kind: "failed"; readonly message: string };
 
@@ -39,7 +35,7 @@ const SESSION_UPDATES_ENDED_ERROR_CODE = "session_updates_ended";
 export function sessionUpdatesEndedError(): MortyError {
     return new MortyError(
         SESSION_UPDATES_ENDED_ERROR_CODE,
-        "Session updates disconnected. Reopen the Session to continue.",
+        "Session updates disconnected. Open the Session again to continue.",
     );
 }
 
@@ -51,7 +47,6 @@ export function connectionFailure(connection: SessionConnection): string | null 
         case "reconnecting":
             return connection.message;
         case "closed":
-            return connection.reopen.kind === "failed" ? connection.reopen.message : null;
         case "first-loading":
         case "ready":
             return null;
