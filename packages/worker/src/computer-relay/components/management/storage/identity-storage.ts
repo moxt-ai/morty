@@ -3,7 +3,7 @@ import { and, eq, exists, gt, inArray, isNull, max, ne, notExists, or, type SQL,
 import { alias, type SQLiteColumn } from "drizzle-orm/sqlite-core";
 import type { Credential, SharedLinkTerms } from "../../../../contracts/authentication/credential.ts";
 import type { ClientLocation } from "../../../../contracts/client-location.ts";
-import { createProjectCredential, readProjectCredential } from "../../../../contracts/project-credential.ts";
+import { readProjectCredential } from "../../../../contracts/project-credential.ts";
 import type { DurableObjectDatabase } from "../../../infra/durable-object-database.ts";
 import {
     browserCredential,
@@ -110,7 +110,7 @@ function browserCredentialInForce(database: IdentityDatabase, now: number) {
     return and(isNull(browserCredential.replacedAt), browserAccessHeld(database, now));
 }
 
-/** The one rule for the computer's own and recovery credentials: each holds its own access until it is revoked. */
+/** The one rule for the computer's own credential: it holds its own access until it is revoked. */
 function ownerAccessHeld(credential: { readonly revokedAt: SQLiteColumn } = ownerCredential) {
     return isNull(credential.revokedAt);
 }
@@ -134,12 +134,12 @@ export interface IdentityTransfer extends SharedLinkTerms {
 }
 
 /**
- * A credential of the computer's owner as it stands now. The computer's own and recovery credentials hold their own
- * access or were revoked; a browser credential holds its device's access until its device's term, unless a newer
+ * A credential of the computer's owner as it stands now. The computer's own credential holds its own access or was
+ * revoked; a browser credential holds its device's access until its device's term, unless a newer
  * credential of the device replaced it or the device's access ended.
  */
 export type StoredCredential = { readonly credentialId: string } & (
-    | { readonly kind: "local" | "recovery"; readonly held: boolean }
+    | { readonly kind: "local"; readonly held: boolean }
     | {
           readonly kind: "browser";
           readonly transferId: string;
@@ -176,7 +176,7 @@ export class IdentityStorage {
         const database = requireIdentityDatabase(this.#database);
         await database
             .insert(ownerCredential)
-            .values({ id: credentialId, tokenHash, kind: "local", createdAt: now })
+            .values({ id: credentialId, tokenHash, createdAt: now })
             .onConflictDoNothing({ target: ownerCredential.tokenHash })
             .run();
         signal.throwIfAborted();
@@ -184,7 +184,7 @@ export class IdentityStorage {
         const credential = await database
             .select({ id: ownerCredential.id })
             .from(ownerCredential)
-            .where(and(eq(ownerCredential.tokenHash, tokenHash), eq(ownerCredential.kind, "local"), ownerAccessHeld()))
+            .where(and(eq(ownerCredential.tokenHash, tokenHash), ownerAccessHeld()))
             .get();
         signal.throwIfAborted();
         return credential === undefined ? null : { computerToken: token, computerId };
@@ -192,7 +192,7 @@ export class IdentityStorage {
 
     /**
      * The owner's credential this token authenticates as, as it stands at `now`; null for any other token. The computer's
-     * own and recovery credentials are read first, so the credential its holder chose as the successor is that one.
+     * own credential is read first, so the credential its holder chose as the successor is that one.
      */
     readonly findCredential = async (
         token: string,
@@ -205,7 +205,6 @@ export class IdentityStorage {
         const owner = await database
             .select({
                 credentialId: ownerCredential.id,
-                kind: ownerCredential.kind,
                 held: sql<number>`CASE WHEN ${ownerAccessHeld()} THEN 1 ELSE 0 END`.as("held"),
             })
             .from(ownerCredential)
@@ -213,7 +212,7 @@ export class IdentityStorage {
             .get();
         signal.throwIfAborted();
         if (owner !== undefined) {
-            return { credentialId: owner.credentialId, kind: owner.kind, held: owner.held === 1 };
+            return { credentialId: owner.credentialId, kind: "local", held: owner.held === 1 };
         }
         const browser = await database
             .select({
@@ -243,8 +242,8 @@ export class IdentityStorage {
     };
 
     /**
-     * Whether the access a Session credential carries holds at `now`: its browser device's, or the computer's own or a
-     * recovery credential's. Only the computer owner's access holds.
+     * Whether the access a Session credential carries holds at `now`: its browser device's, or the computer's own
+     * credential's. Only the computer owner's access holds.
      */
     readonly holdsAccess = async (holder: SessionAccessHolder, now: number, signal: AbortSignal): Promise<boolean> => {
         signal.throwIfAborted();
@@ -293,7 +292,7 @@ export class IdentityStorage {
                 accessHeldUntil: accessHeldUntil.as("access_held_until"),
                 sharerKind: sql<
                     Credential["kind"] | null
-                >`coalesce(${sharerOwner.kind}, CASE WHEN ${sharerBrowser.id} IS NOT NULL THEN 'browser' END)`.as(
+                >`CASE WHEN ${sharerOwner.id} IS NOT NULL THEN 'local' WHEN ${sharerBrowser.id} IS NOT NULL THEN 'browser' END`.as(
                     "sharer_kind",
                 ),
                 sharerLabel: sql<string | null>`${sharerDevice.label}`.as("sharer_label"),
@@ -311,7 +310,7 @@ export class IdentityStorage {
     };
 
     /**
-     * Revokes every local and recovery credential except the caller's, ends every browser device's access, and cancels
+     * Revokes every local credential except the caller's, ends every browser device's access, and cancels
      * the links no device has used yet. Only the computer's own credential, which belongs to no device, may do this.
      */
     readonly revokeOtherAccess = async (token: string, now: number, signal: AbortSignal): Promise<void> => {
@@ -333,7 +332,7 @@ export class IdentityStorage {
     };
 
     /**
-     * Revokes every local and recovery credential, the caller's included, and ends every browser device's access, in one
+     * Revokes every local credential, the caller's included, and ends every browser device's access, in one
      * transaction that issues `successor` as the only local credential. Every link was shared by access this ends, so
      * none adds a device afterwards. Only
      * the computer's own credential may do this, so a copy of it stops working too. Repeating it with the successor as
@@ -350,19 +349,12 @@ export class IdentityStorage {
         const database = requireIdentityDatabase(this.#database);
         const tokenHash = await digest(token);
         const successorHash = await digest(successor);
-        const localCredential = (hash: string) =>
-            and(eq(ownerCredential.tokenHash, hash), eq(ownerCredential.kind, "local"), ownerAccessHeld());
+        const localCredential = (hash: string) => and(eq(ownerCredential.tokenHash, hash), ownerAccessHeld());
         const successorInForce = exists(
             database
                 .select({ id: successorCredential.id })
                 .from(successorCredential)
-                .where(
-                    and(
-                        eq(successorCredential.tokenHash, successorHash),
-                        eq(successorCredential.kind, "local"),
-                        ownerAccessHeld(successorCredential),
-                    ),
-                ),
+                .where(and(eq(successorCredential.tokenHash, successorHash), ownerAccessHeld(successorCredential))),
         );
         this.#database.batch(
             [
@@ -374,7 +366,6 @@ export class IdentityStorage {
                                 id: sql<string>`${`cred_${crypto.randomUUID()}`}`.as("id"),
                                 retainedOwnerReference: sql<null>`null`.as("user_id"),
                                 tokenHash: sql<string>`${successorHash}`.as("token_hash"),
-                                kind: sql<"local">`'local'`.as("kind"),
                                 createdAt: sql<number>`${now}`.as("created_at"),
                                 revokedAt: sql<null>`null`.as("revoked_at"),
                             })
@@ -402,7 +393,7 @@ export class IdentityStorage {
 
     /**
      * Ends the access of every browser device except the one kept, and cancels the links no device has used yet. The
-     * computer's own and recovery credentials belong to no device, so they stay.
+     * computer's own credential belongs to no device, so it stays.
      */
     readonly endOtherBrowserAccess = async (
         keptDeviceId: string | null,
@@ -523,42 +514,6 @@ export class IdentityStorage {
             .get();
         signal.throwIfAborted();
         return issued === undefined ? { kind: "conflict" } : { kind: "issued", ...issued };
-    };
-
-    /** Issues a recovery credential while the computer's own credential that asks for it holds access. */
-    readonly createRecoveryToken = async (
-        parentToken: string,
-        now: number,
-        signal: AbortSignal,
-    ): Promise<string | null> => {
-        signal.throwIfAborted();
-        const token = createProjectCredential("morty_recovery_v1", this.#computerId);
-        const database = requireIdentityDatabase(this.#database);
-        const result = await database
-            .insert(ownerCredential)
-            .select(
-                database
-                    .select({
-                        id: sql<string>`${`cred_${crypto.randomUUID()}`}`.as("id"),
-                        retainedOwnerReference: sql<null>`null`.as("user_id"),
-                        tokenHash: sql<string>`${await digest(token)}`.as("token_hash"),
-                        kind: sql<"recovery">`'recovery'`.as("kind"),
-                        createdAt: sql<number>`${now}`.as("created_at"),
-                        revokedAt: sql<null>`null`.as("revoked_at"),
-                    })
-                    .from(ownerCredential)
-                    .where(
-                        and(
-                            eq(ownerCredential.tokenHash, await digest(parentToken)),
-                            eq(ownerCredential.kind, "local"),
-                            ownerAccessHeld(),
-                        ),
-                    ),
-            )
-            .returning({ id: ownerCredential.id })
-            .get();
-        signal.throwIfAborted();
-        return result === undefined ? null : token;
     };
 
     /**

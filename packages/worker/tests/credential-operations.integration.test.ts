@@ -14,7 +14,7 @@ afterAll(async () => {
     await fixture.close();
 });
 
-test("Given local, browser and recovery credentials, When their operations end access, Then each preserves the other credential kinds", async () => {
+test("Given local and browser credentials, When their operations end access, Then each preserves the other credential kind", async () => {
     const owner = await fixture.createAnonymousUser();
     const request = (path: string, token: string, method = "GET", body?: object) =>
         fetchPublicApplication(
@@ -25,9 +25,6 @@ test("Given local, browser and recovery credentials, When their operations end a
             }),
             fixture.environment(),
         );
-    const recoveryResponse = await request("/identity/recovery-token", owner.token, "POST");
-    expect(recoveryResponse.status).toBe(201);
-    const recovery = v.parse(v.object({ token: v.string() }), await recoveryResponse.json()).token;
     const share = async () => {
         const response = await request("/identity/transfers", owner.token, "POST", {
             operationId: crypto.randomUUID(),
@@ -50,15 +47,9 @@ test("Given local, browser and recovery credentials, When their operations end a
     // Another device retains its independent browser access.
     expect((await redeem(await share())).status).toBe(200);
     const operations = [
-        { token: recovery, path: "/identity/v1/recovery-credential" },
         { token: owner.token, path: "/identity/v1/local-credential" },
         { token: browser, path: "/identity/v1/browser-access" },
     ];
-    const namespace = fixture.environment().COMPUTER_RELAY;
-    const storage = namespace.get(namespace.idFromName(owner.computerId));
-    const kinds = async () =>
-        await (await storage.fetch(new Request("https://computer.internal/credential-kinds"))).json();
-    expect(await kinds()).toEqual(expect.arrayContaining(["local", "browser", "recovery"]));
     for (const operation of operations) {
         const session = await request("/session", operation.token);
         expect(session.status).toBe(200);
@@ -69,7 +60,7 @@ test("Given local, browser and recovery credentials, When their operations end a
             expect(await rejected.json()).toMatchObject({ error: { code: "CREDENTIAL_KIND_REQUIRED" } });
         }
     }
-    for (const token of [browser, recovery]) {
+    for (const token of [browser]) {
         const refused = await fetchPublicApplication(
             new Request(`${APP_ORIGIN}/morty/api/computers/${owner.computerId}/identity/revoke-all-access`, {
                 method: "POST",
@@ -90,7 +81,7 @@ test("Given local, browser and recovery credentials, When their operations end a
     }
 });
 
-test("Given a browser that joined through a link, When it asks for recovery access, a Computer pairing or the Computer's binding, Then only the computer's local credential may issue them", async () => {
+test("Given a browser that joined through a link, When it asks for a Computer pairing or the Computer's binding, Then only the computer's local credential may issue them", async () => {
     const owner = await fixture.createAnonymousUser();
     const request = (path: string, token: string, method = "GET", body?: object) =>
         fetchPublicApplication(
@@ -118,13 +109,9 @@ test("Given a browser that joined through a link, When it asks for recovery acce
         fixture.environment(),
     );
     const browser = v.parse(v.object({ computerToken: v.string() }), await redeemed.json()).computerToken;
-    const recoveryResponse = await request(`${project}/identity/recovery-token`, owner.token, "POST");
-    expect(recoveryResponse.status).toBe(201);
-    const recovery = v.parse(v.object({ token: v.string() }), await recoveryResponse.json()).token;
 
-    for (const token of [browser, recovery]) {
+    for (const token of [browser]) {
         for (const refused of [
-            await request(`${project}/identity/recovery-token`, token, "POST"),
             await request(`${project}/management/pairing`, token, "POST", {
                 idempotencyKey: "shared-pairing",
             }),

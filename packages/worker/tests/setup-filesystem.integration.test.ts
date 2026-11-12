@@ -1225,10 +1225,7 @@ test("Given two shared links and redeemed access, When the local owner revokes a
             tokens.push(v.parse(v.object({ computerToken: v.string() }), await response.json()).computerToken);
         }
         const remote = v.parse(v.string(), tokens[0]);
-        const recovery = await request(owner.computerId, "/identity/recovery-token", owner.token, "POST");
-        expect(recovery.status).toBe(201);
-        const recoveryToken = v.parse(v.object({ token: v.string() }), await recovery.json()).token;
-        for (const token of [remote, recoveryToken]) {
+        for (const token of [remote]) {
             const refused = await fetch(
                 `${fixture.origin}/morty/api/computers/${owner.computerId}/identity/revoke-all-access`,
                 {
@@ -1270,7 +1267,7 @@ test("Given two shared links and redeemed access, When the local owner revokes a
         for (const link of links) {
             expect((await redeem(link)).status).toBe(410);
         }
-        for (const token of [...tokens, recoveryToken, owner.token]) {
+        for (const token of [...tokens, owner.token]) {
             expect((await request(owner.computerId, "/session", token)).status).toBe(401);
             expect(
                 (

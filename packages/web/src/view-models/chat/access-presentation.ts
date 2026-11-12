@@ -41,8 +41,6 @@ function addedByLabel(device: LinkedDevice): string | null {
     switch (device.addedBy?.kind) {
         case "computer":
             return "Your computer";
-        case "recovery":
-            return "Recovery";
         case "device":
             return device.addedBy.label ?? "Another browser";
         case undefined:

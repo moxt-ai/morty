@@ -127,16 +127,6 @@ export class ComputerRelay extends ProductionComputerRelay {
                     .map((row) => row.name),
             });
         }
-        if (request.url === "https://computer.internal/credential-kinds") {
-            return Response.json(
-                this.ctx.storage.sql
-                    .exec<{ kind: string }>(
-                        "SELECT kind FROM owner_credential UNION ALL SELECT 'browser' FROM browser_credential",
-                    )
-                    .toArray()
-                    .map((row) => row.kind),
-            );
-        }
         return await super.fetch(request);
     }
 }
