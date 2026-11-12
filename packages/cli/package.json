@@ -26,9 +26,7 @@
     "scripts": {
         "prebuild": "tsc --project src/engine/acp/harness/claude/upstream/tsconfig.json && tsc --project src/engine/acp/harness/pi/upstream/tsconfig.json",
         "build": "node scripts/build.ts",
-        "dev": "node --watch src/cli/entrypoint.ts",
         "pretypecheck": "tsc --project src/engine/acp/harness/claude/upstream/tsconfig.json && tsc --project src/engine/acp/harness/pi/upstream/tsconfig.json",
-        "prepack": "pnpm build",
         "start": "node dist/cli.js",
         "typecheck": "tsc --project tsconfig.json && tsc --project tests/tsconfig.json",
         "pretest:controlled": "pnpm build && pnpm pack:test",

@@ -12,7 +12,7 @@ import { existsSync, readFileSync } from "node:fs";
  */
 
 const SCANNED = "packages/web/src/views";
-const ALLOWED_HOOKS = new Set(["useStore", "useExternalStore", "useParams", "useRouter", "useMortyApplication"]);
+const ALLOWED_HOOKS = new Set(["useStore", "useExternalStore", "useRouter", "useMortyApplication"]);
 const HOOK_CALL = /(?<![\w.$])(?:\w+\.)?(use[A-Z]\w*)\s*(?:<[^()]*>)?\s*\(/gu;
 const NAMED_IMPORTS = /import\s+(?:type\s+)?(?:\w+\s*,\s*)?\{([^}]*)\}\s*from/gu;
 

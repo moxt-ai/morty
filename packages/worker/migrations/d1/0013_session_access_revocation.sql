@@ -1,1 +1,0 @@
-ALTER TABLE `platform_projects` ADD `session_access_revoked_through` integer DEFAULT 0 NOT NULL;
