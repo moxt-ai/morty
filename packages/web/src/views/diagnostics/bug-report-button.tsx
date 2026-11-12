@@ -34,21 +34,17 @@ export function BugReportButton({
     daemonSource = null,
     dialog,
 }: {
-    readonly appearance?: keyof typeof appearances | "option" | "card";
+    readonly appearance?: keyof typeof appearances | "card";
     readonly daemonSource?: DaemonDiagnosticsSource | null;
     readonly dialog: BugReportDialogStore;
 }) {
     const showBugReport = dialog.getState().show;
     const trigger =
-        appearance === "option" || appearance === "card" ? (
+        appearance === "card" ? (
             <button
                 type="button"
                 aria-label="Report a bug"
-                className={
-                    appearance === "card"
-                        ? mobileDrawerCardRowClassName
-                        : "flex w-full items-center gap-2.5 rounded-lg px-[10px] py-2 text-left text-[13px] font-medium text-copy-secondary outline-none transition-[background-color,color] duration-150 hover:bg-morty-fill-opacity-2 active:bg-morty-fill-opacity-3 keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/60 motion-reduce:transition-none"
-                }
+                className={mobileDrawerCardRowClassName}
                 onClick={(event) => {
                     if (event.detail > 0) {
                         event.currentTarget.blur();
@@ -56,10 +52,7 @@ export function BugReportButton({
                     showBugReport(daemonSource);
                 }}
             >
-                <Bug
-                    aria-hidden="true"
-                    className={appearance === "card" ? "size-5 shrink-0 text-copy-secondary" : "size-4 shrink-0"}
-                />
+                <Bug aria-hidden="true" className="size-5 shrink-0 text-copy-secondary" />
                 Report a bug
             </button>
         ) : (
@@ -158,7 +151,6 @@ function BugReportDialog({
     };
     return (
         <Dialog
-            variant="bugReport"
             title="Report a bug"
             description="Send a description, optional images and recent technical and network diagnostics to the Morty team. Session text, other files and credentials are not collected automatically."
             onClose={closeDialog}

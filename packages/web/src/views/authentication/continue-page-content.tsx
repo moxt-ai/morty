@@ -27,12 +27,7 @@ function ContinueError({
     readonly children?: ReactNode;
 }) {
     return (
-        <SetupCardShell
-            cardClassName="pb-10"
-            cardLeading={<SetupCardFailureIcon />}
-            showPageHeader
-            titleId="continue-title"
-        >
+        <SetupCardShell cardClassName="pb-10" cardLeading={<SetupCardFailureIcon />} titleId="continue-title">
             <div className="w-full" role="alert">
                 <SetupCardTitle id="continue-title">{title}</SetupCardTitle>
                 <SetupCardDescription>{content}</SetupCardDescription>

@@ -6,11 +6,7 @@ import { overlaySurfaceRadiusClassName } from "../../components/ui/overlay-surfa
 
 const setupPageBackgroundClassName = "bg-[radial-gradient(circle_at_top,_#f6f7f9_0%,_#f0f1f4_48%)]";
 
-const setupPageClassName = `flex min-h-dvh flex-col items-center justify-center overflow-y-auto ${setupPageBackgroundClassName} px-6 py-12 text-foreground`;
-
 const setupSectionClassName = "mx-auto w-full max-w-[460px]";
-
-const setupSectionWideClassName = `${setupSectionClassName} md:max-w-[960px]`;
 
 const setupCardClassName = `flex flex-col items-center overflow-hidden ${overlaySurfaceRadiusClassName} border-[1px] border-white bg-card px-8 pt-10 pb-6 text-center shadow-module backdrop-blur`;
 
@@ -22,12 +18,8 @@ export const setupPrimaryButtonClassName = "w-full !rounded-[24px]";
 
 export const setupPrimaryButtonSize = "lg" as const;
 
-/** Primary heading on setup card surfaces (`SetupPageWithHeader`, `SetupCardShell` with page header). */
+/** Primary heading on setup card surfaces (`SetupCardShell`). */
 const setupCardTitleClassName = "max-w-md text-24 font-semibold tracking-[-0.03em]";
-
-function SetupCardLogo() {
-    return <MortyLogoMark className="mb-6" size={56} />;
-}
 
 function SetupPageHeader({ headerAction }: { readonly headerAction: ReactNode }) {
     return (
@@ -149,58 +141,30 @@ export function SetupCardShell({
     pageAction,
     pageFooter,
     pageNotice,
-    showPageHeader = false,
     titleId,
     children,
-    wide = false,
 }: {
     readonly cardClassName?: string;
-    readonly cardLeading?: ReactNode | null;
-    /** Trailing header content; only rendered with the page header. */
+    readonly cardLeading?: ReactNode;
     readonly headerAction?: ReactNode;
     readonly pageAction?: ReactNode;
-    /** Content below the card; only rendered with the page header. */
+    /** Content below the card. */
     readonly pageFooter?: ReactNode;
     readonly pageNotice?: ReactNode;
-    readonly showPageHeader?: boolean;
     readonly titleId: string;
     readonly children: ReactNode;
-    readonly wide?: boolean;
 }) {
-    const leading =
-        cardLeading === undefined ? (
-            showPageHeader ? null : (
-                <SetupCardLogo />
-            )
-        ) : cardLeading === null ? null : (
-            cardLeading
-        );
-    const cardSurfaceClassName = cn(setupCardClassName, cardClassName);
-    const sectionClassName = wide ? setupSectionWideClassName : setupSectionClassName;
-    const card = showPageHeader ? (
-        <section aria-labelledby={titleId} className={`${sectionClassName} ${cardSurfaceClassName}`}>
-            {leading}
-            {children}
-        </section>
-    ) : (
-        <section aria-labelledby={titleId} className={sectionClassName}>
-            <div className={cardSurfaceClassName}>
-                {leading}
+    return (
+        <SetupPageWithHeader
+            headerAction={headerAction}
+            pageAction={pageAction}
+            pageFooter={pageFooter}
+            pageNotice={pageNotice}
+        >
+            <section aria-labelledby={titleId} className={cn(setupSectionClassName, setupCardClassName, cardClassName)}>
+                {cardLeading}
                 {children}
-            </div>
-        </section>
+            </section>
+        </SetupPageWithHeader>
     );
-    if (showPageHeader) {
-        return (
-            <SetupPageWithHeader
-                headerAction={headerAction}
-                pageAction={pageAction}
-                pageFooter={pageFooter}
-                pageNotice={pageNotice}
-            >
-                {card}
-            </SetupPageWithHeader>
-        );
-    }
-    return <main className={setupPageClassName}>{card}</main>;
 }

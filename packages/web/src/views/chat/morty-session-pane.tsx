@@ -548,7 +548,6 @@ function SessionConversationTitleBar({
         centered ? null : (
             <HarnessMark
                 harness={harness || agentLabel}
-                appearance="line"
                 className="text-copy-secondary"
                 label={agentLabel}
                 loading={loading}
@@ -1368,7 +1367,6 @@ function MortySessionPaneBody({
                                 controls={[
                                     {
                                         disabled: true,
-                                        harnessLockedLabel: "The harness cannot be changed for an existing session.",
                                         id: "harness",
                                         kind: "select" as const,
                                         label: "Harness",

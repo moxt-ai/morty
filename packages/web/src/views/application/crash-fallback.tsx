@@ -15,12 +15,7 @@ import {
 export function MortyCrashFallback({ dialog }: { readonly dialog: BugReportDialogStore }) {
     return (
         <>
-            <SetupCardShell
-                cardClassName="pb-10"
-                cardLeading={<SetupCardFailureIcon />}
-                showPageHeader
-                titleId="crash-title"
-            >
+            <SetupCardShell cardClassName="pb-10" cardLeading={<SetupCardFailureIcon />} titleId="crash-title">
                 <div role="alert">
                     <SetupCardTitle id="crash-title">Morty encountered an error</SetupCardTitle>
                     <SetupCardDescription>Please reload to try again.</SetupCardDescription>

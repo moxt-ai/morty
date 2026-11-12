@@ -1,4 +1,4 @@
-import { CircleAlert, CircleCheck, Info, type LucideIcon, TriangleAlert } from "lucide-react";
+import { CircleAlert, Info, type LucideIcon, TriangleAlert } from "lucide-react";
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 
@@ -29,12 +29,6 @@ const alertTones = {
         role: "alert",
         iconClassName: undefined,
         surface: `items-start ${warningAlertSurfaceClassName}`,
-    },
-    success: {
-        icon: CircleCheck,
-        role: "status",
-        iconClassName: undefined,
-        surface: "items-start border-success/20 bg-[oklch(0.97_0.025_163/0.6)] text-success backdrop-blur-[80px]",
     },
     info: {
         icon: Info,

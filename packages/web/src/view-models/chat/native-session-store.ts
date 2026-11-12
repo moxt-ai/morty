@@ -93,7 +93,7 @@ export function nativeSessionPresentation(model: NativeSessionStore, sessions: r
 
 /** The agent tab a listing is for: the chosen tab while the Computer still offers it, else the first installed one. */
 function chosenAgent(agents: readonly NativeSessionAgent[], selected: string): NativeSessionAgent | undefined {
-    return agents.find((item) => item.value === selected) ?? agents.find((item) => item.installed) ?? agents[0];
+    return agents.find((item) => item.harness === selected) ?? agents.find((item) => item.installed) ?? agents[0];
 }
 
 /**
@@ -112,7 +112,7 @@ function relistMatch(
 
 /** What a listing shows for an agent, to tell whether the Computer configuration still matches it. */
 function listingFor(agent: NativeSessionAgent | undefined): string {
-    return agent === undefined ? "empty" : `${agent.installed ? "ready" : "agent-unavailable"}:${agent.value}`;
+    return agent === undefined ? "empty" : `${agent.installed ? "ready" : "agent-unavailable"}:${agent.harness}`;
 }
 
 export const createNativeSessionStore = (
@@ -171,7 +171,7 @@ export const createNativeSessionStore = (
                     set({ directory: { kind: "empty" } });
                     return;
                 }
-                const selected = agent.value;
+                const selected = agent.harness;
                 if (!agent.installed) {
                     set({
                         selected,

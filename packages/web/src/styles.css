@@ -29,7 +29,6 @@
     --accent-active: rgba(11, 26, 57, 0.08);
     --destructive: oklch(0.58 0.22 27);
     --border: #c8cdd1;
-    --input: #c8cdd1;
     --ring: #4f7cff;
     --focus-ring-shadow: 0 0 0 3px color-mix(in srgb, var(--ring) 20%, transparent);
 
@@ -204,7 +203,6 @@
     --color-accent: var(--accent);
     --color-accent-active: var(--accent-active);
     --color-border: var(--border);
-    --color-input: var(--input);
     --color-ring: var(--ring);
     --color-destructive: var(--destructive);
     --color-success: var(--success);

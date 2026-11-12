@@ -9,7 +9,6 @@ export interface BrowserDiagnostic {
     readonly outcome: string;
     readonly requestId: string;
     readonly elapsedMs: number;
-    readonly closeCode?: number;
     readonly attempt?: number;
 }
 const entries: BrowserDiagnostic[] = [];

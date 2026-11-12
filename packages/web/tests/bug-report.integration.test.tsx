@@ -1,5 +1,5 @@
 import { createServer } from "node:http";
-import { close as closeSentry, flush, makeFetchTransport } from "@sentry/react";
+import { close as closeSentry, flush } from "@sentry/react";
 import { getAllByRole, getByLabelText, getByRole, queryByRole } from "@testing-library/dom";
 import { cleanup, render } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -345,8 +345,6 @@ async function createReportInbox() {
         dsn: `http://public@127.0.0.1:${address.port}/1`,
         environment: "test",
         release: "morty@test-release",
-        tracesSampleRate: 0,
-        transport: (options) => makeFetchTransport(options, window.fetch.bind(window)),
     });
     return {
         envelopes,

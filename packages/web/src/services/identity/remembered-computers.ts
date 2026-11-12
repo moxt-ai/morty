@@ -27,7 +27,7 @@ export function storedToken(computerId: string): string | null {
 }
 
 /** The access this browser holds for a remembered Computer, or null when it holds none. */
-export function storedTokenForProject(computerId: string): string | null {
+export function storedTokenForComputer(computerId: string): string | null {
     const computer = rememberedComputers().find((entry) => entry.scope.computerId === computerId);
     return computer === undefined ? null : storedToken(computer.scope.computerId);
 }
