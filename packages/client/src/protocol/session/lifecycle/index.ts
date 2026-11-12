@@ -14,7 +14,6 @@ import { nativeSessionTargetSchema } from "../shared/native-session-target.ts";
 
 export const SESSION_PREPARE_KIND = "session.prepare";
 export const SESSION_CREATE_KIND = "session.create";
-export const SESSION_CREATION_READ_KIND = "session.creation.read";
 export const SESSION_READY_KIND = "session.ready";
 export const SESSION_LIST_KIND = "session.list";
 export const SESSION_LISTED_KIND = "session.listed";
@@ -30,7 +29,6 @@ export const SESSION_ARCHIVED_KIND = "session.archived";
 /** Failure code of an operation that needs a Session the Computer has closed and nobody has reopened. */
 export const SESSION_CLOSED_ERROR_CODE = "session_closed";
 export const SESSION_STATUS_CHANGED_KIND = "session.status.changed";
-export const SESSION_INFO_UPDATED_KIND = "session.info.updated";
 export const SESSION_OPERATION_FAILED_KIND = "session.operation.failed";
 export const SESSION_PROMPT_ACCEPTED_KIND = "session.prompt.accepted";
 
@@ -151,21 +149,9 @@ const sessionPrepareCommandSchema = z
         requestId: IDENTIFIER,
         sessionState: z.literal("provisioned").optional(),
         target: nativeSessionTargetSchema,
-        /** Marks an inspection-only Session preparation. */
-        transient: z.boolean().optional(),
     })
     .superRefine((command, context) => {
-        if (command.transient === true && command.sessionState === "provisioned") {
-            context.addIssue({
-                code: "custom",
-                message: "A transient Session cannot already be provisioned",
-                path: ["sessionState"],
-            });
-        }
-        if (
-            command.configurations !== undefined &&
-            (command.transient === true || command.sessionState !== undefined)
-        ) {
+        if (command.configurations !== undefined && command.sessionState !== undefined) {
             context.addIssue({
                 code: "custom",
                 message: "Only a Session being created states its initial settings",
@@ -193,19 +179,6 @@ export const decodeSessionCreateCommand = (encoded: string): SessionCreateComman
     decode(encoded, sessionCreateCommandSchema);
 export const encodeSessionCreateCommand = (message: SessionCreateCommand): string =>
     encode(message, sessionCreateCommandSchema);
-
-const sessionCreationReadCommandSchema = z
-    .object({
-        kind: z.literal(SESSION_CREATION_READ_KIND),
-        requestId: IDENTIFIER,
-        operationId: IDENTIFIER,
-    })
-    .readonly();
-export type SessionCreationReadCommand = z.infer<typeof sessionCreationReadCommandSchema>;
-export const decodeSessionCreationReadCommand = (encoded: string): SessionCreationReadCommand =>
-    decode(encoded, sessionCreationReadCommandSchema);
-export const encodeSessionCreationReadCommand = (message: SessionCreationReadCommand): string =>
-    encode(message, sessionCreationReadCommandSchema);
 
 const runtimeTimingsSchema = z
     .array(
@@ -288,18 +261,6 @@ const sessionCloseNoticeEventSchema = z
     .readonly();
 
 export type SessionCloseNoticeEvent = z.infer<typeof sessionCloseNoticeEventSchema>;
-
-const sessionInfoUpdatedEventSchema = z
-    .object({
-        kind: z.literal(SESSION_INFO_UPDATED_KIND),
-        computerId: IDENTIFIER.optional(),
-        target: nativeSessionTargetSchema,
-        title: z.string().max(500).nullable(),
-        updatedAt: z.string().max(128),
-    })
-    .readonly();
-
-export type SessionInfoUpdatedEvent = z.infer<typeof sessionInfoUpdatedEventSchema>;
 
 const sessionOperationFailedEventSchema = z
     .object({
@@ -384,10 +345,6 @@ export const encodeSessionPrepareCommand = (message: SessionPrepareCommand): str
     encode(message, sessionPrepareCommandSchema);
 export const decodeSessionReadyEvent = (encoded: string): SessionReadyEvent => decode(encoded, sessionReadyEventSchema);
 export const encodeSessionReadyEvent = (message: SessionReadyEvent): string => encode(message, sessionReadyEventSchema);
-export const decodeSessionInfoUpdatedEvent = (encoded: string): SessionInfoUpdatedEvent =>
-    decode(encoded, sessionInfoUpdatedEventSchema);
-export const encodeSessionInfoUpdatedEvent = (message: SessionInfoUpdatedEvent): string =>
-    encode(message, sessionInfoUpdatedEventSchema);
 export const decodeSessionOperationFailedEvent = (encoded: string): SessionOperationFailedEvent =>
     decode(encoded, sessionOperationFailedEventSchema);
 export const encodeSessionOperationFailedEvent = (message: SessionOperationFailedEvent): string =>

@@ -4,7 +4,6 @@ import {
     type AgentModelEffort,
     isIdentifier,
     type NativeSessionTarget,
-    SESSION_INFO_UPDATED_KIND,
     type SessionCapabilities,
     type SessionCommand,
     type SessionConfigOption,
@@ -1102,12 +1101,6 @@ export class AgentSession {
                 if (this.#identity.kind === "bound") {
                     this.writeStoredSession(updatedAt);
                 }
-                await this.#observer.onInfo({
-                    kind: SESSION_INFO_UPDATED_KIND,
-                    target: this.target,
-                    title: this.#sessionTitle,
-                    updatedAt,
-                });
                 return;
             }
         }
