@@ -1,6 +1,7 @@
-import type { ForkMortyNativeSessionRequest, NativeSessionRequest } from "@morty-build/client";
+import type { ForkMortyNativeSessionRequest } from "@morty-build/client";
 import { MortyClient } from "@morty-build/client";
 import { sameNativeSession } from "@morty-build/client/native-session";
+import type { NativeSessionRequest } from "@morty-build/client/protocol";
 import {
     decodeAgentSettingsDiscoveredEvent,
     decodeComputerDiagnosticsResult,
@@ -445,7 +446,6 @@ export class BotChatApi {
             endpoint: this.#origin,
             computerId,
             operationTimeoutMilliseconds: 120000,
-            maxStreamReconnectAttempts: 0,
             onClose: () => {
                 this.#sessionClients.delete(client);
             },

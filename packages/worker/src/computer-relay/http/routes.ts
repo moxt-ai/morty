@@ -1,5 +1,5 @@
+import { computerRequestTarget } from "@morty-build/client";
 import { decodeFileReadCommand, MORTY_API_PREFIX } from "@morty-build/client/protocol";
-import { computerRequestTarget } from "@morty-build/client/relay";
 import { Hono, type MiddlewareHandler } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import * as v from "valibot";
