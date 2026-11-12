@@ -65,8 +65,6 @@ const unknownPaths = [
     "/chatty",
     "/continue/unknown",
     "/continue/preview/ready/extra",
-    "/playground",
-    "/playground/buttons",
 ];
 
 const browserNavigation = {

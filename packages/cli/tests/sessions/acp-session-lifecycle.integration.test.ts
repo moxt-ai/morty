@@ -5,11 +5,7 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { Writable } from "node:stream";
 import { fileURLToPath } from "node:url";
-import {
-    type NativeSessionTarget,
-    SESSION_CLOSED_ERROR_CODE,
-    type SessionStatusChangedEvent,
-} from "@morty-build/client/protocol";
+import type { NativeSessionTarget } from "@morty-build/client/protocol";
 import { describe, expect, it, vi } from "vitest";
 import { openPreviewEventCache } from "../../src/engine/acp/adapter/preview-event-cache.ts";
 import { AcpContentExternalizer } from "../../src/engine/acp/content/content-externalizer.ts";
@@ -851,9 +847,6 @@ child.once("exit", (code) => process.exit(code ?? 84));
                 { MORTY_TEST_PI_PID_FILE: piPidPath },
                 "0.85.0",
                 agentIdentity,
-                undefined,
-                "0.0.33",
-                [agentIdentity, adapterIdentity],
             );
 
             try {
@@ -991,65 +984,6 @@ child.once("exit", (code) => process.exit(code ?? 84));
                 signal: new AbortController().signal,
             });
             expect(observer.agentText()).toBe("Claude Code turn 1: selected agent");
-        } finally {
-            await manager.close();
-        }
-    });
-
-    it("Given a conversation closed after its prompt was prepared, When the prompt runs, Then the Computer reports session_closed without reporting the conversation working", async () => {
-        const statuses: SessionStatusChangedEvent[] = [];
-        const manager = new SessionManager({
-            observer: new NullSessionObserver(),
-            store: new MemorySessionStore(),
-            adapters: acpAdapters,
-            onSessionStatusChanged: (event) => statuses.push(event),
-            contentExternalizer: new AcpContentExternalizer((sessionTarget, content, signal) =>
-                new UnretainedExternalContentStore().put({
-                    bytes: content.bytes,
-                    kind: content.kind,
-                    mediaType: content.mediaType,
-                    name: content.name,
-                    target: sessionTarget,
-                    signal,
-                }),
-            ),
-            timer: systemTimer,
-            maxProcesses: null,
-        });
-        const preparation = await manager.createSession({
-            agent: createControlledAgent(
-                (options) =>
-                    new ControlledAcpConnection(
-                        {
-                            harness: "codex",
-                            adapterPath: process.execPath,
-                            arguments: [fakeAgentPath, "--agent-name", "Codex"],
-                            environment: options.environment,
-                        },
-                        options,
-                    ),
-                "codex",
-                "Codex",
-                process.execPath,
-            ),
-            cwd: process.cwd(),
-            signal: new AbortController().signal,
-        });
-
-        try {
-            await manager.prepareExecutionSession(preparation);
-            await manager.closeSession(preparation.target, preparation.signal);
-
-            await expect(
-                manager.runPrompt({
-                    ...preparation,
-                    commandId: "command-after-close",
-                    images: [],
-                    prompt: "Too late",
-                    resources: [],
-                }),
-            ).rejects.toMatchObject({ code: SESSION_CLOSED_ERROR_CODE });
-            expect(statuses).toEqual([]);
         } finally {
             await manager.close();
         }

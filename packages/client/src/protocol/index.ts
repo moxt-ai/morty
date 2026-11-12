@@ -38,7 +38,6 @@ export {
     mortyApiUrl,
 } from "./relay/morty-api.ts";
 export type { ProjectLocationHint } from "./relay/project-location.ts";
-export { PROJECT_LOCATION_HINTS } from "./relay/project-location.ts";
 
 export type {
     SessionAccessClaims,
@@ -50,20 +49,6 @@ export {
     decodeSessionAccessCredential,
     decodeSessionAccessGrant,
 } from "./session/access/index.ts";
-
-export type {
-    AgentCatalogDiscoverCommand,
-    AgentCatalogDiscoveredEvent,
-} from "./session/agent/catalog.ts";
-
-export {
-    AGENT_CATALOG_DISCOVER_KIND,
-    AGENT_CATALOG_DISCOVERED_KIND,
-    AGENT_CATALOG_DISCOVERY_FAILED_KIND,
-    decodeAgentCatalogDiscoveredEvent,
-    decodeAgentCatalogDiscoveryFailedEvent,
-    encodeAgentCatalogDiscoverCommand,
-} from "./session/agent/catalog.ts";
 
 export { MAX_LOCAL_AGENT_DIRECTORY_ENTRIES } from "./session/agent/directory.ts";
 
@@ -232,12 +217,8 @@ export {
 export type {
     SessionArchiveCommand,
     SessionArchivedEvent,
-    SessionCloseCommand,
-    SessionClosedEvent,
     SessionCloseNoticeEvent,
     SessionCreateCommand,
-    SessionCreationReadCommand,
-    SessionInfoUpdatedEvent,
     SessionListCommand,
     SessionMetadata,
     SessionOperationFailedEvent,
@@ -255,10 +236,8 @@ export type {
 export {
     decodeSessionArchiveCommand,
     decodeSessionArchivedEvent,
-    decodeSessionClosedEvent,
     decodeSessionCloseNoticeEvent,
     decodeSessionCreateCommand,
-    decodeSessionInfoUpdatedEvent,
     decodeSessionListCommand,
     decodeSessionOperationFailedEvent,
     decodeSessionPrepareCommand,
@@ -270,10 +249,7 @@ export {
     decodeSessionStatusChangedEvent,
     decodeSessionsListedEvent,
     decodeSessionsQueriedEvent,
-    encodeSessionCloseCommand,
-    encodeSessionClosedEvent,
     encodeSessionCreateCommand,
-    encodeSessionInfoUpdatedEvent,
     encodeSessionListCommand,
     encodeSessionOperationFailedEvent,
     encodeSessionPrepareCommand,
@@ -283,13 +259,9 @@ export {
     encodeSessionStatusChangedEvent,
     SESSION_ARCHIVE_KIND,
     SESSION_ARCHIVED_KIND,
-    SESSION_CLOSE_KIND,
     SESSION_CLOSE_NOTICE_KIND,
     SESSION_CLOSED_ERROR_CODE,
-    SESSION_CLOSED_KIND,
     SESSION_CREATE_KIND,
-    SESSION_CREATION_READ_KIND,
-    SESSION_INFO_UPDATED_KIND,
     SESSION_LIST_KIND,
     SESSION_LISTED_KIND,
     SESSION_OPERATION_FAILED_KIND,
@@ -322,7 +294,6 @@ export {
     encodeNativeSessionCommand,
     encodeNativeSessionRequest,
     encodeNativeSessionResult,
-    NATIVE_SESSION_CANCEL_KIND,
     NATIVE_SESSION_REQUEST_KIND,
     NATIVE_SESSION_RESULT_KIND,
 } from "./session/native/index.ts";

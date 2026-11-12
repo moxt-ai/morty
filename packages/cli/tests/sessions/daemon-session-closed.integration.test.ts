@@ -1,23 +1,16 @@
 import { sameNativeSession } from "@morty-build/client/native-session";
 import {
     decodeMessageKind,
-    decodeSessionClosedEvent,
+    decodeSessionArchivedEvent,
     decodeSessionCloseNoticeEvent,
     decodeSessionConfigReadResult,
     decodeSessionOperationFailedEvent,
-    decodeSessionReadyEvent,
     decodeSessionRenamedEvent,
     decodeSessionStatusChangedEvent,
     decodeSessionsQueriedEvent,
-    encodeSessionCloseCommand,
-    encodeSessionConfigReadCommand,
-    encodeSessionElicitationRespondCommand,
-    encodeSessionHistoryPageLoad,
-    encodeSessionPermissionRespondCommand,
-    encodeSessionPrepareCommand,
+    encodeServiceToDaemonMessage,
     encodeSessionPromptCommand,
     encodeSessionQueryCommand,
-    encodeSessionRenameCommand,
     SESSION_CLOSED_ERROR_CODE,
     type SessionOperationFailedEvent,
     SessionPromptDisposition,
@@ -104,18 +97,6 @@ async function nextFailure(peer: RealDaemonPeer, requestId: string): Promise<Ses
     }
 }
 
-async function prepare(peer: RealDaemonPeer, sessionTarget: RealDaemonPeer["target"]): Promise<void> {
-    const requestId = crypto.randomUUID();
-    peer.send(
-        encodeSessionPrepareCommand({
-            kind: "session.prepare",
-            requestId,
-            target: sessionTarget,
-        }),
-    );
-    expect(decodeSessionReadyEvent(await nextMessageOfKind(peer, "session.ready")).requestId).toBe(requestId);
-}
-
 function sendPrompt(peer: RealDaemonPeer, sessionTarget: RealDaemonPeer["target"], prompt: string): string {
     const commandId = crypto.randomUUID();
     peer.send(
@@ -142,27 +123,18 @@ async function prompt(peer: RealDaemonPeer, sessionTarget: RealDaemonPeer["targe
     }
 }
 
-function sendClose(peer: RealDaemonPeer, sessionTarget: RealDaemonPeer["target"]): string {
+function sendArchive(peer: RealDaemonPeer, sessionTarget: RealDaemonPeer["target"]): string {
     const requestId = crypto.randomUUID();
-    peer.send(encodeSessionCloseCommand({ kind: "session.close", requestId, target: sessionTarget }));
+    peer.send(encodeServiceToDaemonMessage({ kind: "session.archive", requestId, target: sessionTarget }));
     return requestId;
 }
 
-/** Prepares a Session, runs one prompt in it, and closes it; the reply to the close has been received. */
-async function closedSession(peer: RealDaemonPeer, title: string): Promise<RealDaemonPeer["target"]> {
-    const sessionTarget = await prepareNewRealSession(peer, NATIVE_HARNESS);
-    await prompt(peer, sessionTarget, title);
-    const requestId = sendClose(peer, sessionTarget);
-    expect(decodeSessionClosedEvent(await nextMessageOfKind(peer, "session.closed")).requestId).toBe(requestId);
-    return sessionTarget;
-}
-
-test("Given a client closes a Session, When the Computer stops its Agent process, Then the Computer announces the closed Session and why before it answers the close request", async () => {
+test("Given a client archives a Session, When the Computer stops its Agent process, Then the Computer announces the closing and why before it answers the archive request", async () => {
     const specification = new ClosableAgentSpecification();
     await withClosableDaemon(specification, async (peer) => {
         const sessionTarget = await prepareNewRealSession(peer, NATIVE_HARNESS);
         const endpointsBeforeClose = specification.sessions.endpointCount();
-        const requestId = sendClose(peer, sessionTarget);
+        const requestId = sendArchive(peer, sessionTarget);
 
         const announcements: string[] = [];
         for (;;) {
@@ -171,19 +143,19 @@ test("Given a client closes a Session, When the Computer stops its Agent process
             if (kind === "session.close.notice") {
                 expect(decodeSessionCloseNoticeEvent(message)).toEqual({
                     kind,
-                    reason: "This Session was closed on request.",
+                    reason: "This Session was archived.",
                     target: sessionTarget,
                 });
                 announcements.push(kind);
             }
-            if (kind === "session.closed") {
-                expect(decodeSessionClosedEvent(message)).toEqual({ kind, requestId, target: sessionTarget });
+            if (kind === "session.archived") {
+                expect(decodeSessionArchivedEvent(message)).toEqual({ kind, requestId, target: sessionTarget });
                 announcements.push(kind);
                 break;
             }
         }
 
-        expect(announcements).toEqual(["session.close.notice", "session.closed"]);
+        expect(announcements).toEqual(["session.close.notice", "session.archived"]);
         expect(specification.sessions.operations.at(-1)).toEqual({
             endpoint: endpointsBeforeClose - 1,
             method: "session/close",
@@ -193,131 +165,12 @@ test("Given a client closes a Session, When the Computer stops its Agent process
     });
 });
 
-test("Given a closed Session, When a client loads more history, Then the Computer reports session_closed and starts no Agent process", async () => {
-    const specification = new ClosableAgentSpecification();
-    await withClosableDaemon(specification, async (peer) => {
-        const sessionTarget = await closedSession(peer, "Plan the release");
-        const endpointsBeforeHistory = specification.sessions.endpointCount();
-
-        const requestId = crypto.randomUUID();
-        peer.send(
-            encodeSessionHistoryPageLoad({
-                cursor: null,
-                eventLimit: 200,
-                kind: "session.live-history.v2.page.load",
-                requestId,
-                target: sessionTarget,
-            }),
-        );
-
-        expect(await nextFailure(peer, requestId)).toMatchObject({
-            code: SESSION_CLOSED_ERROR_CODE,
-            target: sessionTarget,
-        });
-        expect(specification.sessions.endpointCount()).toBe(endpointsBeforeHistory);
-    });
-});
-
-test("Given a closed Session, When a client sends a prompt, Then the Computer reports session_closed and starts no Agent process", async () => {
-    const specification = new ClosableAgentSpecification();
-    await withClosableDaemon(specification, async (peer) => {
-        const sessionTarget = await closedSession(peer, "Plan the release");
-        const endpointsBeforePrompt = specification.sessions.endpointCount();
-
-        const commandId = sendPrompt(peer, sessionTarget, "Continue the plan");
-
-        expect(await nextFailure(peer, commandId)).toMatchObject({
-            code: SESSION_CLOSED_ERROR_CODE,
-            target: sessionTarget,
-        });
-        expect(specification.sessions.endpointCount()).toBe(endpointsBeforePrompt);
-    });
-});
-
-test("Given a closed Session, When a client renames it, Then the Computer reports session_closed", async () => {
-    const specification = new ClosableAgentSpecification();
-    await withClosableDaemon(specification, async (peer) => {
-        const sessionTarget = await closedSession(peer, "Plan the release");
-
-        const requestId = crypto.randomUUID();
-        peer.send(
-            encodeSessionRenameCommand({
-                kind: "session.rename",
-                requestId,
-                target: sessionTarget,
-                title: "Release plan",
-            }),
-        );
-
-        expect(await nextFailure(peer, requestId)).toMatchObject({
-            code: SESSION_CLOSED_ERROR_CODE,
-            target: sessionTarget,
-        });
-    });
-});
-
-test("Given a closed Session, When a client reads its settings, Then the Computer reports session_closed and starts no Agent process", async () => {
-    const specification = new ClosableAgentSpecification();
-    await withClosableDaemon(specification, async (peer) => {
-        const sessionTarget = await closedSession(peer, "Plan the release");
-        const endpointsBeforeRead = specification.sessions.endpointCount();
-
-        const requestId = crypto.randomUUID();
-        peer.send(encodeSessionConfigReadCommand({ kind: "session.config.read", requestId, target: sessionTarget }));
-
-        expect(await nextFailure(peer, requestId)).toMatchObject({
-            code: SESSION_CLOSED_ERROR_CODE,
-            target: sessionTarget,
-        });
-        expect(specification.sessions.endpointCount()).toBe(endpointsBeforeRead);
-    });
-});
-
-test("Given a closed Session, When a client answers a permission request or an elicitation, Then the Computer reports session_closed for each", async () => {
-    const specification = new ClosableAgentSpecification();
-    await withClosableDaemon(specification, async (peer) => {
-        const sessionTarget = await closedSession(peer, "Plan the release");
-
-        const permissionAnswer = crypto.randomUUID();
-        peer.send(
-            encodeSessionPermissionRespondCommand({
-                interactionId: crypto.randomUUID(),
-                kind: "session.permission.respond",
-                optionId: "allow",
-                outcome: "selected",
-                requestId: permissionAnswer,
-                target: sessionTarget,
-            }),
-        );
-        expect(await nextFailure(peer, permissionAnswer)).toMatchObject({
-            code: SESSION_CLOSED_ERROR_CODE,
-            target: sessionTarget,
-        });
-
-        const elicitationAnswer = crypto.randomUUID();
-        peer.send(
-            encodeSessionElicitationRespondCommand({
-                action: "accept",
-                content: "{}",
-                interactionId: crypto.randomUUID(),
-                kind: "session.elicitation.respond",
-                requestId: elicitationAnswer,
-                target: sessionTarget,
-            }),
-        );
-        expect(await nextFailure(peer, elicitationAnswer)).toMatchObject({
-            code: SESSION_CLOSED_ERROR_CODE,
-            target: sessionTarget,
-        });
-    });
-});
-
 test("Given a Session whose Agent process is still stopping, When a client sends a prompt, Then the Computer reports session_closed without waiting for the process", async () => {
     const specification = new ClosableAgentSpecification();
     await withClosableDaemon(specification, async (peer) => {
         const sessionTarget = await prepareNewRealSession(peer, NATIVE_HARNESS);
         const teardown = specification.sessions.closes.hold();
-        sendClose(peer, sessionTarget);
+        sendArchive(peer, sessionTarget);
         await teardown.entered;
         const endpointsBeforePrompt = specification.sessions.endpointCount();
 
@@ -329,23 +182,7 @@ test("Given a Session whose Agent process is still stopping, When a client sends
         });
         expect(specification.sessions.endpointCount()).toBe(endpointsBeforePrompt);
         teardown.release();
-        await nextMessageOfKind(peer, "session.closed");
-    });
-});
-
-test("Given a closed Session, When a client prepares it again, Then the Computer resumes the Agent session and the next prompt runs", async () => {
-    const specification = new ClosableAgentSpecification();
-    await withClosableDaemon(specification, async (peer) => {
-        const sessionTarget = await closedSession(peer, "Plan the release");
-
-        await prepare(peer, sessionTarget);
-        await prompt(peer, sessionTarget, "Continue the plan");
-
-        const requestId = crypto.randomUUID();
-        peer.send(encodeSessionQueryCommand({ kind: "session.query", requestId, targets: [sessionTarget] }));
-        expect(decodeSessionsQueriedEvent(await nextMessageOfKind(peer, "session.queried")).entries).toEqual([
-            expect.objectContaining({ target: sessionTarget, prompted: true, status: { kind: "idle" } }),
-        ]);
+        await nextMessageOfKind(peer, "session.archived");
     });
 });
 
@@ -354,11 +191,12 @@ test.each([
     { prompt: "\n> ## Plan   the release\nAdditional instructions", title: "Plan the release" },
     { prompt: `# ${"\u{1f680}".repeat(45)}\nAdditional instructions`, title: `${"\u{1f680}".repeat(41)}\u2026` },
 ])(
-    "Given a first prompt $prompt, When a client closes and continues the Session, Then its readable fallback title survives",
+    "Given a first prompt $prompt, When a client continues the Session, Then its readable fallback title survives",
     async ({ prompt: firstPrompt, title }) => {
         const specification = new ClosableAgentSpecification();
         await withClosableDaemon(specification, async (peer) => {
-            const sessionTarget = await closedSession(peer, firstPrompt);
+            const sessionTarget = await prepareNewRealSession(peer, NATIVE_HARNESS);
+            await prompt(peer, sessionTarget, firstPrompt);
 
             const queryTitle = async (): Promise<void> => {
                 const requestId = crypto.randomUUID();
@@ -369,7 +207,6 @@ test.each([
                 ]);
             };
             await queryTitle();
-            await prepare(peer, sessionTarget);
             await prompt(peer, sessionTarget, "Continue with a different request");
             await queryTitle();
         });

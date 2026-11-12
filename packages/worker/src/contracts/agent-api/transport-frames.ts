@@ -7,6 +7,7 @@ import * as v from "valibot";
 export const REQUEST_KIND = "http.request";
 export const RESPONSE_KIND = "http.response";
 export const ERROR_KIND = "http.error";
+export const CANCEL_KIND = "http.cancel";
 export const EVENT_SUBSCRIBE_KIND = "session.events.subscribe";
 export const EVENT_UNSUBSCRIBE_KIND = "session.events.unsubscribe";
 export const MAX_BODY_BYTES = 12_582_912;
@@ -62,6 +63,11 @@ export const transportFrames = {
                 v.description('The JSON-encoded request body; "" for GET.'),
             ),
         }),
+    },
+    httpCancel: {
+        direction: "send",
+        summary: "Abandon a pending http.request; its answer is an http.error unless it already completed.",
+        schema: v.object({ kind: v.literal(CANCEL_KIND), requestId: frameIdentifier }),
     },
     httpResponse: {
         direction: "receive",

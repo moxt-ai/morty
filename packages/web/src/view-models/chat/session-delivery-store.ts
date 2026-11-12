@@ -1,10 +1,5 @@
-import {
-    MortyApiError,
-    MortyCancellationError,
-    type MortyClient,
-    MortyError,
-    type PromptAttachment,
-} from "@morty-build/client";
+import { MortyApiError, MortyCancellationError, type MortyClient, MortyError } from "@morty-build/client";
+import type { PromptAttachment } from "@morty-build/client/protocol";
 import { createStore } from "zustand/vanilla";
 import type { ComposerAttachment } from "../../components/chat/composer-attachment.ts";
 import { CloudApiError } from "../../services/management/management-api.ts";

@@ -11,7 +11,6 @@ import type {
     SessionSteerOptions,
     SessionTurnOptions,
 } from "../../src/engine/session/api/session-api.ts";
-import type { ClosedSessionHandling } from "../../src/engine/session/manager/session-lifecycle.ts";
 import { SessionManager } from "../../src/engine/session/manager/session-manager.ts";
 import { nativeSessionQuery } from "../../src/engine/session/native/native-query.ts";
 import { AgentProcessPool } from "../../src/engine/session/process/agent-process-pool.ts";
@@ -43,20 +42,11 @@ export class SessionRuntimeFixture {
         adapter: this.adapters.resolve(agent),
     });
 
-    readonly prepareSession = (
-        options: TestSessionPrepareOptions,
-        metrics?: OperationMetrics,
-        closed?: ClosedSessionHandling,
-    ) => this.sessions.prepareSession({ ...options, adapter: this.adapters.resolve(options.agent) }, metrics, closed);
+    readonly prepareSession = (options: TestSessionPrepareOptions, metrics?: OperationMetrics) =>
+        this.sessions.prepareSession({ ...options, adapter: this.adapters.resolve(options.agent) }, metrics);
 
-    readonly restoreSession = (
-        options: TestSessionPrepareOptions,
-        metrics?: OperationMetrics,
-        closed?: ClosedSessionHandling,
-    ) => this.sessions.restoreSession({ ...options, adapter: this.adapters.resolve(options.agent) }, metrics, closed);
-
-    readonly inspectSession = (options: TestSessionPrepareOptions, metrics?: OperationMetrics) =>
-        this.sessions.inspectSession({ ...options, adapter: this.adapters.resolve(options.agent) }, metrics);
+    readonly restoreSession = (options: TestSessionPrepareOptions, metrics?: OperationMetrics) =>
+        this.sessions.restoreSession({ ...options, adapter: this.adapters.resolve(options.agent) }, metrics);
 
     readonly prepareExecutionSession = (options: TestSessionPrepareOptions) =>
         this.sessions.prepareExecutionSession({ ...options, adapter: this.adapters.resolve(options.agent) });
@@ -155,8 +145,8 @@ export class SessionRuntimeFixture {
         this.sessions.respondPermission(...args);
     readonly respondElicitation = (...args: Parameters<SessionManager["respondElicitation"]>) =>
         this.sessions.respondElicitation(...args);
-    readonly closeSession = (...args: Parameters<SessionManager["closeSession"]>) =>
-        this.sessions.closeSession(...args);
+    readonly archiveSession = (...args: Parameters<SessionManager["archiveSession"]>) =>
+        this.sessions.archiveSession(...args);
     readonly findSessions = (...args: Parameters<SessionManager["findSessions"]>) =>
         this.sessions.findSessions(...args);
     readonly sessionStatus = (...args: Parameters<SessionManager["sessionStatus"]>) =>

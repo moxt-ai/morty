@@ -22,7 +22,8 @@ Production is one `morty-production` Worker at `morty.build`. It serves the webs
 identity and computer management APIs, pairing and Session traffic. Each computer
 owns its state and Runtime connection in a `ComputerRelay` Durable Object. Relay
 is an internal responsibility of this deployment, not a separately deployed
-service. D1 holds the computer directory; R2 holds immutable web assets.
+service. The ComputerRelay Durable Object owns computer state; R2 holds immutable
+web assets.
 Conversation attachments remain on the connected computer. Local and CI stacks
 use the same topology with isolated storage.
 
@@ -41,16 +42,26 @@ in a private short-lived file and removed after deployment.
 
 Use a Cloudflare Account API Token for CI/CD so deployment authority belongs to
 the Morty account independently of its creator's user membership. Limit it to the
-account's required Workers, D1 and R2 write permissions and set an expiration.
-Deployment and restore verify account ownership and active
-status before making changes. Rotate the environment secret before expiry and
-verify a deployment before revoking the replaced token; never use a personal
-User API Token or a Global API key as a fallback.
+required Workers deployment and R2 asset-upload permissions in the Morty account
+and set an expiration. Scope Workers access to the production Worker where the
+deployed API supports it. R2 uploads currently use the Cloudflare REST API; its
+account-level storage permission must stay in the Morty-only account. Bucket-scoped
+object credentials require a separately verified S3 upload path.
+
+Ordinary deployment does not need D1, DNS, zone administration, member management
+or API-token provisioning permissions.
+
+Deployment and restore verify account ownership, active status and a valid future
+expiration before making changes, and warn when expiry is within 30 days. The
+Morty production operator owns rotation and must have access to both Cloudflare
+account tokens and the GitHub deployment environment. Rotate the environment
+secret before expiry and verify a deployment before revoking the replaced token;
+never use a personal User API Token or a Global API key as a fallback.
 Never log credentials.
 
 Morty enforces identity, sharing, pairing and authorization at the owning execution
-boundary. Preserve retained computer and Agent data; historical database migrations
-are immutable.
+boundary. Preserve active computer and Agent data; the migration history of every
+bound database is immutable.
 
 Deployment checks account authority, artifact identity, required secrets and the
 destination resources before writes. Production refuses to activate an installer until the exact
@@ -87,7 +98,7 @@ must pass the exact-archive acceptance gates first. Keep the existing installer
 available until the accepted npm archive exists; then activate the matching cloud
 artifact and verify health, assets, pairing and Session access.
 
-D1 migrations run before Worker activation and are never reversed. For ordinary
+Database migrations are never reversed. For ordinary
 updates, a failed deployment restores the previous Worker only when Durable
 Object lifecycle history permits it. Creation or deletion of a DO namespace
 requires forward repair; do not claim an ordinary version rollback restored it.

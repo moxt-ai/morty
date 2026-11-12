@@ -165,6 +165,7 @@ describe("acp commands environment", () => {
             },
             [fakeAgent()],
             localContext,
+            async (agent) => agent,
         );
         try {
             await manager.runPrompt({

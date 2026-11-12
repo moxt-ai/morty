@@ -17,7 +17,6 @@ import {
     encodeSessionConfigReadResult,
     encodeSessionEventEnvelope,
     encodeSessionHistoryPageLoaded,
-    encodeSessionInfoUpdatedEvent,
     encodeSessionOperationFailedEvent,
     encodeSessionPromptAcceptedEvent,
     encodeSessionRenamedEvent,
@@ -399,14 +398,6 @@ describe.sequential("Relay Session-only boundary", () => {
                     status: { commandId: "command-1", kind: "working" },
                 }),
             );
-            daemon.send(
-                encodeSessionInfoUpdatedEvent({
-                    kind: "session.info.updated",
-                    target: nativeTarget(sessionId),
-                    title: "Renamed session",
-                    updatedAt: "2026-09-18T00:01:00.000Z",
-                }),
-            );
             const historyPage = JSON.stringify({
                 events: {
                     events: {
@@ -721,7 +712,7 @@ async function connectComputerDaemon(slug: string, options: { readonly anchorClo
                     {
                         method: "POST",
                         headers: credentialHeaders(appCredential),
-                        body: JSON.stringify({ ...input, computerId }),
+                        body: JSON.stringify(input),
                     },
                 ),
             ),

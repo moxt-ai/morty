@@ -1,4 +1,5 @@
 """Verify account-owned deployment authority without disclosing its credential."""
+from datetime import datetime, timedelta, timezone
 import json
 import os
 from pathlib import Path
@@ -25,12 +26,24 @@ if (
     or re.fullmatch(r'[a-f0-9]{32}', result['id']) is None
 ):
     raise ValueError('The deployment token is not active in the pinned Morty account')
+expires_on = result.get('expires_on')
+if not isinstance(expires_on, str) or not expires_on:
+    raise ValueError('The deployment token must have an expiration; rotate it in morty-production')
+try:
+    expiration = datetime.fromisoformat(expires_on.replace('Z', '+00:00'))
+except ValueError:
+    raise ValueError('The deployment token has an invalid expiration') from None
+now = datetime.now(timezone.utc)
+if expiration.tzinfo is None or expiration <= now:
+    raise ValueError('The deployment token must have a valid future expiration')
+if expiration - now <= timedelta(days=30):
+    print('::warning::The Cloudflare deployment token expires within 30 days. Rotate the morty-production secret and verify a deployment before revoking the old token.')
 evidence = {
     'account': account,
     'kind': 'account_api_token',
     'id': result['id'],
     'status': result['status'],
-    'expiresOn': result.get('expires_on'),
+    'expiresOn': expires_on,
 }
 (ROOT / 'account-token-evidence.json').write_text(json.dumps(evidence, indent=2) + '\n')
 print(json.dumps(evidence))

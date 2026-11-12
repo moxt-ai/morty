@@ -5,6 +5,7 @@ import {
     SESSION_CLOSED_ERROR_CODE,
 } from "@morty-build/client/protocol";
 import {
+    CANCEL_KIND,
     ERROR_KIND,
     EVENT_SUBSCRIBE_KIND,
     EVENT_UNSUBSCRIBE_KIND,
@@ -21,7 +22,6 @@ import {
 import { type HttpError, toHttpError } from "../../../../contracts/http-error.ts";
 import { diagnosticText, serializeDiagnosticError } from "../../../../infra/log-diagnostics.ts";
 import { logger } from "../../../../infra/logger.ts";
-import { standardWebSocketHost } from "../infra/websocket-host.ts";
 
 const MAX_PENDING_BINARY_BYTES = MAX_BODY_BYTES;
 const MAX_PENDING_BINARY_REQUESTS = 16;
@@ -291,12 +291,14 @@ export function acceptWebSocketHttpTransport({
     uploads = new WebSocketUploadBudget(),
     authorizeUpload,
     validateTarget: acceptsTarget = () => true,
+    cancellable = () => false,
 }: {
     readonly request: Request;
     readonly dispatch: DispatchRequest;
     readonly uploads?: WebSocketUploadBudget;
     readonly authorizeUpload?: DispatchRequest;
     readonly validateTarget?: (request: Request) => boolean;
+    readonly cancellable?: (request: Request) => boolean;
 }): Response {
     if (request.headers.get("Upgrade")?.toLowerCase() !== "websocket") {
         return Response.json(
@@ -322,6 +324,7 @@ export function acceptWebSocketHttpTransport({
     // Only verified uploads may consume the Computer-wide budget.
     const connectionUploads = new WebSocketUploadBudget();
     const binaryRequests = new Map<string, PendingBinaryUpload>();
+    const requests = new Map<string, AbortController>();
     const browserOrigin = request.headers.get("origin");
     let subscriptionDiagnosticCount = 0;
     let lastActivityAt = Date.now();
@@ -373,12 +376,21 @@ export function acceptWebSocketHttpTransport({
         }
         subscriptions.clear();
         releaseAllBinaryRequests();
+        for (const pending of requests.values()) {
+            pending.abort(new DOMException("WebSocket transport closed", "AbortError"));
+        }
+        requests.clear();
     };
     const receive = (data: string | ArrayBuffer) => {
         const event = { data };
         touch();
         void (async () => {
             let requestId = "unknown";
+            let operation: {
+                readonly controller: AbortController;
+                readonly timeout: ReturnType<typeof setTimeout>;
+                readonly requestId: string;
+            } | null = null;
             try {
                 let decoded: unknown;
                 let binaryBody: Uint8Array | undefined;
@@ -429,6 +441,12 @@ export function acceptWebSocketHttpTransport({
                 const kind = string(message, "kind", 32);
                 if (kind === "ping" && Object.keys(message).length === 1) {
                     server.send('{"kind":"pong"}');
+                    return;
+                }
+                if (kind === CANCEL_KIND) {
+                    const cancelledId = string(message, "requestId", 128);
+                    requests.get(cancelledId)?.abort(new DOMException("Request cancelled", "AbortError"));
+                    releaseBinaryRequest(cancelledId);
                     return;
                 }
                 if (kind === EVENT_UNSUBSCRIBE_KIND) {
@@ -677,7 +695,29 @@ export function acceptWebSocketHttpTransport({
                 );
                 requestId = converted.requestId;
                 validateTarget(converted.request);
-                const response = await dispatch(converted.request);
+                if (cancellable(converted.request)) {
+                    if (requests.has(requestId)) {
+                        throw transportError("invalid_message");
+                    }
+                    if (requests.size >= 64) {
+                        throw transportError("request_capacity_exceeded");
+                    }
+                    const requestController = new AbortController();
+                    operation = {
+                        controller: requestController,
+                        requestId,
+                        timeout: setTimeout(() => requestController.abort(transportError("request_timeout")), 120_000),
+                    };
+                    requests.set(requestId, requestController);
+                }
+                const dispatched =
+                    operation === null
+                        ? converted.request
+                        : new Request(converted.request, {
+                              signal: AbortSignal.any([controller.signal, operation.controller.signal]),
+                          });
+                const response = await dispatch(dispatched);
+                operation?.controller.signal.throwIfAborted();
                 const mediaType = response.headers.get("content-type") ?? "";
                 if (mediaType.startsWith("text/event-stream")) {
                     throw transportError("streaming_response_unsupported");
@@ -697,11 +737,18 @@ export function acceptWebSocketHttpTransport({
                 );
                 touch();
             } catch (cause) {
-                if (controller.signal.aborted || server.readyState !== WebSocket.OPEN) {
+                if (
+                    controller.signal.aborted ||
+                    server.readyState !== WebSocket.OPEN ||
+                    (operation?.controller.signal.aborted &&
+                        !(operation.controller.signal.reason instanceof WebSocketTransportError))
+                ) {
                     return;
                 }
                 logger.error({ err: cause, requestId }, "Morty WebSocket transport request failed");
-                const httpError = toHttpError(cause);
+                const httpError = toHttpError(
+                    operation?.controller.signal.aborted ? operation.controller.signal.reason : cause,
+                );
                 server.send(
                     JSON.stringify({
                         code: httpError.body.error.code,
@@ -711,20 +758,32 @@ export function acceptWebSocketHttpTransport({
                         status: httpError.status,
                     }),
                 );
+            } finally {
+                if (operation !== null) {
+                    clearTimeout(operation.timeout);
+                    requests.delete(operation.requestId);
+                }
             }
         })();
     };
-    standardWebSocketHost.accept(server, {
-        message: receive,
-        close: () => {
+    server.accept();
+    server.addEventListener("message", (event) => receive(event.data));
+    server.addEventListener(
+        "close",
+        () => {
             release();
             server.close(1000, "WebSocket transport closed");
         },
-        error: () => {
+        { once: true },
+    );
+    server.addEventListener(
+        "error",
+        () => {
             release();
             server.close(1011, "WebSocket transport failed");
         },
-    });
+        { once: true },
+    );
     touch();
     return new Response(null, {
         status: 101,

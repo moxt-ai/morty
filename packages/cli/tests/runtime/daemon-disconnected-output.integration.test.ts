@@ -309,6 +309,7 @@ async function startRuntime() {
             ),
         ],
         new RuntimeLocalContext(directory, {}),
+        async (agent) => agent,
     );
     let cancellation = new AbortController();
     let runtime = runRuntime(config, cancellation.signal, timer, { onExecutionCountChange });

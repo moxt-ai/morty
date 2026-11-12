@@ -181,8 +181,8 @@ test("Given a healthy conversation, when the stability timer and foreground sign
     await page.clock.runFor(5000);
     await expect(composer).toBeEnabled();
     await expect(page.getByRole("alert")).toHaveCount(0);
-    // The new submission owns one delivery connection; foreground recovery adds none.
-    expect(connections).toBe(before + 1);
+    // Submissions and foreground recovery both reuse the Computer's healthy transport.
+    expect(connections).toBe(before);
 });
 
 test("Given an interrupted browser connection, when a task completes before foreground recovery, then the interruption stays neutral and its result is restored", async ({

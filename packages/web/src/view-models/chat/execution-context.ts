@@ -33,7 +33,7 @@ export function pendingExecutionContext(
             return {
                 ...base,
                 harness: settings.selectedAgent.harness,
-                computer: computer?.computerName.trim() || settings.selectedAgent.computerName.trim() || "Unknown",
+                computer: computer?.computerName.trim() || "Unknown",
                 agent: offered?.label.trim() || settings.selectedAgent.label.trim() || "Unknown",
                 directory: settings.cwd.directoryLabel,
             };

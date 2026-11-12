@@ -102,7 +102,7 @@ export function createMortyApplication(options: {
     const releaseWorkspace = (): void => {
         workspace?.dispose();
         // The workspace receives the chat API by injection; the application
-        // owns it, so it closes the pooled session transports here.
+        // owns it, so it closes the Computer's shared session transport here.
         workspaceRequests?.close();
         workspace = null;
         workspaceRequests = null;

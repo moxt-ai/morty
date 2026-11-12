@@ -138,11 +138,7 @@ it("Given a deeply nested multibyte project path, When the SDK browses it and ru
         expect(await runtime.api.managedSessions(signal)).toContainEqual(
             expect.objectContaining({ target: sessionTarget, directory, directoryLabel: canonical, prompted: true }),
         );
-        const discovery = await runtime.api.nativeSessions(
-            runtime.computerId,
-            { ...identity, action: "list", cursor: null },
-            signal,
-        );
+        const discovery = await runtime.api.nativeSessions({ ...identity, action: "list", cursor: null }, signal);
         if (discovery.action !== "list" || discovery.entries[0] === undefined) {
             throw new Error("Missing native conversation in the long workspace");
         }
@@ -152,7 +148,6 @@ it("Given a deeply nested multibyte project path, When the SDK browses it and ru
             directoryLabel: canonical,
         });
         const events = await runtime.api.nativeSession(
-            runtime.computerId,
             { harness: sessionTarget.harness, sessionId: sessionTarget.sessionId, directory: directory },
             signal,
         );

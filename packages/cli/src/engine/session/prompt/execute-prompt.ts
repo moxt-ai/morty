@@ -51,11 +51,7 @@ export async function executePrompt({
     try {
         // The directory the Session records is authorized again before the Agent uses it.
         const resolved = await resolveSessionDirectory(directories, session.cwd, signal);
-        const { agent, adapter, externalizeSessionUpdate } = await resolveAgent(
-            session.harness,
-            signal,
-            session.target,
-        );
+        const { agent, adapter, externalizeSessionUpdate } = await resolveAgent(session.harness, signal);
         const dispatch = await waitForSessionAdmission(signal);
         // A steering prompt joins an execution the Agent already holds. Check before preparing, so a steer can never
         // replace or reconfigure the process an admitted prompt is still preparing.

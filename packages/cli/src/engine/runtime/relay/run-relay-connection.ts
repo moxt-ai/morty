@@ -15,7 +15,7 @@ import type { ExecutionReceipts } from "../../session/turn/execution-receipts.ts
 import type { SessionTurns } from "../../session/turn/session-turns.ts";
 import type { WorkspaceDirectoryService } from "../../session/workspace/workspace-directory.ts";
 import type { Timer } from "../../util/timer.ts";
-import { createRuntimeCommandDispatcher } from "../command/dispatcher.ts";
+import { createCommandRegistry } from "../command/registry/index.ts";
 import { send } from "../command/transport.ts";
 import { replyFailure } from "../command/turn-replies.ts";
 import type { RuntimeConfig } from "../config.ts";
@@ -90,7 +90,7 @@ export async function runRelayConnection({
     let rotationSaved: Promise<void> = Promise.resolve();
     diagnostics.connectionOpened(connectionEpoch);
     const connectionController = new AbortController();
-    const commands = createRuntimeCommandDispatcher({
+    const commands = createCommandRegistry({
         resolveAgent,
         config,
         directories,

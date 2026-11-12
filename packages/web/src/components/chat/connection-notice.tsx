@@ -8,7 +8,6 @@ import { ScrollArea } from "../ui/scroll-area.tsx";
 import type { ConnectionFeedback } from "./execution-context.ts";
 
 type VisibleFeedback = Exclude<ConnectionFeedback, { readonly kind: "hidden" }>;
-type ClosedFeedback = Extract<ConnectionFeedback, { readonly kind: "closed" }>;
 function noticeTestId(feedback: ConnectionFeedback): string {
     return feedback.kind === "closed" ? dataTestId.sessionClosedNotice : dataTestId.sessionReconnectNotice;
 }
@@ -18,18 +17,13 @@ function noticeTestId(feedback: ConnectionFeedback): string {
  * notice in the product: failures read as errors, everything else is neutral.
  */
 function noticeTone(feedback: VisibleFeedback): MortyAlertTone {
-    const failed =
-        feedback.kind === "failed" ||
-        feedback.kind === "action-required" ||
-        (feedback.kind === "closed" && feedback.reopen === "failed");
-    return failed ? "error" : "neutral";
+    return feedback.kind === "failed" || feedback.kind === "action-required" ? "error" : "neutral";
 }
 
 /** The leading icon names the connection state, so it can stand in for the tone's default icon. */
 function noticeIcon(feedback: VisibleFeedback): LucideIcon | undefined {
     if (feedback.kind === "closed") {
-        // A failed reopen is a failure, so it keeps the error tone's own icon.
-        return feedback.reopen === "failed" ? undefined : Archive;
+        return Archive;
     }
     return feedback.kind === "retrying" || feedback.kind === "waiting" ? WifiOff : undefined;
 }
@@ -38,26 +32,6 @@ function RetryAction({ className, onClick }: { readonly className: string; reado
     return (
         <LinkButton className={className} onClick={onClick}>
             Retry now
-        </LinkButton>
-    );
-}
-
-function ReopenAction({
-    className,
-    feedback,
-    onReopen,
-}: {
-    readonly className: string;
-    readonly feedback: ClosedFeedback;
-    readonly onReopen: () => void;
-}) {
-    return (
-        <LinkButton
-            className={className}
-            disabled={feedback.reopen === "reopening" || feedback.reopen === "offline"}
-            onClick={onReopen}
-        >
-            {feedback.reopen === "reopening" ? "Reopening…" : "Reopen it"}
         </LinkButton>
     );
 }
@@ -116,7 +90,6 @@ export function ConnectionNotice({
     footer,
     inline = false,
     onRetryNow,
-    onReopen,
 }: {
     readonly feedback: ConnectionFeedback;
     /**
@@ -128,7 +101,6 @@ export function ConnectionNotice({
     /** Extra action line, such as switching to another online computer. */
     readonly footer?: ReactNode;
     readonly onRetryNow: () => void;
-    readonly onReopen: () => void;
 }) {
     if (feedback.kind === "hidden") {
         return null;
@@ -145,10 +117,6 @@ export function ConnectionNotice({
         ? "min-h-5"
         : "relative min-h-5 before:absolute before:inset-x-0 before:top-1/2 before:h-11 before:-translate-y-1/2 before:content-[''] sm:before:hidden";
     const retry = retryButton(feedback, onRetryNow, actionClassName);
-    const reopen =
-        feedback.kind === "closed" ? (
-            <ReopenAction className={actionClassName} feedback={feedback} onReopen={onReopen} />
-        ) : null;
     const testId = noticeTestId(feedback);
     const restart =
         (feedback.kind === "waiting" || feedback.kind === "retrying") && feedback.restartCommand !== null ? (
@@ -200,7 +168,6 @@ export function ConnectionNotice({
                 </span>
                 {countdown(feedback)}
                 {retry}
-                {reopen}
             </div>
         );
         // The host's own action (switching to another online computer) is part of the
@@ -233,7 +200,6 @@ export function ConnectionNotice({
             <span className="min-w-0">{feedback.description}</span>
             {countdown(feedback)}
             {retry}
-            {reopen}
         </div>
     );
     return (

@@ -65,21 +65,7 @@ export function connectionPresentation(
     if (session?.kind === "closed") {
         return present(
             { kind: "closed", label: "Session closed" },
-            {
-                kind: "closed",
-                description:
-                    session.reopen.kind === "failed"
-                        ? session.reopen.message
-                        : !home.networkAvailable
-                          ? "Reconnect to the network before reopening this session."
-                          : (session.reason ?? "Reopen it to continue this conversation."),
-                reopen:
-                    session.reopen.kind === "reopening"
-                        ? "reopening"
-                        : !home.networkAvailable
-                          ? "offline"
-                          : session.reopen.kind,
-            },
+            { kind: "closed", description: session.reason ?? "This Session was archived." },
         );
     }
     if (!home.networkAvailable) {

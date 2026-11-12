@@ -1,5 +1,5 @@
-import type { MortyClient, PromptAttachment } from "@morty-build/client";
-import type { NativeSessionTarget } from "@morty-build/client/protocol";
+import type { MortyClient } from "@morty-build/client";
+import type { NativeSessionTarget, PromptAttachment } from "@morty-build/client/protocol";
 import type { ComposerAttachment } from "../../components/chat/composer-attachment.ts";
 
 async function contentKey(bytes: Uint8Array): Promise<string> {

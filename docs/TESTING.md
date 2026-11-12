@@ -19,7 +19,7 @@ pnpm test:e2e
 ```
 
 Run only related suites during development. `pnpm ci:check` reproduces combined
-static and coverage validation when diagnosing CI.
+static validation and client tests when diagnosing CI.
 
 ## Test boundaries
 

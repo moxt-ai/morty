@@ -10,7 +10,7 @@ export async function resolveCatalogAgent(
     signal: AbortSignal,
 ): Promise<CatalogAgentDefinition> {
     const agent = config.catalog.find(harness);
-    return config.resolveAgent === undefined ? agent : await config.resolveAgent(agent, signal);
+    return await config.resolveAgent(agent, signal);
 }
 
 type DiscoverInventory = (signal: AbortSignal) => Promise<Awaited<ReturnType<typeof discoverLocalAgentInventory>>>;
@@ -29,7 +29,7 @@ export function createCatalogAgentResolver(
     discover: DiscoverInventory,
     readConfig: () => RuntimeConfig,
     publish: PublishCatalog,
-): NonNullable<RuntimeConfig["resolveAgent"]> {
+): RuntimeConfig["resolveAgent"] {
     const swaps = new Map<string, Promise<void>>();
     return async (agent, signal) => {
         const config = readConfig();
@@ -75,12 +75,8 @@ export function createCatalogAgentResolver(
 }
 
 async function unchangedIdentity(agent: CatalogAgentDefinition, signal: AbortSignal): Promise<boolean> {
-    for (const identity of agent.runtimeExecutables) {
-        signal.throwIfAborted();
-        if (!(await revalidateExecutable(identity))) {
-            return false;
-        }
-    }
     signal.throwIfAborted();
-    return true;
+    const unchanged = await revalidateExecutable(agent.agentIdentity);
+    signal.throwIfAborted();
+    return unchanged;
 }

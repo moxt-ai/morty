@@ -27,7 +27,7 @@ export interface SessionConnectionFollower {
  * sent keeps the client it started with until the operation settles, even after its pane stops following it.
  */
 export interface SessionOperationConnection {
-    /** Ends viewing immediately and closes the transport once any operations using it settle. */
+    /** Ends viewing immediately and closes this Session's client once its operations settle. */
     readonly release: (client: MortyClient) => void;
     /** Starts following the Session through `pane`, replacing any pane that followed it before. */
     readonly follow: (pane: SessionFollowingPane) => SessionConnectionFollower;

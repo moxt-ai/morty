@@ -55,7 +55,6 @@ export const managedSessionsResponse = v.object({
 const sessionCredential = {
     computerId: v.string(),
     credential: v.pipe(v.string(), v.description("Secret. Authenticates Session operations until `expiresAt`.")),
-    endpoint: v.pipe(v.string(), v.url()),
     expiresAt: timestamp,
     target: sessionTarget,
 };

@@ -172,12 +172,6 @@ test("Given access shared from a saved Computer, When its Project is replaced, T
     const redeemed = await redeem(await share(original.computerId, original.token));
     expect(redeemed.status).toBe(200);
     const browser = v.parse(v.object({ computerToken: v.string() }), await redeemed.json()).computerToken;
-    const recoveryResponse = await worker.fetch(
-        projectRequest(original.computerId, "/identity/recovery-token", original.token, "POST"),
-        fixture.environment(),
-    );
-    expect(recoveryResponse.status).toBe(201);
-    const recovery = v.parse(v.object({ token: v.string() }), await recoveryResponse.json()).token;
     const unredeemed = await share(original.computerId, original.token);
 
     const replace = async () =>
@@ -189,11 +183,9 @@ test("Given access shared from a saved Computer, When its Project is replaced, T
     expect(response.status).toBe(201);
     const replacement = v.parse(replacementAccess, await response.json());
 
-    for (const token of [browser, recovery]) {
-        expect(
-            (await worker.fetch(projectRequest(original.computerId, "/session", token), fixture.environment())).status,
-        ).toBe(401);
-    }
+    expect(
+        (await worker.fetch(projectRequest(original.computerId, "/session", browser), fixture.environment())).status,
+    ).toBe(401);
     expect((await redeem(unredeemed)).status).toBe(410);
     // A reply the local identity never received can be asked for again.
     const retry = await replace();

@@ -4,13 +4,7 @@ import { once } from "node:events";
 import { createServer } from "node:http";
 import { afterEach, expect, it, onTestFinished, vi } from "vitest";
 import { WebSocketServer } from "ws";
-import {
-    MortyClient,
-    MortyConnectionError,
-    MortyPageRequest,
-    type MortyWebSocketConnector,
-    WsTransport,
-} from "../src/index.ts";
+import { MortyClient, MortyConnectionError, type MortyWebSocketConnector, WsTransport } from "../src/index.ts";
 
 // The transport routes by the claims it decodes; only the Relay verifies the signature.
 const sessionClaims = btoa(
@@ -136,25 +130,17 @@ class BrowserWebSocket extends EventTarget implements WebSocket {
 }
 
 class BrowserWebSocketConnector implements MortyWebSocketConnector {
-    #remainingReconnectFailures: number;
-    connectAttempts = 0;
     readonly responseBody: string;
     readonly sockets: BrowserWebSocket[] = [];
     readonly liveness: "responsive" | "silent";
 
-    constructor(reconnectFailures = 0, responseBody = "", liveness: "responsive" | "silent" = "responsive") {
-        this.#remainingReconnectFailures = reconnectFailures;
+    constructor(responseBody = "", liveness: "responsive" | "silent" = "responsive") {
         this.responseBody = responseBody;
         this.liveness = liveness;
     }
 
     readonly connect = async (endpoint: URL, signal: AbortSignal): Promise<WebSocket> => {
         signal.throwIfAborted();
-        this.connectAttempts += 1;
-        if (this.connectAttempts > 1 && this.#remainingReconnectFailures > 0) {
-            this.#remainingReconnectFailures -= 1;
-            throw new Error("The controlled WebSocket reconnect failed because the network is unavailable");
-        }
         const socket = new BrowserWebSocket(endpoint.toString(), this.responseBody, this.liveness);
         this.sockets.push(socket);
         return socket;
@@ -166,11 +152,9 @@ afterEach(() => {
 });
 
 /** A stateful wire peer for SDK recovery; the SDK owns its real connector and transport. */
-async function liveEventPeer(resubscribeFailures = 0, liveness: "responsive" | "silent" = "responsive") {
+async function liveEventPeer(liveness: "responsive" | "silent" = "responsive") {
     const server = createServer();
     const webSockets = new WebSocketServer({ noServer: true });
-    let subscriptions = 0;
-    let remainingFailures = resubscribeFailures;
     const activeSubscriptions = new Set<string>();
     server.on("upgrade", (request, socket, head) => {
         webSockets.handleUpgrade(request, socket, head, (connection) => {
@@ -187,41 +171,9 @@ async function liveEventPeer(resubscribeFailures = 0, liveness: "responsive" | "
                     "subscriptionId" in value &&
                     typeof value.subscriptionId === "string"
                 ) {
-                    subscriptions += 1;
-                    if (subscriptions > 1 && remainingFailures > 0) {
-                        remainingFailures -= 1;
-                        connection.send(
-                            JSON.stringify({
-                                kind: "session.events.error",
-                                subscriptionId: value.subscriptionId,
-                                status: 503,
-                                code: "unavailable",
-                                message: "The live peer is unavailable",
-                            }),
-                        );
-                    } else {
-                        activeSubscriptions.add(value.subscriptionId);
-                        connection.send(
-                            JSON.stringify({ kind: "session.events.ready", subscriptionId: value.subscriptionId }),
-                        );
-                    }
-                } else if (value.kind === "http.request" && "requestId" in value) {
+                    activeSubscriptions.add(value.subscriptionId);
                     connection.send(
-                        JSON.stringify({
-                            kind: "http.response",
-                            requestId: value.requestId,
-                            status: 200,
-                            headers: [],
-                            body: JSON.stringify({
-                                version: 2,
-                                events: [],
-                                nextCursor: null,
-                                tailCursor: "",
-                                throughPosition: "0",
-                                truncated: false,
-                                sessionGenerationId: "generation-1",
-                            }),
-                        }),
+                        JSON.stringify({ kind: "session.events.ready", subscriptionId: value.subscriptionId }),
                     );
                 }
             });
@@ -281,10 +233,10 @@ it("Given a browser bound to one computer, When it opens another Session or addr
     }
 });
 
-it("Given a quiet subscription with connection heartbeats, When multiple idle deadlines pass, Then its original stream still delivers events", async () => {
+it("Given a quiet subscription with connection heartbeats, When minutes pass, Then its original stream still delivers events", async () => {
     vi.useFakeTimers({ toFake: ["Date", "clearTimeout", "setTimeout"] });
     vi.setSystemTime(new Date("2030-01-01T00:00:00Z"));
-    const connector = new BrowserWebSocketConnector(0, "", "responsive");
+    const connector = new BrowserWebSocketConnector("", "responsive");
     const transport = new WsTransport({ connector });
     const stream = await transport.openSessionLiveEvents(
         computerRequest("https://relay.example.test/session/events-v2"),
@@ -321,7 +273,7 @@ it("Given a quiet subscription with connection heartbeats, When multiple idle de
 it("Given a transport whose peer stops answering heartbeats, When the ten-second acknowledgement deadline expires, Then the stream fails and a subsequent request reconnects", async () => {
     vi.useFakeTimers({ toFake: ["Date", "clearTimeout", "setTimeout"] });
     vi.setSystemTime(new Date("2030-01-01T00:00:00Z"));
-    const connector = new BrowserWebSocketConnector(0, "", "silent");
+    const connector = new BrowserWebSocketConnector("", "silent");
     const transport = new WsTransport({ connector });
     const stream = await transport.openSessionLiveEvents(
         computerRequest("https://relay.example.test/session/events-v2"),
@@ -341,7 +293,7 @@ it("Given a transport whose peer stops answering heartbeats, When the ten-second
 
 it("Given a Unicode JSON request and response, When the browser uses the WebSocket transport, Then it transfers their text without Base64 wrapping", async () => {
     const responseBody = JSON.stringify({ message: "Olá, Morty" });
-    const connector = new BrowserWebSocketConnector(0, responseBody);
+    const connector = new BrowserWebSocketConnector(responseBody);
     const transport = new WsTransport({ connector });
     const requestBody = JSON.stringify({ prompt: "show café ☕" });
 
@@ -358,25 +310,6 @@ it("Given a Unicode JSON request and response, When the browser uses the WebSock
 
     expect(connector.sockets[0]?.requestBodies).toEqual([requestBody]);
     expect(await response.text()).toBe(responseBody);
-    transport.close();
-});
-
-it("Given an idle browser transport, When its connection expires, Then it closes cleanly and the next request reconnects", async () => {
-    vi.useFakeTimers({ toFake: ["Date", "clearTimeout", "setTimeout"] });
-    vi.setSystemTime(new Date("2030-01-01T00:00:00.000Z"));
-    const connector = new BrowserWebSocketConnector();
-    const transport = new WsTransport({ connector, idleTimeoutMilliseconds: 1_000 });
-
-    expect((await transport.fetch(computerRequest("https://relay.example.test/first"))).status).toBe(204);
-    await vi.advanceTimersByTimeAsync(1_000);
-
-    expect(connector.sockets[0]?.closedWith).toEqual({
-        code: 4000,
-        reason: "Morty transport idle timeout",
-    });
-    expect((await transport.fetch(computerRequest("https://relay.example.test/second"))).status).toBe(204);
-    expect(connector.sockets).toHaveLength(2);
-
     transport.close();
 });
 
@@ -427,11 +360,14 @@ it("Given a replacement WebSocket carries a live subscription, When the old sock
     transport.close();
 });
 
-it("Given an idle Session stream whose subscription ends, When the retry delay expires, Then the SDK recovers the live subscription", async () => {
+it("Given a live Session stream, When it disconnects, Then the subscription fails at once so its owner can recover", async () => {
     vi.useFakeTimers({ toFake: ["Date", "clearTimeout", "setTimeout"] });
     vi.setSystemTime(new Date("2030-01-01T00:00:00.000Z"));
     const peer = await liveEventPeer();
+    const transport = new WsTransport();
+    onTestFinished(transport.close);
     const client = new MortyClient({
+        transport,
         credentialProvider: {
             credential: async (signal: AbortSignal) => {
                 signal.throwIfAborted();
@@ -439,91 +375,6 @@ it("Given an idle Session stream whose subscription ends, When the retry delay e
             },
         },
         endpoint: peer.endpoint,
-        computerId: "project-1",
-    });
-    const reconciliations: string[] = [];
-    const recovered = Promise.withResolvers<void>();
-    const controller = new AbortController();
-    const subscription = await client.events.subscribeLive(
-        { harness: "claude", sessionId: "session-1" },
-        {
-            receive: async () => true,
-            reconcile: async (connection) => {
-                reconciliations.push(connection.kind);
-                if (connection.kind === "reconnected") {
-                    recovered.resolve();
-                }
-            },
-        },
-        controller.signal,
-    );
-    const completed = subscription.completed;
-    void completed.catch(() => undefined);
-
-    await peer.disconnect();
-    await client.events.list(
-        { harness: "claude", sessionId: "session-1" },
-        new MortyPageRequest(1, ""),
-        controller.signal,
-    );
-    await vi.advanceTimersByTimeAsync(250);
-    await recovered.promise;
-
-    expect(reconciliations).toEqual(["initial", "reconnected"]);
-
-    controller.abort();
-    await completed;
-    client.close();
-});
-
-it("Given a live Session stream cannot reconnect, When its retry budget expires, Then the SDK exposes the sanitized transport reason", async () => {
-    vi.useFakeTimers({ toFake: ["Date", "clearTimeout", "setTimeout"] });
-    vi.setSystemTime(new Date("2030-01-01T00:00:00.000Z"));
-    const peer = await liveEventPeer(1);
-    const client = new MortyClient({
-        credentialProvider: {
-            credential: async (signal: AbortSignal) => {
-                signal.throwIfAborted();
-                return sessionCredential;
-            },
-        },
-        endpoint: peer.endpoint,
-        maxStreamReconnectAttempts: 1,
-        computerId: "project-1",
-    });
-    const controller = new AbortController();
-    const subscription = await client.events.subscribeLive(
-        { harness: "claude", sessionId: "session-1" },
-        { receive: async () => true, reconcile: async () => undefined },
-        controller.signal,
-    );
-
-    const failed = expect(subscription.completed).rejects.toThrow("The live session event stream could not recover");
-    await peer.disconnect();
-    await client.events.list(
-        { harness: "claude", sessionId: "session-1" },
-        new MortyPageRequest(1, ""),
-        controller.signal,
-    );
-    await vi.advanceTimersByTimeAsync(250);
-
-    await failed;
-    client.close();
-});
-
-it("Given caller-owned Session recovery, When its live stream disconnects, Then a zero retry budget reports the failure without waiting for an SDK backoff", async () => {
-    vi.useFakeTimers({ toFake: ["Date", "clearTimeout", "setTimeout"] });
-    vi.setSystemTime(new Date("2030-01-01T00:00:00.000Z"));
-    const peer = await liveEventPeer();
-    const client = new MortyClient({
-        credentialProvider: {
-            credential: async (signal: AbortSignal) => {
-                signal.throwIfAborted();
-                return sessionCredential;
-            },
-        },
-        endpoint: peer.endpoint,
-        maxStreamReconnectAttempts: 0,
         computerId: "project-1",
     });
     try {
@@ -532,9 +383,7 @@ it("Given caller-owned Session recovery, When its live stream disconnects, Then 
             { receive: async () => true, reconcile: async () => undefined },
             new AbortController().signal,
         );
-        const failure = expect(subscription.completed).rejects.toThrow(
-            "The live session event stream could not recover",
-        );
+        const failure = expect(subscription.completed).rejects.toThrow("The live session event stream disconnected");
         await peer.disconnect();
         await failure;
     } finally {
@@ -542,11 +391,14 @@ it("Given caller-owned Session recovery, When its live stream disconnects, Then 
     }
 });
 
-it("Given caller-owned Session recovery, When its live stream receives nothing past the transport idle deadline, Then the stream fails so the caller can reconnect", async () => {
+it("Given a live Session stream, When its peer stops answering heartbeats, Then the subscription fails so its owner can reconnect", async () => {
     vi.useFakeTimers({ toFake: ["Date", "clearTimeout", "setTimeout"] });
     vi.setSystemTime(new Date("2030-01-01T00:00:00.000Z"));
-    const peer = await liveEventPeer(0, "silent");
+    const peer = await liveEventPeer("silent");
+    const transport = new WsTransport();
+    onTestFinished(transport.close);
     const client = new MortyClient({
+        transport,
         credentialProvider: {
             credential: async (signal: AbortSignal) => {
                 signal.throwIfAborted();
@@ -554,7 +406,6 @@ it("Given caller-owned Session recovery, When its live stream receives nothing p
             },
         },
         endpoint: peer.endpoint,
-        maxStreamReconnectAttempts: 0,
         computerId: "project-1",
     });
     try {

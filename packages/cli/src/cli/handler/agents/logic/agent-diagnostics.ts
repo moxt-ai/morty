@@ -4,17 +4,14 @@ import {
     type UnavailableAgent,
     UnsupportedAgentVersion,
 } from "../../../../engine/agent/discovery/agent-discovery.ts";
-import { writeExistingFile } from "../../../../storage/files/output-file.ts";
 
 class AvailableAgentDiagnostic {
-    readonly adapterVersion: string;
     readonly agentVersion: string;
     readonly harness: string;
     readonly label: string;
     readonly status = "ready";
 
     constructor(discovery: AvailableAgent) {
-        this.adapterVersion = discovery.agent.adapterVersion;
         this.agentVersion = discovery.agent.agentVersion;
         this.harness = discovery.specification.harness;
         this.label = discovery.specification.label;
@@ -105,11 +102,7 @@ export function formatAgentDiagnostics(inventory: LocalAgentInventory, json: boo
     const lines: string[] = [];
     for (const available of diagnostics.available) {
         lines.push(
-            humanLine(
-                available.label,
-                available.status,
-                `${available.agentVersion}   ${available.adapterVersion}${detectionSuffix(available)}`,
-            ),
+            humanLine(available.label, available.status, `${available.agentVersion}${detectionSuffix(available)}`),
         );
     }
     for (const unavailable of diagnostics.unavailable) {
@@ -121,25 +114,4 @@ export function formatAgentDiagnostics(inventory: LocalAgentInventory, json: boo
         }
     }
     return `${lines.join("\n")}\n`;
-}
-
-/** Writes the JSON inventory to a file the caller created, so a program can read it without parsing terminal output. */
-export async function writeAgentDiagnostics(
-    path: string,
-    inventory: LocalAgentInventory,
-    verbose: boolean,
-    signal: AbortSignal,
-): Promise<void> {
-    signal.throwIfAborted();
-    const write = await writeExistingFile(path, formatAgentDiagnostics(inventory, true, verbose), signal);
-    switch (write.kind) {
-        case "written":
-            return;
-        case "missing":
-            throw new Error("The JSON output file does not exist", { cause: write.cause });
-        case "unwritable":
-            throw new Error("The JSON output file cannot be written", { cause: write.cause });
-        case "not-a-file":
-            throw new Error("The JSON output path is not a regular file");
-    }
 }

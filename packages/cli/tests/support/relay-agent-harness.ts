@@ -116,6 +116,7 @@ export async function createFakeAgentHarnessRuntime(options: {
             },
             harnesses.map((definition) => fakeAgentHarness(definition, harnessState)),
             localContext,
+            async (agent) => agent,
         );
         const online = Promise.withResolvers<void>();
         runtime = runRuntime(config, signal, undefined, {
@@ -159,7 +160,7 @@ export async function createFakeAgentHarnessRuntime(options: {
                     method: "POST",
                     signal,
                     headers: { authorization: `Bearer ${options.credential}`, "content-type": "application/json" },
-                    body: JSON.stringify({ computerId: pairing.computerId, harness: selected.harness }),
+                    body: JSON.stringify({ harness: selected.harness }),
                 }),
             );
             if (setup.status !== 202) {

@@ -112,7 +112,7 @@ describe("native session identity", () => {
         },
     );
 
-    it("Given an imported native conversation that the Computer closed, When it is imported again, Then the same Session reopens", async () => {
+    it("Given an imported native conversation that was archived, When it is imported again, Then the same Session is held again", async () => {
         const f = await fixture("Claude Code", "supported");
         const signal = new AbortController().signal;
         try {
@@ -128,14 +128,14 @@ describe("native session identity", () => {
             if (first.action !== "import") {
                 throw new Error("Expected a native import");
             }
-            await f.sessions.closeSession(first.ready.target, signal);
+            await f.sessions.archiveSession(first.ready.target, signal);
 
             const repeated = await f.service.execute(
                 {
                     ...f.identity,
                     action: "import",
                     sessionId: entry.sessionId,
-                    requestId: "import-after-close",
+                    requestId: "import-after-archive",
                 },
                 signal,
             );

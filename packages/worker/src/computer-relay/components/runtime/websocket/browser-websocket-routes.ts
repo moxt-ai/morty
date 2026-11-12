@@ -4,8 +4,11 @@ import {
     type Identifier,
     isIdentifier,
     MORTY_API_PREFIX,
+    type NativeSessionTarget,
     type TurnState,
 } from "@morty-build/client/protocol";
+import { Hono } from "hono";
+import { createMiddleware } from "hono/factory";
 import * as v from "valibot";
 import {
     decodeSessionRequest,
@@ -17,25 +20,21 @@ import {
 } from "../../../../contracts/agent-api/session-requests.ts";
 import { toHttpError } from "../../../../contracts/http-error.ts";
 import { PairingDirectoryError, validateIdentifier } from "../../../../contracts/relay/pairing.ts";
+import { RequestDeadline } from "../../../../http/request-deadline.ts";
 import { authorizeSessionContentUpload } from "../http/session-content-upload.ts";
 import type { LocalSessionOperations } from "../service/local-session-operations.ts";
 import type { SessionAccessService } from "../service/session-access-service.ts";
 import type { TurnAdmission } from "../service/session-control.ts";
 import { SessionControl } from "../service/session-control.ts";
 
-type BrowserOperation =
-    | {
-          readonly kind:
-              | "configuration-read"
-              | "execution-read"
-              | "turn-submit"
-              | "configuration-write"
-              | "rename"
-              | "events";
-      }
-    | { readonly kind: "content-write" }
-    | { readonly kind: "turn-steer" | "turn-withdraw" | "turn-cancel"; readonly turnId: Identifier }
-    | { readonly kind: "interaction-respond"; readonly interactionId: Identifier };
+type BrowserSessionEnvironment = {
+    readonly Variables: {
+        readonly access: Awaited<ReturnType<SessionAccessService["authenticate"]>>;
+        readonly control: SessionControl;
+        readonly target: NativeSessionTarget;
+        readonly computerId: string;
+    };
+};
 
 const identifier = v.custom<Identifier>(isIdentifier);
 const json = (value: unknown): Response => Response.json(value, { headers: { "Cache-Control": "no-store" } });
@@ -45,45 +44,7 @@ const notFound = (): Response =>
         { status: 404 },
     );
 
-/** The Session operation a method and the path segments after the Session name; null for any other request. */
-export function decodeOperation(method: string, path: readonly string[]): BrowserOperation | null {
-    const [resource, id, action] = path;
-    if (path.length === 1) {
-        switch (`${method} ${resource}`) {
-            case "GET configuration":
-                return { kind: "configuration-read" };
-            case "GET active-turn":
-                return { kind: "execution-read" };
-            case "POST turns":
-                return { kind: "turn-submit" };
-            case "POST configuration":
-                return { kind: "configuration-write" };
-            case "POST rename":
-                return { kind: "rename" };
-            case "GET events-v2":
-                return { kind: "events" };
-        }
-    }
-    if (path.length === 2 && resource === "content" && method === "PUT") {
-        return { kind: "content-write" };
-    }
-    if (path.length === 3 && resource === "turns") {
-        switch (`${method} ${action}`) {
-            case "PUT disposition":
-                return { kind: "turn-steer", turnId: decodeSessionRequest(identifier, id) };
-            case "POST cancel-before-start":
-                return { kind: "turn-withdraw", turnId: decodeSessionRequest(identifier, id) };
-            case "POST cancel":
-                return { kind: "turn-cancel", turnId: decodeSessionRequest(identifier, id) };
-        }
-    }
-    if (path.length === 3 && resource === "interactions" && action === "responses" && method === "POST") {
-        return { kind: "interaction-respond", interactionId: decodeSessionRequest(identifier, id) };
-    }
-    return null;
-}
-
-/** Dispatches the existing browser WS envelopes internally. These paths are not HTTP endpoints. */
+/** Session routes are mounted only in the browser WebSocket dispatcher, never in the public HTTP router. */
 export function createBrowserWebSocketRoutes(ctx: {
     readonly computerId: string;
     readonly services: {
@@ -91,25 +52,18 @@ export function createBrowserWebSocketRoutes(ctx: {
         readonly operations: LocalSessionOperations;
     };
 }) {
-    const dispatch = async (request: Request): Promise<Response> => {
-        const url = new URL(request.url);
-        const prefix = `${MORTY_API_PREFIX}/v1/computers/`;
-        const parts = url.pathname.startsWith(prefix) ? url.pathname.slice(prefix.length).split("/") : [];
-        if (parts[1] !== "harnesses" || parts[3] !== "sessions" || parts.length < 6) {
-            return notFound();
-        }
-        const computerId = validateIdentifier(parts[0] ?? "", "computer_id");
+    const authenticate = createMiddleware<BrowserSessionEnvironment>(async (context, next) => {
+        using deadline = new RequestDeadline(context.req.raw.signal, 30_000);
+        context.req.raw = new Request(context.req.raw, { signal: deadline.signal });
+        const request = context.req.raw;
+        const computerId = validateIdentifier(context.req.param("computerId") ?? "", "computer_id");
         if (computerId !== ctx.computerId) {
             return Response.json({ error: { code: "runtime_access_denied" } }, { status: 403 });
         }
         const target = {
-            harness: validateIdentifier(decodeURIComponent(parts[2] ?? ""), "harness"),
-            sessionId: validateIdentifier(decodeURIComponent(parts[4] ?? ""), "session_id"),
+            harness: validateIdentifier(context.req.param("harness") ?? "", "harness"),
+            sessionId: validateIdentifier(context.req.param("sessionId") ?? "", "session_id"),
         };
-        const operation = decodeOperation(request.method, parts.slice(5).map(decodeURIComponent));
-        if (operation === null) {
-            return notFound();
-        }
         const credential = (request.headers.get("authorization") ?? "").match(/^Bearer ([^\s]+)$/u)?.[1];
         if (credential === undefined) {
             return Response.json(
@@ -122,113 +76,118 @@ export function createBrowserWebSocketRoutes(ctx: {
             credential,
             request.signal,
         );
-        const control = new SessionControl(async (command) => {
-            await access.authorize(request.signal);
-            return ctx.services.operations.requestControl(computerId, command, request.signal);
-        }, target);
-        switch (operation.kind) {
-            case "content-write":
-                return uploadContent(request, ctx.services);
-            case "configuration-read":
-                return json(await control.readConfiguration());
-            case "execution-read": {
-                const commandId = url.searchParams.get("commandId");
-                return json(
-                    await control.activeTurn(
-                        commandId === null ? undefined : decodeSessionRequest(identifier, commandId),
-                    ),
-                );
-            }
-            case "turn-submit": {
-                const input: unknown = await request.json();
-                const body = decodeSessionRequest(turnSubmissionRequest, input);
-                const accepted = await control.submitTurn({ ...body, commandId: body.idempotencyKey });
-                const acceptedAt = new Date().toISOString();
-                return json({
-                    acceptedAt,
-                    idempotencyKey: body.idempotencyKey,
-                    request: {
-                        content: body.content,
-                        kind: "prompt",
-                        sessionConfigurations: body.sessionConfigurations,
-                    },
-                    target,
-                    state: submittedTurnState(accepted.state, acceptedAt),
-                    turnId: accepted.commandId,
-                });
-            }
-            case "turn-steer": {
-                const input: unknown = await request.json();
-                decodeSessionRequest(turnSteerRequest, input);
-                await control.steerTurn(operation.turnId);
-                return json({ turnId: operation.turnId });
-            }
-            case "turn-withdraw":
-                await control.withdrawTurn(operation.turnId);
-                return json({ turnId: operation.turnId });
-            case "turn-cancel": {
-                const { stopReason } = await control.cancelTurn(operation.turnId);
-                return json({ turnId: operation.turnId, stopReason });
-            }
-            case "configuration-write": {
-                const input: unknown = await request.json();
-                return json(await control.configure(decodeSessionRequest(sessionConfigurationRequest, input)));
-            }
-            case "rename": {
-                const input: unknown = await request.json();
-                return json(await control.rename(decodeSessionRequest(sessionRenameRequest, input).title));
-            }
-            case "interaction-respond": {
-                const input: unknown = await request.json();
-                await control.respond(operation.interactionId, decodeSessionRequest(interactionResponseRequest, input));
-                return json({ accepted: true });
-            }
-            case "events":
+        context.set("computerId", computerId);
+        context.set("target", target);
+        context.set("access", access);
+        context.set(
+            "control",
+            new SessionControl(async (command) => {
                 await access.authorize(request.signal);
-                if (request.headers.get("upgrade")?.toLowerCase() === "websocket") {
-                    return ctx.services.operations.openPublicSessionEvents(
-                        computerId,
-                        target,
-                        {
-                            signingKeyId: access.signingKeyId,
-                            grant: access.grant,
-                            expiresAt: access.expiresAtEpochMilliseconds,
-                        },
-                        request.signal,
-                    );
-                }
-                return json(
-                    await control.liveEvents({
-                        cursor: decodeSessionRequest(
-                            v.nullable(v.pipe(v.string(), v.minLength(1), v.maxLength(512))),
-                            url.searchParams.get("cursor"),
-                        ),
-                        eventLimit: decodeSessionRequest(
-                            v.pipe(v.number(), v.safeInteger(), v.minValue(1), v.maxValue(10_000)),
-                            Number(url.searchParams.get("limit") ?? "50"),
-                        ),
-                    }),
-                );
-        }
-    };
-    return async (request: Request): Promise<Response> => {
-        request.signal.throwIfAborted();
-        const controller = new AbortController();
-        const timer = setTimeout(() => controller.abort(new DOMException("Request timed out", "TimeoutError")), 30_000);
-        const signal = AbortSignal.any([request.signal, controller.signal]);
-        try {
-            return await dispatch(new Request(request, { signal }));
-        } catch (cause) {
-            signal.throwIfAborted();
+                return ctx.services.operations.requestControl(computerId, command, request.signal);
+            }, target),
+        );
+        await next();
+        return;
+    });
+    const sessionPath = `${MORTY_API_PREFIX}/v1/computers/:computerId/harnesses/:harness/sessions/:sessionId`;
+    return new Hono<BrowserSessionEnvironment>()
+        .onError((cause, context) => {
+            context.req.raw.signal.throwIfAborted();
             const error = toHttpError(cause);
             return Response.json(error.body, {
                 status: error.status,
                 ...(error.headers === undefined ? {} : { headers: error.headers }),
             });
-        } finally {
-            clearTimeout(timer);
-        }
-    };
+        })
+        .notFound(notFound)
+        .put(`${sessionPath}/content/:contentKey`, authenticate, (context) =>
+            uploadContent(context.req.raw, ctx.services),
+        )
+        .get(`${sessionPath}/configuration`, authenticate, async (context) =>
+            json(await context.var.control.readConfiguration()),
+        )
+        .get(`${sessionPath}/active-turn`, authenticate, async (context) => {
+            const commandId = context.req.query("commandId");
+            return json(
+                await context.var.control.activeTurn(
+                    commandId === undefined ? undefined : decodeSessionRequest(identifier, commandId),
+                ),
+            );
+        })
+        .post(`${sessionPath}/turns`, authenticate, async (context) => {
+            const input: unknown = await context.req.json();
+            const body = decodeSessionRequest(turnSubmissionRequest, input);
+            const accepted = await context.var.control.submitTurn({ ...body, commandId: body.idempotencyKey });
+            const acceptedAt = new Date().toISOString();
+            return json({
+                acceptedAt,
+                idempotencyKey: body.idempotencyKey,
+                request: { content: body.content, kind: "prompt", sessionConfigurations: body.sessionConfigurations },
+                target: context.var.target,
+                state: submittedTurnState(accepted.state, acceptedAt),
+                turnId: accepted.commandId,
+            });
+        })
+        .put(`${sessionPath}/turns/:turnId/disposition`, authenticate, async (context) => {
+            const turnId = decodeSessionRequest(identifier, context.req.param("turnId"));
+            const input: unknown = await context.req.json();
+            decodeSessionRequest(turnSteerRequest, input);
+            await context.var.control.steerTurn(turnId);
+            return json({ turnId });
+        })
+        .post(`${sessionPath}/turns/:turnId/cancel-before-start`, authenticate, async (context) => {
+            const turnId = decodeSessionRequest(identifier, context.req.param("turnId"));
+            await context.var.control.withdrawTurn(turnId);
+            return json({ turnId });
+        })
+        .post(`${sessionPath}/turns/:turnId/cancel`, authenticate, async (context) => {
+            const turnId = decodeSessionRequest(identifier, context.req.param("turnId"));
+            const { stopReason } = await context.var.control.cancelTurn(turnId);
+            return json({ turnId, stopReason });
+        })
+        .post(`${sessionPath}/configuration`, authenticate, async (context) => {
+            const input: unknown = await context.req.json();
+            return json(await context.var.control.configure(decodeSessionRequest(sessionConfigurationRequest, input)));
+        })
+        .post(`${sessionPath}/rename`, authenticate, async (context) => {
+            const input: unknown = await context.req.json();
+            return json(await context.var.control.rename(decodeSessionRequest(sessionRenameRequest, input).title));
+        })
+        .post(`${sessionPath}/interactions/:interactionId/responses`, authenticate, async (context) => {
+            const interactionId = decodeSessionRequest(identifier, context.req.param("interactionId"));
+            const input: unknown = await context.req.json();
+            await context.var.control.respond(interactionId, decodeSessionRequest(interactionResponseRequest, input));
+            return json({ accepted: true });
+        })
+        .get(`${sessionPath}/events-v2`, authenticate, async (context) => {
+            const request = context.req.raw;
+            const access = context.var.access;
+            await access.authorize(request.signal);
+            if (request.headers.get("upgrade")?.toLowerCase() === "websocket") {
+                return ctx.services.operations.openPublicSessionEvents(
+                    context.var.computerId,
+                    context.var.target,
+                    {
+                        signingKeyId: access.signingKeyId,
+                        grant: access.grant,
+                        expiresAt: access.expiresAtEpochMilliseconds,
+                    },
+                    request.signal,
+                );
+            }
+            return json(
+                await context.var.control.liveEvents({
+                    cursor: decodeSessionRequest(
+                        v.nullable(v.pipe(v.string(), v.minLength(1), v.maxLength(512))),
+                        context.req.query("cursor") ?? null,
+                    ),
+                    eventLimit: decodeSessionRequest(
+                        v.pipe(v.number(), v.safeInteger(), v.minValue(1), v.maxValue(10_000)),
+                        Number(context.req.query("limit") ?? "50"),
+                    ),
+                }),
+            );
+        });
 }
 
 function submittedTurnState(state: TurnAdmission["state"], answeredAt: string): TurnState {

@@ -93,7 +93,7 @@ Use `chat-local-full-dev` to:
 1. Validate the Morty checkout, pinned Node and pnpm versions, and locked
    workspace dependencies.
 2. Start an isolated local stack in `web-server` mode. This must include the
-   single Morty Worker and its local D1, Durable Objects and browser assets.
+   single Morty Worker and its local Durable Objects and browser assets.
    Read `chatOrigin` and `stateDir` from
    the ready/status record; do not assume ports.
 3. Check stack health before opening the browser.

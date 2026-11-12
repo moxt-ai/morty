@@ -1,5 +1,5 @@
 import { resolve } from "node:path";
-import { MortyClient } from "@morty-build/client";
+import { MortyClient, WsTransport } from "@morty-build/client";
 import * as v from "valibot";
 import type { ControlledAgent } from "../../../../tests/support/fake-daemon/runtime.ts";
 import { createResponseLossProxy } from "../../../relay-test-support/src/response-loss-proxy.ts";
@@ -63,7 +63,6 @@ export async function createChatWorkerEnvironment(
         const connect = async (agents: readonly ControlledAgent[], sessionIds?: ReadonlySet<string>) => {
             const runtime = await cloud.connectAgent(identity.computerId, identity.token, agents, sessionIds);
             const setup = await request(`chat/computers/${identity.computerId}/setup`, {
-                computerId: runtime.computerId,
                 harness: agents[0]?.harness ?? "codex",
             });
             if (setup.status !== 202) {
@@ -91,7 +90,10 @@ export async function createChatWorkerEnvironment(
                 }
                 const access = v.parse(v.object({ credential: v.string() }), await response.json());
                 signal.throwIfAborted();
+                const transport = new WsTransport();
                 return new MortyClient({
+                    transport,
+                    onClose: transport.close,
                     endpoint: cloud.directOrigin,
                     computerId: runtime.computerId,
                     credentialProvider: {
@@ -105,14 +107,14 @@ export async function createChatWorkerEnvironment(
             return {
                 failure: runtime.failure,
                 continueReply: runtime.continueReply,
-                /** Closes a Session through the real daemon protocol while the browser observes its production lifecycle events. */
-                closeSession: async (sessionId: string): Promise<void> => {
-                    const response = await cloud.dispatchFetch(
-                        `${origin}/__test/computers/${runtime.computerId}/harnesses/${agents[0]?.harness ?? "codex"}/sessions/${encodeURIComponent(sessionId)}/close`,
-                        { method: "POST" },
-                    );
+                /** Archives a Session the way another browser window of this Computer would. */
+                archiveSession: async (sessionId: string): Promise<void> => {
+                    const response = await request(`chat/computers/${identity.computerId}/managed-session/archive`, {
+                        harness: agents[0]?.harness ?? "codex",
+                        sessionId,
+                    });
                     if (response.status !== 200) {
-                        throw new Error(`Could not close the test Session: ${response.status}`);
+                        throw new Error(`Could not archive the test Session: ${response.status}`);
                     }
                 },
                 /** Applies another client's explicit model edit through the public Relay contract. */

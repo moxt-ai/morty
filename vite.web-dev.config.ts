@@ -53,7 +53,6 @@ const forward = {
 
 export default defineConfig({
     plugins: [react(), tailwindcss()],
-    define: { __MORTY_WEB_DEV_ORIGIN__: JSON.stringify(deployed) },
     resolve: {
         alias: [{ find: "@", replacement: fileURLToPath(new URL("./packages/web/src", import.meta.url)) }],
     },

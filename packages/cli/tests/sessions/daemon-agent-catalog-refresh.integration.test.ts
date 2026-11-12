@@ -332,7 +332,6 @@ test.for([
                 ? new RuntimeAgentDependencies(inventory.readyAgents())
                 : new RuntimeAgentDependencies(inventory.readyAgents(), acpAdapters),
             new RuntimeLocalContext(stateDirectory, environment),
-            null,
             createCatalogAgentResolver(
                 (refreshSignal) =>
                     discoverLocalAgentInventory({

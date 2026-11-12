@@ -1,5 +1,5 @@
 import { createMiddleware } from "hono/factory";
-import { ComputerManagementError } from "../contracts/relay/computer-management.ts";
+import { ComputerManagementError } from "../contracts/computer-management.ts";
 
 interface BrowserCorsEnvironment {
     readonly Variables: { readonly allowedOrigins: ReadonlySet<string> };
@@ -10,8 +10,7 @@ function browserCorsHeaders(origin: string, methods: readonly string[], headers:
         "access-control-allow-headers": headers.join(", "),
         "access-control-allow-methods": [...methods, "OPTIONS"].join(", "),
         "access-control-allow-origin": origin,
-        "access-control-expose-headers":
-            "content-length, content-type, x-morty-artifact-id, x-morty-byte-length, x-morty-event-format, x-morty-file-name, x-morty-sha256",
+        "access-control-expose-headers": "content-length, content-type, x-morty-byte-length, x-morty-file-name",
         "access-control-max-age": "600",
         vary: "Origin, Access-Control-Request-Method, Access-Control-Request-Headers",
     });

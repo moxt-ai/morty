@@ -12,18 +12,6 @@ export class SessionCreations {
         this.#table = table;
     }
 
-    readonly read = (operationId: string): SessionReadyEvent => {
-        const prior = this.#table.read(operationId);
-        if (prior === undefined || prior.resultJson === null) {
-            throw new AcpExecutionError(
-                "No completed creation receipt is available",
-                {},
-                "session_creation_unavailable",
-            );
-        }
-        return decodeSessionReadyEvent(prior.resultJson);
-    };
-
     readonly settle = async (): Promise<void> => {
         await Promise.allSettled([...this.#running.values()].map(({ result }) => result));
     };

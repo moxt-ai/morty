@@ -3,7 +3,6 @@ import { build } from "esbuild";
 import { convertV4MiniflareOptions, Miniflare } from "miniflare";
 import * as v from "valibot";
 import { expect, test } from "vitest";
-import { decodeOperation } from "../src/computer-relay/components/runtime/websocket/browser-websocket-routes.ts";
 import worker from "../src/worker/application.ts";
 
 const bundle = await build({
@@ -210,51 +209,6 @@ test("Given agent documents at the edge, When agents fetch them with different q
     } finally {
         await runtime.dispose();
     }
-});
-
-test("Given the generated agent API description, When each documented operation is sent to the Worker, Then plain HTTP operations reach a route and WebSocket operations reach the Session dispatcher", async () => {
-    const response = await worker.fetch(new Request("https://preview.example/agent-api/openapi.json"), {
-        APP_ORIGIN: "https://chat.example",
-    });
-    const document = v.parse(
-        v.object({
-            paths: v.record(
-                v.string(),
-                v.record(
-                    v.string(),
-                    v.object({ operationId: v.string(), "x-morty-transport": v.optional(v.literal("websocket")) }),
-                ),
-            ),
-        }),
-        await response.json(),
-    );
-    const sessionPrefix = "/morty/api/v1/computers/{computerId}/harnesses/{harness}/sessions/{sessionId}/";
-    let checked = 0;
-    for (const [path, methods] of Object.entries(document.paths)) {
-        for (const [method, operation] of Object.entries(methods)) {
-            checked += 1;
-            if (operation["x-morty-transport"] === "websocket") {
-                expect(path.startsWith(sessionPrefix), operation.operationId).toBe(true);
-                const segments = path
-                    .slice(sessionPrefix.length)
-                    .split("/")
-                    .map((segment) => segment.replace(/^\{.*\}$/u, "id-1"));
-                expect(decodeOperation(method.toUpperCase(), segments), operation.operationId).not.toBeNull();
-                continue;
-            }
-            const concrete = path.replace("{computerId}", "prj_as_01_AAAAAAAAAAAAAAAAAAAAAAAA");
-            const answer = await worker.fetch(
-                new Request(`https://chat.example${concrete}`, {
-                    method: method.toUpperCase(),
-                    headers: { authorization: "Bearer invalid", "content-type": "application/json" },
-                    body: "{}",
-                }),
-                { APP_ORIGIN: "https://chat.example" },
-            );
-            expect(answer.status, operation.operationId).not.toBe(404);
-        }
-    }
-    expect(checked).toBeGreaterThanOrEqual(13);
 });
 
 test("Given the generated agent API descriptions, When an agent follows every schema reference, Then each resolves inside its document", async () => {

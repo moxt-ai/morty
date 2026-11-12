@@ -7,7 +7,6 @@ import {
     SESSION_EVENT_BATCH_MAX_SIZE,
     SESSION_EVENT_KIND,
     type SessionCloseNoticeEvent,
-    type SessionInfoUpdatedEvent,
     type SessionLiveEvent,
     type SessionStatusChangedEvent,
 } from "@morty-build/client/protocol";
@@ -89,7 +88,6 @@ export class RuntimeSessionEventPublisher implements SessionEventSink {
     };
 
     readonly publishStatus = (event: SessionStatusChangedEvent): void => this.#send(event);
-    readonly publishInfo = (event: SessionInfoUpdatedEvent): void => this.#send(event);
     readonly publishClosed = (event: SessionCloseNoticeEvent): void => {
         this.#awaitingFirstAnswer.delete(event.target);
         this.#send(event);

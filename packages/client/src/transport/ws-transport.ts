@@ -3,7 +3,7 @@ import { MortyApiError, MortyConnectionError, MortyProtocolError, MortyValidatio
 import { computerRequestTarget } from "./computer-request-target.ts";
 import { HttpTransport, type MortyHttpTransport, type MortyTransportSessionEvent } from "./http-transport.ts";
 
-const DEFAULT_CONNECTION_TIMEOUT_MILLISECONDS = 15_000;
+const CONNECTION_TIMEOUT_MILLISECONDS = 15_000;
 const HEARTBEAT_INTERVAL_MILLISECONDS = 20_000;
 const HEARTBEAT_TIMEOUT_MILLISECONDS = 10_000;
 
@@ -12,23 +12,14 @@ export interface MortyWebSocketConnector {
 }
 
 export interface WsTransportOptions {
-    readonly connectionTimeoutMilliseconds?: number;
+    /** Opens the WebSocket; the browser's own WebSocket unless a test supplies a stateful socket. */
     readonly connector?: MortyWebSocketConnector;
-    readonly idleTimeoutMilliseconds?: number;
-}
-
-function validatePositiveInteger(value: number, name: string): number {
-    if (!Number.isSafeInteger(value) || value < 1) {
-        throw new MortyValidationError(`The ${name} is invalid`);
-    }
-    return value;
 }
 
 type WsTransportState =
     | { readonly kind: "closed" }
     | {
           readonly kind: "connected";
-          readonly idleTimeoutId: ReturnType<typeof globalThis.setTimeout>;
           readonly socket: WebSocket;
       }
     | { readonly kind: "connecting"; readonly connection: Promise<WebSocket> }
@@ -152,9 +143,7 @@ class RelayMortyWebSocketConnector implements MortyWebSocketConnector {
 }
 
 export class WsTransport implements MortyHttpTransport {
-    readonly #connectionTimeoutMilliseconds: number;
     readonly #connector: MortyWebSocketConnector;
-    readonly #idleTimeoutMilliseconds: number;
     readonly #pending = new Map<string, PendingWsRequest>();
     readonly #subscriptions = new Map<string, LiveEventSubscription>();
     readonly #http = new HttpTransport();
@@ -167,15 +156,7 @@ export class WsTransport implements MortyHttpTransport {
     };
 
     constructor(options: WsTransportOptions = {}) {
-        this.#connectionTimeoutMilliseconds = validatePositiveInteger(
-            options.connectionTimeoutMilliseconds ?? DEFAULT_CONNECTION_TIMEOUT_MILLISECONDS,
-            "WebSocket transport connection timeout",
-        );
         this.#connector = options.connector ?? new RelayMortyWebSocketConnector();
-        this.#idleTimeoutMilliseconds = validatePositiveInteger(
-            options.idleTimeoutMilliseconds ?? 60_000,
-            "WebSocket transport idle timeout",
-        );
     }
 
     readonly fetch = async (request: Request): Promise<Response> => {
@@ -243,7 +224,6 @@ export class WsTransport implements MortyHttpTransport {
                     sequence += 1;
                 }
             }
-            this.#touch(socket);
         } catch (cause) {
             const pending = this.#pending.get(requestId);
             this.#pending.delete(requestId);
@@ -256,6 +236,7 @@ export class WsTransport implements MortyHttpTransport {
         request.signal.throwIfAborted();
         const requestUrl = new URL(request.url);
         const socket = await this.#socket(request);
+        request.signal.throwIfAborted();
         const id = crypto.randomUUID();
         const abort = (): void => {
             const subscription = this.#subscriptions.get(id);
@@ -282,7 +263,6 @@ export class WsTransport implements MortyHttpTransport {
                     subscriptionId: id,
                 }),
             );
-            this.#touch(socket);
         } catch (cause) {
             this.#subscriptions.delete(id);
             cleanup();
@@ -296,7 +276,6 @@ export class WsTransport implements MortyHttpTransport {
         const state = this.#state;
         this.#state = { kind: "closed" };
         if (state.kind === "connected") {
-            globalThis.clearTimeout(state.idleTimeoutId);
             state.socket.close(1000, "Morty transport closed");
         }
         this.#failPending(new MortyConnectionError("The Morty WebSocket transport closed"));
@@ -333,7 +312,7 @@ export class WsTransport implements MortyHttpTransport {
         const controller = new AbortController();
         const timeout = globalThis.setTimeout(
             () => controller.abort(new MortyConnectionError("The Morty WebSocket connection timed out")),
-            this.#connectionTimeoutMilliseconds,
+            CONNECTION_TIMEOUT_MILLISECONDS,
         );
         try {
             const socket = await this.#connector.connect(endpoint, controller.signal);
@@ -362,7 +341,7 @@ export class WsTransport implements MortyHttpTransport {
                     ),
                 { once: true },
             );
-            this.#state = this.#connected(socket);
+            this.#state = { kind: "connected", socket };
             this.#scheduleHeartbeat(socket);
             return socket;
         } catch (cause) {
@@ -380,9 +359,6 @@ export class WsTransport implements MortyHttpTransport {
 
     readonly #receive = (event: MessageEvent): void => {
         try {
-            if (this.#state.kind === "connected") {
-                this.#touch(this.#state.socket);
-            }
             if (typeof event.data !== "string") {
                 throw new MortyProtocolError("The WebSocket transport returned a binary message");
             }
@@ -439,7 +415,6 @@ export class WsTransport implements MortyHttpTransport {
         if (this.#state.kind !== "connected" || this.#state.socket !== socket) {
             return;
         }
-        globalThis.clearTimeout(this.#state.idleTimeoutId);
         this.#stopHeartbeat();
         this.#state = { kind: "disconnected" };
         this.#failPending(cause);
@@ -538,28 +513,6 @@ export class WsTransport implements MortyHttpTransport {
             return;
         }
         this.#state.socket.send(JSON.stringify({ kind: EVENT_UNSUBSCRIBE_KIND, subscriptionId: id }));
-        this.#touch(this.#state.socket);
-    };
-
-    readonly #connected = (socket: WebSocket): Extract<WsTransportState, { readonly kind: "connected" }> => ({
-        kind: "connected",
-        idleTimeoutId: globalThis.setTimeout(() => {
-            if (this.#state.kind === "connected" && this.#state.socket === socket) {
-                // Live streams fail with their socket: the next request opens a replacement that
-                // never carries their subscription, and their owner must reconnect and reconcile.
-                this.#disconnected(socket, new MortyConnectionError("The Morty WebSocket transport became inactive"));
-                socket.close(4000, "Morty transport idle timeout");
-            }
-        }, this.#idleTimeoutMilliseconds),
-        socket,
-    });
-
-    readonly #touch = (socket: WebSocket): void => {
-        if (this.#state.kind !== "connected" || this.#state.socket !== socket) {
-            return;
-        }
-        globalThis.clearTimeout(this.#state.idleTimeoutId);
-        this.#state = this.#connected(socket);
     };
 
     readonly #stopHeartbeat = (): void => {

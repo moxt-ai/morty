@@ -5,9 +5,9 @@ import {
     type NativeSessionEvents,
     type NativeSessionTarget,
     type QueuedPromptRequestEventLog,
-    SESSION_HISTORY_PAGE_LOAD_KIND,
+    type SESSION_HISTORY_PAGE_LOAD_KIND,
     SESSION_HISTORY_PAGE_LOADED_KIND,
-    SESSION_PREVIEW_HISTORY_PAGE_LOAD_KIND,
+    type SESSION_PREVIEW_HISTORY_PAGE_LOAD_KIND,
     SESSION_PREVIEW_HISTORY_PAGE_LOADED_KIND,
     type SessionEvent,
 } from "@morty-build/client/protocol";
@@ -22,7 +22,7 @@ import type { PromptLifecycle } from "../../../session/prompt/prompt-lifecycle.t
 import { resolveSessionDirectory } from "../../../session/workspace/resolve-session-directory.ts";
 import type { WorkspaceDirectoryService } from "../../../session/workspace/workspace-directory.ts";
 import type { RelayConnectionDiagnostics } from "../../relay/diagnostics.ts";
-import type { RuntimeCommand } from "../definition.ts";
+import type { CommandHandler } from "../definition.ts";
 import { reportOperationFailure, send } from "../transport.ts";
 
 interface OrderedHistoryEvent {
@@ -113,7 +113,7 @@ async function executeSessionHistoryPageLoad(
         harness = entry.harness;
         const resolved = await resolveSessionDirectory(directories, entry.directory, signal);
         const loadOptions = {
-            ...(await resolveAgent(entry.harness, signal, command.target)),
+            ...(await resolveAgent(entry.harness, signal)),
             cwd: resolved.cwd,
             target: command.target,
             signal,
@@ -162,7 +162,7 @@ async function executeSessionPreviewHistoryPageLoad(
     try {
         const resolved = await resolveSessionDirectory(directories, command.directory, signal);
         const loadOptions = {
-            ...(await resolveAgent(command.target.harness, signal, command.target)),
+            ...(await resolveAgent(command.target.harness, signal)),
             cwd: resolved.cwd,
             target: command.target,
             signal,
@@ -199,40 +199,34 @@ async function executeSessionPreviewHistoryPageLoad(
     }
 }
 
-export const sessionHistoryPageLoadCommand: RuntimeCommand = {
-    kind: SESSION_HISTORY_PAGE_LOAD_KIND,
-    handle: (context, message): void => {
-        if (message.kind !== SESSION_HISTORY_PAGE_LOAD_KIND) {
-            throw new Error("Command kind mismatch");
-        }
-        void executeSessionHistoryPageLoad(
-            context.socket,
-            message,
-            context.resolveAgent,
-            context.directories,
-            context.diagnostics,
-            context.sessions,
-            context.nativeSessions,
-            context.eventProjection,
-            context.signal,
-        );
-    },
+export const handleSessionHistoryPageLoad: CommandHandler<typeof SESSION_HISTORY_PAGE_LOAD_KIND> = (
+    context,
+    message,
+): void => {
+    void executeSessionHistoryPageLoad(
+        context.socket,
+        message,
+        context.resolveAgent,
+        context.directories,
+        context.diagnostics,
+        context.sessions,
+        context.nativeSessions,
+        context.eventProjection,
+        context.signal,
+    );
 };
 
-export const previewHistoryPageLoadCommand: RuntimeCommand = {
-    kind: SESSION_PREVIEW_HISTORY_PAGE_LOAD_KIND,
-    handle: (context, message): void => {
-        if (message.kind !== SESSION_PREVIEW_HISTORY_PAGE_LOAD_KIND) {
-            throw new Error("Command kind mismatch");
-        }
-        void executeSessionPreviewHistoryPageLoad(
-            context.socket,
-            message,
-            context.resolveAgent,
-            context.directories,
-            context.diagnostics,
-            context.nativeSessions,
-            context.signal,
-        );
-    },
+export const handlePreviewHistoryPageLoad: CommandHandler<typeof SESSION_PREVIEW_HISTORY_PAGE_LOAD_KIND> = (
+    context,
+    message,
+): void => {
+    void executeSessionPreviewHistoryPageLoad(
+        context.socket,
+        message,
+        context.resolveAgent,
+        context.directories,
+        context.diagnostics,
+        context.nativeSessions,
+        context.signal,
+    );
 };

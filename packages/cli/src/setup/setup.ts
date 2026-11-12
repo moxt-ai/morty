@@ -1,5 +1,3 @@
-import type { ChildProcess } from "node:child_process";
-import { once } from "node:events";
 import { constants } from "node:fs";
 import { mkdir, open, readFile, realpath, rename, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -7,25 +5,41 @@ import { isAbsolute, join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { parseArgs } from "node:util";
 import { decodeIdentifier, isIdentifier } from "@morty-build/client/protocol";
-import { mortyStateDirectory } from "@morty-build/local-state";
 import jsQrImport from "jsqr";
 import { PNG } from "pngjs";
 import QRCode from "qrcode";
 import { validateLocalPath } from "../engine/util/filesystem/private-path.ts";
-import { spawnProcess, stopProcessTree } from "../engine/util/process/executable.ts";
+import { readStateDirectory } from "../storage/state-directory.ts";
+import { StateRootError, validateStateRoot } from "../storage/state-root.ts";
 
+/** A pairing the browser offered this computer. Its code is redeemed once and never appears on a command line. */
+export interface SetupPairing {
+    readonly relayOrigin: string;
+    readonly computerId: string;
+    readonly pairingCode: string;
+    /** The Computer's default workspace. */
+    readonly workspace: string;
+}
+
+/** Whether this computer's Morty offers one Agent, and how the user makes it available when it does not. */
+export interface SetupAgentReport {
+    readonly harness: string;
+    readonly label: string;
+    readonly status: string;
+    readonly recoveryCommand: string;
+    readonly minimumSupportedVersion: string;
+}
+
+/** The Morty installation in a state directory, as setup drives it. */
 export interface SetupRuntime {
-    /** Runs a Morty command; `input`, when given, is written to its standard input, which is then closed. */
-    readonly run: (
-        directory: string,
-        args: readonly string[],
-        cwd: string,
-        signal: AbortSignal,
-        input?: string,
-    ) => Promise<{
-        readonly pid: number;
-        readonly logPath: string;
-    }>;
+    /** The Computers the installation keeps a connection for. */
+    readonly computers: (directory: string, signal: AbortSignal) => Promise<readonly string[]>;
+    /** Redeems a pairing, saves its connection, and has the daemon serve it. */
+    readonly pair: (directory: string, pairing: SetupPairing, signal: AbortSignal) => Promise<void>;
+    /** Has the daemon serve the saved connection, starting one when none runs. */
+    readonly start: (directory: string, signal: AbortSignal) => Promise<void>;
+    /** The Agents the installation finds on this computer. */
+    readonly agents: (directory: string, signal: AbortSignal) => Promise<readonly SetupAgentReport[]>;
 }
 
 interface SetupEnvironment {
@@ -46,11 +60,7 @@ interface SetupEnvironment {
     };
 }
 
-export type SetupHost = SetupEnvironment &
-    (
-        | { readonly runtime: SetupRuntime }
-        | { /** The invoking CLI release, never another release resolved through npm. */ readonly cliEntry: string }
-    );
+export type SetupHost = SetupEnvironment & { readonly runtime: SetupRuntime };
 
 /** Where each supported harness exposes its current session to the commands its Agent runs. */
 const harnessSessionVariables: ReadonlyMap<string, string> = new Map([
@@ -252,10 +262,6 @@ type ComputerSelection =
           readonly relayUrl: string;
       };
 
-interface ManagedConnection {
-    readonly computerId: string;
-}
-
 interface VerifiedIdentity {
     readonly context: Context;
     /** Where the Computer's Runtime pairing stands, as the Relay records it. */
@@ -350,48 +356,23 @@ function errorCode(cause: unknown): unknown {
     return cause !== null && typeof cause === "object" && "code" in cause ? cause.code : undefined;
 }
 
-type RuntimeTermination =
-    | { readonly kind: "exit"; readonly exitCode: number }
-    | { readonly kind: "signal"; readonly signal: string }
-    | { readonly kind: "spawn"; readonly code: string };
-
+/** Starting or pairing the local Runtime failed; the cause says why. */
 class RuntimeStartError extends Error {
     readonly code = "RUNTIME_START_FAILED";
-    readonly termination: RuntimeTermination;
-    readonly logPath: string;
     readonly nextStep =
-        "Inspect the Runtime log, then run morty start and rerun setup. Check morty --version when diagnosing startup; setup does not stop an existing daemon.";
+        "Run morty start and rerun setup. Run morty logs when diagnosing startup; setup does not stop an existing daemon.";
 
-    constructor(termination: RuntimeTermination, logPath: string, cause?: unknown) {
-        let reason: string;
-        switch (termination.kind) {
-            case "exit":
-                reason = `exited with code ${termination.exitCode}`;
-                break;
-            case "signal":
-                reason = `was terminated by ${termination.signal}`;
-                break;
-            case "spawn":
-                reason = `could not launch (${termination.code})`;
-                break;
-            default: {
-                const exhaustive: never = termination;
-                throw exhaustive;
-            }
-        }
-        super(`The local Runtime command ${reason}. See ${logPath}.`, { cause });
+    constructor(cause: unknown) {
+        super("The local Runtime could not start serving this Computer.", { cause });
         this.name = "RuntimeStartError";
-        this.termination = termination;
-        this.logPath = logPath;
     }
 
-    readonly diagnostic = () => ({ termination: this.termination, logPath: this.logPath, nextStep: this.nextStep });
+    readonly diagnostic = () => ({ nextStep: this.nextStep });
 }
 
 class RuntimePreflightError extends Error {
     readonly code = "RUNTIME_PREFLIGHT_FAILED";
-    readonly nextStep =
-        "Use Node.js 22.19+ or 24.20+, run morty --version in the same terminal, and repair the installed Morty release before rerunning setup.";
+    readonly nextStep = "Use Node.js 22.19+ or 24.20+ and repair the installed Morty release before rerunning setup.";
 
     constructor(message: string, cause?: unknown) {
         super(message, { cause });
@@ -401,31 +382,25 @@ class RuntimePreflightError extends Error {
     readonly diagnostic = () => ({
         nodeVersion: process.versions.node,
         nodeExecutable: process.execPath,
-        ...(this.cause instanceof RuntimeStartError
-            ? { logPath: this.cause.logPath, termination: this.cause.termination }
-            : {}),
         nextStep: this.nextStep,
     });
 }
 
-/** `morty` exits with EX_CONFIG (78) when MORTY_STATE_DIRECTORY names another root's installation data. */
-const MORTY_EXIT_STATE_ROOT_INVALID = 78;
-
 /** Morty refused this shell's state root; setup must not continue against a state it cannot see. */
 class MortyStateRootError extends Error {
     readonly code = "MORTY_STATE_ROOT_INVALID";
-    readonly logPath: string;
+    readonly owningRoot: string;
     readonly nextStep =
-        "This shell's MORTY_STATE_DIRECTORY names Morty installation data that an earlier Morty Runtime passed to this agent, not a state root. Rerun setup with MORTY_STATE_DIRECTORY set to the state root that the Runtime log names.";
+        "This shell's MORTY_STATE_DIRECTORY names Morty installation data that an earlier Morty Runtime passed to this agent, not a state root. Rerun setup with MORTY_STATE_DIRECTORY set to the owning state root.";
 
-    constructor(logPath: string) {
-        super(`Morty refused this shell's state root. See ${logPath}.`);
+    constructor(cause: StateRootError) {
+        super("Morty refused this shell's state root.", { cause });
         this.name = "MortyStateRootError";
-        this.logPath = logPath;
+        this.owningRoot = cause.owningRoot;
     }
 
     readonly diagnostic = (access: ReplacementAccess) => ({
-        logPath: this.logPath,
+        owningRoot: this.owningRoot,
         nextStep: `${this.nextStep} ${
             access.kind === "unchanged"
                 ? "Setup changed nothing; existing Morty links keep working."
@@ -1130,110 +1105,6 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         return { context, computerPairing };
     }
 
-    async function runMorty(
-        directory: string,
-        args: readonly string[],
-        cwd: string,
-        operation = signal,
-        input?: string,
-    ) {
-        operation.throwIfAborted();
-        if ("runtime" in host) {
-            return await host.runtime.run(directory, args, cwd, operation, input);
-        }
-        const logPath = join(directory, `runtime-${crypto.randomUUID()}.log`);
-        const log = await open(
-            logPath,
-            constants.O_WRONLY | constants.O_CREAT | constants.O_EXCL | constants.O_NOFOLLOW,
-            0o600,
-        );
-        let child: ChildProcess | undefined;
-        try {
-            await safeLocalPath(logPath, false, true);
-            const localCli = host.cliEntry;
-            if (!isAbsolute(localCli)) {
-                fail("RUNTIME_NOT_INSTALLED");
-            }
-            child = spawnProcess(process.execPath, [await realpath(localCli), ...args], {
-                cwd,
-                stdio: [input === undefined ? "ignore" : "pipe", log.fd, log.fd],
-                windowsHide: true,
-                env: { ...process.env, MORTY_STATE_DIRECTORY: directory },
-            });
-            if (input !== undefined) {
-                // A Morty that exits before reading reports its own failure; the closed pipe adds nothing.
-                child.stdin?.on("error", () => {});
-                child.stdin?.end(input);
-            }
-            await once(child, "spawn", { signal: AbortSignal.any([operation, AbortSignal.timeout(10000)]) });
-            if (child.pid === undefined || !Number.isSafeInteger(child.pid) || child.pid < 2) {
-                fail("RUNTIME_START_FAILED");
-            }
-            const [code, exitSignal] = await once(child, "exit", { signal: operation });
-            if (typeof exitSignal === "string") {
-                throw new RuntimeStartError({ kind: "signal", signal: exitSignal }, logPath);
-            }
-            if (typeof code !== "number") {
-                fail("INVALID_RUNTIME_EXIT");
-            }
-            if (code === MORTY_EXIT_STATE_ROOT_INVALID) {
-                throw new MortyStateRootError(logPath);
-            }
-            if (code !== 0) {
-                throw new RuntimeStartError({ kind: "exit", exitCode: code }, logPath);
-            }
-            return { pid: child.pid, logPath };
-        } catch (cause) {
-            // Only terminate the child this invocation still owns; an exited PID may be reused.
-            if (child?.pid !== undefined && child.exitCode === null && child.signalCode === null) {
-                try {
-                    // Cancel the whole invocation, including any CLI descendants.
-                    await stopProcessTree(child);
-                } catch {
-                    // Cleanup must not replace the launch failure or prevent its diagnostic from being written.
-                }
-            }
-            operation.throwIfAborted();
-            if (errorCode(cause) === "RUNTIME_NOT_INSTALLED" || cause instanceof MortyStateRootError) {
-                throw cause;
-            }
-            const code = errorCode(cause);
-            const failure =
-                cause instanceof RuntimeStartError
-                    ? cause
-                    : new RuntimeStartError(
-                          { kind: "spawn", code: typeof code === "string" ? code : "UNKNOWN" },
-                          logPath,
-                          cause,
-                      );
-            // A silent crash still leaves a useful private log without recording pairing credentials.
-            await log.writeFile(`${JSON.stringify(failure.diagnostic())}\n`);
-            throw failure;
-        } finally {
-            await log.close();
-        }
-    }
-
-    async function listManagedConnections(directory: string, cwd: string): Promise<readonly ManagedConnection[]> {
-        const outputPath = join(tmpdir(), `morty-pair-list-${crypto.randomUUID()}.json`);
-        await writePrivateFile(outputPath, "");
-        try {
-            await runMorty(directory, ["pair", "list", `--output-json=${outputPath}`], cwd);
-            const value: unknown = JSON.parse(await readFile(outputPath, "utf8"));
-            if (!Array.isArray(value)) {
-                fail("INVALID_PAIR_LIST");
-            }
-            return value.map((item) => {
-                const connection = object(item);
-                return {
-                    computerId: identifier(connection["computer_id"]),
-                };
-            });
-        } finally {
-            await rm(outputPath, { force: true });
-        }
-    }
-
     async function createComputerPairing(
         context: Context,
         requestKey: string,
@@ -1286,7 +1157,6 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
 
     async function prepareComputer(
         context: Context,
-        cwd: string,
         computerPairing: VerifiedIdentity["computerPairing"],
         confirmedComputerId: string | null,
     ): Promise<{ readonly context: Context; readonly computer: ComputerSelection }> {
@@ -1316,8 +1186,8 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         }
         // Computer IDs are unique, so the Computer's own connection list names the connection that serves one.
         const reusable = async (computerId: string) => {
-            const connections = await listManagedConnections(context.directory, cwd);
-            const existing = connections.find((connection) => connection.computerId === computerId);
+            const connections = await host.runtime.computers(context.directory, signal);
+            const existing = connections.includes(computerId) ? { computerId } : undefined;
             if (existing !== undefined) {
                 emit({
                     status: "computer_reused",
@@ -1388,30 +1258,6 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         return fail("COMPUTER_PAIRING_UNAVAILABLE");
     }
 
-    function runtimeCommand(
-        computer: ComputerSelection,
-        cwd: string,
-    ): { readonly args: readonly string[]; readonly input?: string } {
-        if (computer.kind === "existing") {
-            return { args: ["start"] };
-        }
-        // The pairing code goes through standard input: a command line is visible to every user of this computer,
-        // who could redeem the code while it is valid and take over this Computer's pairing.
-        return {
-            args: [
-                "pair",
-                "--url",
-                computer.relayUrl,
-                "--computer",
-                computer.computerId,
-                "--code-stdin",
-                "--workspace",
-                cwd,
-            ],
-            input: computer.pairingCode,
-        };
-    }
-
     async function startRuntime(
         context: Context,
         computer: ComputerSelection,
@@ -1433,15 +1279,25 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 return;
             }
             try {
-                const command = runtimeCommand(computer, cwd);
-                const started = await runMorty(context.directory, command.args, cwd, signal, command.input);
-                emit({ status: "runtime_started", ...started });
-                return;
-            } catch (cause) {
-                signal.throwIfAborted();
-                if (!(cause instanceof RuntimeStartError)) {
-                    throw cause;
+                if (computer.kind === "existing") {
+                    await host.runtime.start(context.directory, signal);
+                } else {
+                    await host.runtime.pair(
+                        context.directory,
+                        {
+                            relayOrigin: computer.relayUrl,
+                            computerId: computer.computerId,
+                            pairingCode: computer.pairingCode,
+                            workspace: cwd,
+                        },
+                        signal,
+                    );
                 }
+                emit({ status: "runtime_started" });
+                return;
+            } catch (startFailure) {
+                signal.throwIfAborted();
+                const cause = new RuntimeStartError(startFailure);
                 // A launcher may fail after the daemon has connected successfully.
                 if (await reuseOnline()) {
                     return;
@@ -1498,47 +1354,28 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     }
 
     /** One rule for every Computer setup waits on: an online Computer without the chosen harness cannot run it. */
-    async function harnessUnavailable(
-        context: Context,
-        harness: string,
-        available: readonly string[],
-        cwd: string,
-    ): Promise<never> {
+    async function harnessUnavailable(context: Context, harness: string, available: readonly string[]): Promise<never> {
         emit({ status: "harness_unavailable", harness, available });
-        throw new HarnessUnavailableError(harness, await diagnoseHarness(context, harness, cwd));
+        throw new HarnessUnavailableError(harness, await diagnoseHarness(context, harness));
     }
 
     /**
      * Asks this computer's Morty why it does not offer the harness. The published catalog omits unusable Agents, but
      * the local inventory keeps their status and recovery command. Without an answer, setup still fails as unavailable.
      */
-    async function diagnoseHarness(context: Context, harness: string, cwd: string): Promise<HarnessDiagnosis | null> {
-        const outputPath = join(tmpdir(), `morty-agents-${crypto.randomUUID()}.json`);
+    async function diagnoseHarness(context: Context, harness: string): Promise<HarnessDiagnosis | null> {
         try {
-            await writePrivateFile(outputPath, "");
-            await runMorty(
-                context.directory,
-                ["agents", `--output-json=${outputPath}`],
-                cwd,
-                AbortSignal.any([signal, deadline(60_000)]),
-            );
-            const inventory = object(JSON.parse(await readFile(outputPath, "utf8")));
-            const entry = [inventory["unavailable"], inventory["available"]]
-                .flatMap((agents) => (Array.isArray(agents) ? agents : []))
-                .map(object)
-                .find((agent) => agent["harness"] === harness);
+            const reports = await host.runtime.agents(context.directory, AbortSignal.any([signal, deadline(60_000)]));
+            const entry = reports.find((report) => report.harness === harness);
             if (entry === undefined) {
                 return null;
             }
-            const field = (name: string) => {
-                const value = entry[name];
-                return typeof value === "string" && value.length <= 200 && !/[\r\n]/u.test(value) ? value : "";
-            };
+            const field = (value: string) => (value.length <= 200 && !/[\r\n]/u.test(value) ? value : "");
             return {
-                status: field("status") || "unknown",
-                label: field("label") || harness,
-                recoveryCommand: field("recoveryCommand"),
-                minimumSupportedVersion: field("minimumSupportedVersion"),
+                status: field(entry.status) || "unknown",
+                label: field(entry.label) || harness,
+                recoveryCommand: field(entry.recoveryCommand),
+                minimumSupportedVersion: field(entry.minimumSupportedVersion),
             };
         } catch (cause) {
             // Cancellation and the setup budget keep their own codes; any other failure leaves the harness unavailable
@@ -1547,12 +1384,10 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 throw cause;
             }
             return null;
-        } finally {
-            await rm(outputPath, { force: true });
         }
     }
 
-    async function waitForComputer(context: Context, computer: ComputerSelection, harness: string, cwd: string) {
+    async function waitForComputer(context: Context, computer: ComputerSelection, harness: string) {
         const computerId = computer.computerId;
         let attempts = 0;
         if (computer.kind === "pairing") {
@@ -1577,7 +1412,6 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                         context,
                         harness,
                         status["agents"].map((agent) => identifier(object(agent)["harness"])),
-                        cwd,
                     );
                 }
                 await clock.wait(1000, signal);
@@ -1604,7 +1438,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 const now = clock.now().getTime();
                 missingSince ??= now;
                 if (now - missingSince >= HARNESS_CATALOG_GRACE_MILLISECONDS) {
-                    await harnessUnavailable(context, harness, agents, cwd);
+                    await harnessUnavailable(context, harness, agents);
                 }
             }
             if (attempts++ % 10 === 0) {
@@ -1614,14 +1448,10 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         }
     }
 
-    async function bindAgent(context: Context, computer: ComputerSelection, harness: string) {
+    async function bindAgent(context: Context, harness: string) {
         progress("binding", `Connecting the Computer to ${harness} in the default working directory.`);
-        const computerId = computer.computerId;
         try {
-            await request(context, `/chat/computers/${context.identity.computerId}/setup`, {
-                computerId,
-                harness,
-            });
+            await request(context, `/chat/computers/${context.identity.computerId}/setup`, { harness });
         } catch (cause) {
             // Cancellation and the setup budget keep their own codes.
             if (signal.aborted || !(cause instanceof Error)) {
@@ -1762,7 +1592,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
 
     async function revokeAllAccess(options: RevokeAllAccessOptions) {
         const directory = await prepareStateDirectory(
-            mortyStateDirectory({ ...process.env, MORTY_STATE_DIRECTORY: host.state }),
+            readStateDirectory({ ...process.env, MORTY_STATE_DIRECTORY: host.state }),
         );
         const saved = await readSavedState(directory);
         if (saved === null || saved.identity.kind !== "ready") {
@@ -1783,7 +1613,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         });
     }
 
-    async function preflightRuntime(directory: string, cwd: string) {
+    async function preflightRuntime(directory: string) {
         progress("preflight", "Verifying the Morty CLI before creating an identity.");
         const [major = 0, minor = 0] = process.versions.node.split(".").map(Number);
         if (!((major === 22 && minor >= 19) || (major === 24 && minor >= 20))) {
@@ -1792,19 +1622,13 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             );
         }
         try {
-            // This uses the same executable resolution as start/pair, including the Node
-            // selected by its launcher. A package's engines field is not proof it starts.
-            await runMorty(directory, ["--version"], cwd, AbortSignal.any([signal, deadline(120_000)]));
+            await validateStateRoot({ ...process.env, MORTY_STATE_DIRECTORY: directory });
         } catch (cause) {
-            signal.throwIfAborted();
             // The installation is fine; the shell names the wrong state root.
-            if (cause instanceof MortyStateRootError) {
-                throw cause;
+            if (cause instanceof StateRootError) {
+                throw new MortyStateRootError(cause);
             }
-            throw new RuntimePreflightError(
-                "The local Runtime failed its startup check. No remote identity or pairing was created by this run.",
-                cause,
-            );
+            throw cause;
         }
         emit({ status: "runtime_verified", nodeVersion: process.versions.node, nodeExecutable: process.execPath });
     }
@@ -1812,13 +1636,13 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     async function setup(options: SetupOptions) {
         const cwd = await resolveWorkingDirectory(options.cwd);
         const directory = await prepareStateDirectory(
-            mortyStateDirectory({ ...process.env, MORTY_STATE_DIRECTORY: host.state }),
+            readStateDirectory({ ...process.env, MORTY_STATE_DIRECTORY: host.state }),
         );
         const location: StateLocation = { directory, base: options.base };
         // Refuses a state that belongs to another service before anything runs, and explains a previous replacement
         // even when this run fails its local startup checks.
         restoreReplacementAccess(await loadIdentity(directory, options.base));
-        await preflightRuntime(directory, cwd);
+        await preflightRuntime(directory);
         const saved = await loadIdentity(directory, options.base);
         restoreReplacementAccess(saved);
         const identity = await prepareIdentity(location, saved);
@@ -1827,11 +1651,11 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         );
         let computer = verified.context;
         emit({ status: "identity_ready", computerId: computer.identity.computerId });
-        const prepared = await prepareComputer(computer, cwd, verified.computerPairing, options.replaceProject);
+        const prepared = await prepareComputer(computer, verified.computerPairing, options.replaceProject);
         computer = prepared.context;
         await startRuntime(computer, prepared.computer, cwd, options.harness);
-        await waitForComputer(computer, prepared.computer, options.harness, cwd);
-        computer = await bindAgent(computer, prepared.computer, options.harness);
+        await waitForComputer(computer, prepared.computer, options.harness);
+        computer = await bindAgent(computer, options.harness);
         await finishSetup(computer, prepared.computer, options, cwd, identity.project);
     }
 

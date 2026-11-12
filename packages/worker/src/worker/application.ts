@@ -11,7 +11,7 @@ import { RequestError } from "../http/request-error.ts";
 import { logger } from "../infra/logger.ts";
 import { errorMiddleware, relayErrorHandler } from "../middleware/error-middleware.ts";
 import { requestTimeoutMiddleware } from "../middleware/request-timeout-middleware.ts";
-import { instructionDocumentRoutes } from "./components/instruction-documents/http/index.ts";
+import { instructionDocumentRoutes } from "./components/instruction-documents/http/instruction-document-routes.ts";
 import { cloudRoutes } from "./composition/cloud-http.ts";
 import { forwardToComputer } from "./gateway/computer-object-routing.ts";
 import { notFoundPage, webPages } from "./http/web-pages.ts";
@@ -55,52 +55,55 @@ function createComputerForwardingRoutes() {
         context.req.raw = new Request(context.req.raw, { headers });
         await next();
     };
-    return new Hono<ForwardingEnvironment>()
-        .onError(relayErrorHandler)
-        .use("*", errorMiddleware, timeout)
-        .get("/morty/api/v1/computers/connect", computerFromRuntimeCredential, forward)
-        .post("/morty/api/v1/pairings/:computerId/redeem", computerFromPath, forward)
-        .put("/morty/api/channels/:computerId/catalog", computerFromPath, forward)
-        .get("/morty/api/v1/computers/:computerId/transport", computerFromPath, forward)
-        .on(
-            ["GET", "OPTIONS"],
-            "/morty/api/v1/computers/:computerId/harnesses/:harness/sessions/:sessionId/files/content",
-            computerFromPath,
-            forward,
-        )
-        .post("/morty/api/identity/transfers/redeem", location, computerFromTransfer, forward)
-        .post("/morty/api/computers/:computerId/identity/link", computerFromPath, forward)
-        .all("/morty/api/computers/:computerId/session", computerFromPath, forward)
-        .post("/morty/api/computers/:computerId/identity/transfers", computerFromPath, forward)
-        .post("/morty/api/computers/:computerId/identity/recovery-token", computerFromPath, forward)
-        .get("/morty/api/computers/:computerId/identity/devices", computerFromPath, forward)
-        .post("/morty/api/computers/:computerId/identity/revoke-all-access", computerFromPath, forward)
-        .delete("/morty/api/computers/:computerId/identity/v1/other-browser-access", computerFromPath, forward)
-        .delete("/morty/api/computers/:computerId/identity/v1/devices/:deviceId", computerFromPath, forward)
-        .delete(`/morty/api/computers/:computerId${credentialRevocationPaths.browser}`, computerFromPath, forward)
-        .delete(`/morty/api/computers/:computerId${credentialRevocationPaths.recovery}`, computerFromPath, forward)
-        .delete(`/morty/api/computers/:computerId${credentialRevocationPaths.local}`, computerFromPath, forward)
-        .get("/morty/api/computers/:computerId/management/computer/pairing-state", computerFromPath, forward)
-        .get("/morty/api/computers/:computerId/management/computer", computerFromPath, forward)
-        .post("/morty/api/computers/:computerId/management/computer/replacement", computerFromPath, forward)
-        .on(["GET", "POST"], "/morty/api/computers/:computerId/management/pairing", computerFromPath, forward)
-        .post("/morty/api/chat/computers/:computerId/workspace", computerFromPath, forward)
-        .post("/morty/api/chat/computers/:computerId/daemon-diagnostics", computerFromPath, forward)
-        .post("/morty/api/chat/computers/:computerId/network-diagnostic", computerFromPath, forward)
-        .post("/morty/api/chat/computers/:computerId/setup/computers", computerFromPath, forward)
-        .post("/morty/api/chat/computers/:computerId/workspace/directory", computerFromPath, forward)
-        .post("/morty/api/chat/computers/:computerId/managed-sessions", computerFromPath, forward)
-        .post("/morty/api/chat/computers/:computerId/agent-settings", computerFromPath, forward)
-        .post("/morty/api/chat/computers/:computerId/access", computerFromPath, forward)
-        .post("/morty/api/chat/computers/:computerId/session-access", computerFromPath, forward)
-        .post("/morty/api/chat/computers/:computerId/managed-session", computerFromPath, forward)
-        .post("/morty/api/chat/computers/:computerId/managed-session/archive", computerFromPath, forward)
-        .post("/morty/api/chat/computers/:computerId/native-sessions", computerFromPath, forward)
-        .post("/morty/api/chat/computers/:computerId/continue-native-session", computerFromPath, forward)
-        .post("/morty/api/chat/computers/:computerId/native-session/:id", computerFromPath, forward)
-        .post("/morty/api/chat/computers/:computerId/native-session/:id/import", computerFromPath, forward)
-        .post("/morty/api/chat/computers/:computerId/native-session-forks/:operationId", computerFromPath, forward)
-        .post("/morty/api/chat/computers/:computerId/setup", computerFromPath, forward);
+    return (
+        new Hono<ForwardingEnvironment>()
+            .onError(relayErrorHandler)
+            .use("*", errorMiddleware, timeout)
+            .get("/morty/api/v1/computers/connect", computerFromRuntimeCredential, forward)
+            .post("/morty/api/v1/pairings/:computerId/redeem", computerFromPath, forward)
+            .put("/morty/api/channels/:computerId/catalog", computerFromPath, forward)
+            .get("/morty/api/v1/computers/:computerId/transport", computerFromPath, forward)
+            .on(
+                ["GET", "OPTIONS"],
+                "/morty/api/v1/computers/:computerId/harnesses/:harness/sessions/:sessionId/files/content",
+                computerFromPath,
+                forward,
+            )
+            .post("/morty/api/identity/transfers/redeem", location, computerFromTransfer, forward)
+            // Setup/CLI operations retain their HTTPS endpoints.
+            .post("/morty/api/chat/computers/:computerId/setup", computerFromPath, forward)
+            .post("/morty/api/computers/:computerId/identity/link", computerFromPath, forward)
+            .post("/morty/api/computers/:computerId/identity/revoke-all-access", computerFromPath, forward)
+            .post("/morty/api/computers/:computerId/management/computer/replacement", computerFromPath, forward)
+            .on(["GET", "POST"], "/morty/api/computers/:computerId/management/pairing", computerFromPath, forward)
+            .post("/morty/api/chat/computers/:computerId/setup/computers", computerFromPath, forward)
+            // Shared by setup and web: HTTPS remains supported for setup after the browser moves to WebSocket.
+            .post("/morty/api/computers/:computerId/identity/transfers", computerFromPath, forward)
+            .delete(`/morty/api/computers/:computerId${credentialRevocationPaths.local}`, computerFromPath, forward)
+            .get("/morty/api/computers/:computerId/management/computer/pairing-state", computerFromPath, forward)
+            .post("/morty/api/chat/computers/:computerId/workspace", computerFromPath, forward)
+            // Deprecated browser HTTP operations: remove after web clients migrate to the Computer WebSocket.
+            .all("/morty/api/computers/:computerId/session", computerFromPath, forward)
+            .get("/morty/api/computers/:computerId/identity/devices", computerFromPath, forward)
+            .delete("/morty/api/computers/:computerId/identity/v1/other-browser-access", computerFromPath, forward)
+            .delete("/morty/api/computers/:computerId/identity/v1/devices/:deviceId", computerFromPath, forward)
+            .delete(`/morty/api/computers/:computerId${credentialRevocationPaths.browser}`, computerFromPath, forward)
+            .get("/morty/api/computers/:computerId/management/computer", computerFromPath, forward)
+            .post("/morty/api/chat/computers/:computerId/daemon-diagnostics", computerFromPath, forward)
+            .post("/morty/api/chat/computers/:computerId/network-diagnostic", computerFromPath, forward)
+            .post("/morty/api/chat/computers/:computerId/workspace/directory", computerFromPath, forward)
+            .post("/morty/api/chat/computers/:computerId/managed-sessions", computerFromPath, forward)
+            .post("/morty/api/chat/computers/:computerId/agent-settings", computerFromPath, forward)
+            .post("/morty/api/chat/computers/:computerId/access", computerFromPath, forward)
+            .post("/morty/api/chat/computers/:computerId/session-access", computerFromPath, forward)
+            .post("/morty/api/chat/computers/:computerId/managed-session", computerFromPath, forward)
+            .post("/morty/api/chat/computers/:computerId/managed-session/archive", computerFromPath, forward)
+            .post("/morty/api/chat/computers/:computerId/native-sessions", computerFromPath, forward)
+            .post("/morty/api/chat/computers/:computerId/continue-native-session", computerFromPath, forward)
+            .post("/morty/api/chat/computers/:computerId/native-session/:id", computerFromPath, forward)
+            .post("/morty/api/chat/computers/:computerId/native-session/:id/import", computerFromPath, forward)
+            .post("/morty/api/chat/computers/:computerId/native-session-forks/:operationId", computerFromPath, forward)
+    );
 }
 
 const notFound = (): never => {

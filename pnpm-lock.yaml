@@ -288,9 +288,6 @@ importers:
       '@morty-build/client':
         specifier: workspace:*
         version: link:../client
-      '@morty-build/local-state':
-        specifier: workspace:*
-        version: link:../local-state
       '@morty-build/relay-test-support':
         specifier: workspace:*
         version: link:../relay-test-support
@@ -373,8 +370,6 @@ importers:
       ws:
         specifier: ^8.22.1
         version: 8.22.1(bufferutil@4.1.0)(utf-8-validate@6.0.6)
-
-  packages/local-state: {}
 
   packages/relay-test-support:
     dependencies:
