@@ -254,7 +254,7 @@ async function executeSessionRename(
         const resolved = await resolveSessionDirectory(directories, entry.directory, signal);
         const renamed = await sessions.renameSession(
             {
-                ...(await resolveAgent(entry.harness, signal, command.target)),
+                ...(await resolveAgent(entry.harness, signal)),
                 cwd: resolved.cwd,
                 target: command.target,
                 signal,

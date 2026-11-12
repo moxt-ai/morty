@@ -118,6 +118,7 @@ test("Given real Codex streams commentary after a tool, When clients watch and r
         },
         new RuntimeAgentDependencies([agent]),
         new RuntimeLocalContext(stateDirectory, process.env),
+        async (agent) => agent,
     );
     const cancellation = new AbortController();
     const runtime = runRuntime(config, cancellation.signal);

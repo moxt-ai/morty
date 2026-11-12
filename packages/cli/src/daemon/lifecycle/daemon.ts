@@ -3,13 +3,12 @@ import type { RuntimeConfig } from "../../engine/runtime/config.ts";
 import { prepareComputerConnection } from "../../engine/runtime/pairing.ts";
 import { ComputerRelayRevokedError } from "../../engine/runtime/relay/computer-revocation.ts";
 import { RuntimeLoop } from "../../engine/runtime/runtime-loop.ts";
-import { RuntimeAgentProcesses } from "../../engine/session/process/runtime-agent-processes.ts";
+import { AgentProcessPool } from "../../engine/session/process/agent-process-pool.ts";
 import type { InstallationDirectory } from "../../engine/storage/installation/installation-files.ts";
 import { BoundedLineLog } from "../../engine/storage/logs/bounded-log.ts";
 import { DAEMON_LIFECYCLE_LOG_FILENAME, logDirectory } from "../../engine/storage/logs/log-files.ts";
 import { isNodeError } from "../../engine/util/node-error.ts";
 import { acquireDaemonLock } from "../../storage/daemon/daemon-lock.ts";
-import { resolveMaxAcpProcesses } from "../config.ts";
 import { sendLocalRequest } from "../control/local-client.ts";
 import { serveLocalControl } from "../control/local-server.ts";
 import { openMortyInstallation } from "../pairing/pair-local-computer.ts";
@@ -105,11 +104,11 @@ async function runDaemonRuntime(
     try {
         const installation = control;
         rejectionGuard.bindStateDirectory(control.stateDirectory);
-        const agentProcesses = new RuntimeAgentProcesses();
         let active:
             | {
                   readonly pairingGeneration: string;
                   readonly config: RuntimeConfig;
+                  readonly processes: AgentProcessPool;
                   readonly controller: AbortController;
                   readonly completion: Promise<void>;
               }
@@ -130,20 +129,10 @@ async function runDaemonRuntime(
             }
             if (connection?.activation === "active") {
                 try {
-                    const config = await prepareComputerConnection(
-                        installation,
-                        connection,
-                        combined,
-                        process.env,
-                        resolveMaxAcpProcesses(process.env),
-                    );
+                    const config = await prepareComputerConnection(installation, connection, combined, process.env);
                     const controller = new AbortController();
-                    // Process diagnostics live beside the shared control directory,
-                    // so every Computer can include them in bug reports.
-                    const loop = new RuntimeLoop(async () => config, {
-                        processLogsDirectory: control.stateDirectory,
-                        agentProcesses,
-                    });
+                    const processes = new AgentProcessPool(config.localContext.maxAcpProcesses);
+                    const loop = new RuntimeLoop(async () => config, { processes });
                     const completion = loop.run(AbortSignal.any([combined, controller.signal])).then(
                         () => {
                             if (!combined.aborted && !controller.signal.aborted) {
@@ -175,7 +164,13 @@ async function runDaemonRuntime(
                                 .catch((failure: unknown) => fail(connection.pairingGeneration, failure));
                         },
                     );
-                    active = { pairingGeneration: connection.pairingGeneration, config, controller, completion };
+                    active = {
+                        pairingGeneration: connection.pairingGeneration,
+                        config,
+                        processes,
+                        controller,
+                        completion,
+                    };
                 } catch (cause) {
                     combined.throwIfAborted();
                     fail(connection.pairingGeneration, cause);
@@ -195,7 +190,7 @@ async function runDaemonRuntime(
             }
             if (typeof request === "object" && request !== null && "kind" in request && request.kind === "release") {
                 // Agents' own clients can continue the conversations that idle processes held.
-                await agentProcesses.retireIdleProcesses();
+                await active?.processes.retireIdleProcesses();
                 return { kind: "released" };
             }
             if (typeof request !== "object" || request === null || !("kind" in request) || request.kind !== "reload") {
@@ -206,11 +201,10 @@ async function runDaemonRuntime(
             const pending = reload.then(async () => {
                 const previous = active;
                 await reconcile();
-                if (active !== undefined && previous === active && active.config.rediscoverAgents !== undefined) {
+                if (active !== undefined && previous === active) {
                     try {
                         await refreshAgentCatalog(
                             active.config,
-                            active.config.rediscoverAgents,
                             AbortSignal.any([combined, AbortSignal.timeout(90_000)]),
                         );
                     } catch (cause) {

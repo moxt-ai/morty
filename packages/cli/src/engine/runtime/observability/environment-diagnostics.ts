@@ -64,7 +64,6 @@ export function runtimeEnvironmentDiagnostics(config: RuntimeConfig): readonly R
                 timestamp,
                 harness: override === null ? "custom" : agent.harness,
                 agentVersion: version(agent.agentVersion),
-                adapterVersion: version(agent.adapterVersion),
                 versionSource: "runtime_catalog",
                 executableLocation: executableLocation(agent),
                 executableOverride:

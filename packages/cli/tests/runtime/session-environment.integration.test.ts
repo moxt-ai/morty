@@ -9,15 +9,11 @@ import {
     decodeDaemonToServiceMessage,
     decodeNativeSessionResult,
     decodeSessionReadyEvent,
-    decodeSessionsQueriedEvent,
     encodeNativeSessionCancel,
     encodeNativeSessionCommand,
-    encodeSessionCloseCommand,
     encodeSessionCreateCommand,
     encodeSessionListCommand,
     encodeSessionPromptCommand,
-    encodeSessionQueryCommand,
-    encodeSessionRestoreCommand,
     NATIVE_SESSION_REQUEST_KIND,
     type NativeSessionTarget,
     SessionPromptDisposition,
@@ -31,87 +27,6 @@ import { ControlledAcpConnection } from "../support/agents/controlled-acp-connec
 import { createControlledAgent } from "../support/agents/controlled-agent-definition.ts";
 import { memoryComputerCredentials } from "../support/computer-credentials.ts";
 import { createControlledRuntimeConfig } from "../support/controlled-runtime-config.ts";
-
-// @no-uc: Compatibility; public Computer commands and real ACP children verify embedding context isolation.
-test("Given scoped environments, When Sessions run concurrently and restore, Then their children retain the right identity", async ({
-    signal,
-}) => {
-    const peer = await runtimePeer(signal);
-    try {
-        const targets = await Promise.all([peer.create(), peer.create()]);
-        const first = targets[0];
-        if (first === undefined) {
-            throw new Error("Expected the first native conversation");
-        }
-        await Promise.all(targets.map((target) => peer.prompt(target, crypto.randomUUID())));
-        expect(await peer.launches()).toEqual(
-            expect.arrayContaining(targets.map((target) => ({ context: JSON.stringify(target) }))),
-        );
-        expect((await peer.launches()).filter((launch) => launch.context !== null)).toEqual(
-            expect.arrayContaining(targets.map((target) => ({ context: JSON.stringify(target) }))),
-        );
-        await peer.restart("computer");
-        peer.send(encodeSessionQueryCommand({ kind: "session.query", requestId: "identify-a", targets: [first] }));
-        const [entry] = decodeSessionsQueriedEvent(await peer.next("identify-a", ["session.queried"])).entries;
-        if (entry === undefined) {
-            throw new Error("Missing persisted native identity");
-        }
-        peer.send(
-            encodeSessionRestoreCommand({
-                kind: "session.restore",
-                requestId: "restore-a",
-                target: { harness: entry.harness, sessionId: entry.sessionId },
-            }),
-        );
-        await peer.next("restore-a", ["session.restored"]);
-        expect((await peer.launches()).at(-1)).toEqual({ context: JSON.stringify(first) });
-        expect(peer.agent.environment).not.toHaveProperty("MORTY_TEST_SESSION_CONTEXT");
-    } finally {
-        await peer.close();
-    }
-});
-
-// @no-uc: Compatibility; native readers must not inherit a previously resolved execution environment.
-test("Given an execution Session has scoped environment, When other conversations browse and find native history, Then query children stay unscoped", async ({
-    signal,
-}) => {
-    const peer = await runtimePeer(signal);
-    try {
-        const seed = await peer.create();
-        await peer.prompt(seed, "seed-history");
-        peer.send(
-            encodeNativeSessionCommand({
-                ...peer.base(),
-                kind: NATIVE_SESSION_REQUEST_KIND,
-                requestId: "list-unscoped",
-                action: "list",
-                cursor: null,
-            }),
-        );
-        const listed = decodeNativeSessionResult(await peer.next("list-unscoped", ["native.session.result"]));
-        if (listed.action !== "list" || listed.entries[0] === undefined) {
-            throw new Error("Expected the seeded native conversation");
-        }
-        peer.send(
-            encodeNativeSessionCommand({
-                ...peer.base(),
-                kind: NATIVE_SESSION_REQUEST_KIND,
-                requestId: "find-unscoped",
-                action: "find",
-                sessionId: listed.entries[0].sessionId,
-            }),
-        );
-        expect(decodeNativeSessionResult(await peer.next("find-unscoped", ["native.session.result"]))).toMatchObject({
-            action: "find",
-            entry: { sessionId: listed.entries[0].sessionId },
-        });
-        expect((await peer.launches()).filter((launch) => launch.context !== null)).toEqual([
-            { context: JSON.stringify(seed) },
-        ]);
-    } finally {
-        await peer.close();
-    }
-});
 
 // @no-uc: Technical regression; a failed shared reader must not block the next native-browser request.
 test("Given a shared native reader crashes while listing, When a fresh conversation and the original conversation browse again, Then both see saved history without restarting", async ({
@@ -161,62 +76,6 @@ test("Given a shared native reader crashes while listing, When a fresh conversat
                 ],
             });
         }
-    } finally {
-        await peer.close();
-    }
-});
-
-// @no-uc: Technical regression; native discovery, new destinations and canonical reimports must not share identity.
-test("Given native history, When it is imported, reopened and forked, Then execution uses the destination or canonical Session", async ({
-    signal,
-}) => {
-    const peer = await runtimePeer(signal);
-    try {
-        const seed = await peer.create();
-        await peer.prompt(seed, "seed-history");
-        await peer.restart("import-computer");
-        peer.send(
-            encodeNativeSessionCommand({
-                ...peer.base(),
-                kind: NATIVE_SESSION_REQUEST_KIND,
-                requestId: "native-list",
-                action: "list",
-                cursor: null,
-            }),
-        );
-        const listed = decodeNativeSessionResult(await peer.next("native-list", ["native.session.result"]));
-        if (listed.action !== "list" || listed.entries[0] === undefined) {
-            throw new Error("Expected the seeded native conversation");
-        }
-        const sessionId = listed.entries[0].sessionId;
-        const open = async (action: "import" | "fork", requestId: string) => {
-            peer.send(
-                encodeNativeSessionCommand({
-                    ...peer.base(),
-                    kind: NATIVE_SESSION_REQUEST_KIND,
-                    requestId,
-                    action,
-                    sessionId,
-                }),
-            );
-            const result = decodeNativeSessionResult(await peer.next(requestId, ["native.session.result"]));
-            if (result.action !== "import" && result.action !== "fork") {
-                throw new Error("Expected the native opening result");
-            }
-            return result.ready.target;
-        };
-        const imported = await open("import", "native-import");
-        expect(imported.sessionId).toBe(listed.entries[0].sessionId);
-        expect.soft((await peer.nativeRequests()).at(-1)).toMatchObject({ context: JSON.stringify(imported) });
-        peer.send(encodeSessionCloseCommand({ target: imported, requestId: "close-imported", kind: "session.close" }));
-        await peer.next("close-imported", ["session.closed"]);
-        const canonical = await open("import", "native-reimport");
-        expect(canonical).toEqual(imported);
-        expect.soft((await peer.nativeRequests()).at(-1)).toMatchObject({ context: JSON.stringify(canonical) });
-        const forked = await open("fork", "native-fork");
-        expect(forked.sessionId).not.toBe(imported.sessionId);
-        await peer.prompt(forked, "continue-fork");
-        expect.soft((await peer.launches()).at(-1)).toMatchObject({ context: JSON.stringify(forked) });
     } finally {
         await peer.close();
     }
@@ -392,7 +251,6 @@ await import(${JSON.stringify(agentPeer)});
             external.agentVersion,
             undefined,
             external.capabilities,
-            external.adapterVersion,
         );
     const agent = createAgent("codex");
     const otherAgent = createAgent("other-codex");
@@ -423,23 +281,17 @@ await import(${JSON.stringify(agentPeer)});
     if (address === null || typeof address === "string") {
         throw new Error("Expected the relay port");
     }
-    const config = {
-        ...createControlledRuntimeConfig(
-            {
-                credentials: memoryComputerCredentials("r".repeat(43)),
-                computerId: "environment",
-                defaultWorkspace: workspace,
-                relayUrl: new URL(`ws://127.0.0.1:${address.port}/morty/api/v1/computers/connect`),
-            },
-            [agent, otherAgent],
-            new RuntimeLocalContext(join(directory, "computer"), process.env),
-            null,
-            resolveAgent,
-        ),
-        sessionEnvironment: (target: NativeSessionTarget) => ({
-            MORTY_TEST_SESSION_CONTEXT: JSON.stringify(target),
-        }),
-    };
+    const config = createControlledRuntimeConfig(
+        {
+            credentials: memoryComputerCredentials("r".repeat(43)),
+            computerId: "environment",
+            defaultWorkspace: workspace,
+            relayUrl: new URL(`ws://127.0.0.1:${address.port}/morty/api/v1/computers/connect`),
+        },
+        [agent, otherAgent],
+        new RuntimeLocalContext(join(directory, "computer"), process.env),
+        resolveAgent,
+    );
     let cancellation = new AbortController();
     const connected = once(server, "connection", { signal });
     let execution = runRuntime(config, cancellation.signal);

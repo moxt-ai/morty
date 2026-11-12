@@ -280,6 +280,7 @@ async function startControlledDaemon(options: { readonly stateDirectory?: string
         },
         [agent],
         new RuntimeLocalContext(stateDirectory, process.env),
+        async (agent) => agent,
     );
     const cancellation = new AbortController();
     const timer = new ControllableTimer();

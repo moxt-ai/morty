@@ -133,6 +133,7 @@ test("Given a newly created native Session, When its first Turn resolves interac
         },
         [agent],
         new RuntimeLocalContext(stateDirectory, process.env),
+        async (agent) => agent,
     );
     const cancellation = new AbortController();
     const runtime = runRuntime(config, cancellation.signal);
@@ -324,6 +325,7 @@ test("Given an Agent announced a tool call with its input, When it requests perm
         },
         [agent],
         new RuntimeLocalContext(stateDirectory, process.env),
+        async (agent) => agent,
     );
     const cancellation = new AbortController();
     const runtime = runRuntime(config, cancellation.signal);
@@ -430,6 +432,7 @@ test("Given an Agent announced a tool call and then sent a rawInput null update,
         },
         [agent],
         new RuntimeLocalContext(stateDirectory, process.env),
+        async (agent) => agent,
     );
     const cancellation = new AbortController();
     const runtime = runRuntime(config, cancellation.signal);
@@ -536,6 +539,7 @@ test("Given an Agent's first recorded form of a tool call is an update, When it 
         },
         [agent],
         new RuntimeLocalContext(stateDirectory, process.env),
+        async (agent) => agent,
     );
     const cancellation = new AbortController();
     const runtime = runRuntime(config, cancellation.signal);
@@ -642,6 +646,7 @@ test("Given a real daemon prepared a Session, When Relay queries its metadata, T
         },
         [agent],
         new RuntimeLocalContext(stateDirectory, process.env),
+        async (agent) => agent,
     );
     const cancellation = new AbortController();
     const runtime = runRuntime(config, cancellation.signal);
@@ -729,6 +734,7 @@ test("Given a real daemon persisted a Session, When Relay restores it by identif
         },
         [agent],
         new RuntimeLocalContext(stateDirectory, process.env),
+        async (agent) => agent,
     );
     const startDaemon = async () => {
         const connected = Promise.withResolvers<WebSocket>();
@@ -883,6 +889,7 @@ test("Given a running turn and a queued prompt with a file, When an active-turn 
         },
         [agent],
         new RuntimeLocalContext(stateDirectory, process.env),
+        async (agent) => agent,
     );
     const cancellation = new AbortController();
     const runtime = runRuntime(config, cancellation.signal);

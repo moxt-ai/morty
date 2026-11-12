@@ -851,9 +851,6 @@ child.once("exit", (code) => process.exit(code ?? 84));
                 { MORTY_TEST_PI_PID_FILE: piPidPath },
                 "0.85.0",
                 agentIdentity,
-                undefined,
-                "0.0.33",
-                [agentIdentity, adapterIdentity],
             );
 
             try {

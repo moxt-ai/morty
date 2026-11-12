@@ -14,10 +14,10 @@ import { prepareNewRealSession, type RealDaemonPeer, withRealDaemon } from "../s
 import { FakeOpenAiProvider } from "../support/llm/openai.ts";
 
 // The production cap is far above any test scenario, so scenarios that need
-// retirement shrink the retained process budget through the daemon environment.
+// retirement shrink the retained process budget of the embedded Runtime.
 const evictingEnvironment = (environment: Readonly<Record<string, string>>): Readonly<Record<string, string>> => ({
     ...environment,
-    MORTY_MAX_ACP_PROCESSES: "2",
+    MORTY_TEST_MAX_ACP_PROCESSES: "2",
 });
 
 async function promptRealSession(

@@ -53,7 +53,6 @@ const REMOTE_DIAGNOSTIC_FIELDS = [
     "agentCount",
     "omittedAgents",
     "agentVersion",
-    "adapterVersion",
     "versionSource",
     "executableLocation",
     "executableOverride",
@@ -70,13 +69,6 @@ interface DiagnosticSource {
 
 export interface RuntimeDiagnosticLogOptions {
     readonly maximumBytes?: number;
-    /**
-     * Directory holding the manager-written process logs. The manager is the only
-     * witness of how a worker died, so a bug report taken through a live Computer
-     * cannot explain a silent death without it. Read-only: rotation is unsafe
-     * across processes, so each file keeps exactly one writer.
-     */
-    readonly processLogsDirectory?: string;
 }
 
 export class RuntimeDiagnosticLog {
@@ -87,13 +79,11 @@ export class RuntimeDiagnosticLog {
         const maximumBytes = options.maximumBytes ?? MAXIMUM_RUNTIME_LOG_BYTES;
         const directory = logDirectory(stateDirectory);
         this.#log = new BoundedLineLog(directory, DAEMON_LOG_FILENAME, maximumBytes);
-        const processLogsDirectory = options.processLogsDirectory;
         this.#sources = [
             { maximumBytes, path: join(directory, DAEMON_LOG_FILENAME) },
-            // The process logs a Computer does not own, but must read to explain its own deaths.
-            ...(processLogsDirectory === undefined
-                ? []
-                : processLogPaths(processLogsDirectory).map((path) => ({ maximumBytes: null, path }))),
+            // The daemon's lifecycle and rejection logs are the only witness of its own silent deaths. Read-only:
+            // rotation is unsafe across processes, so each file keeps exactly one writer.
+            ...processLogPaths(stateDirectory).map((path) => ({ maximumBytes: null, path })),
         ];
     }
 

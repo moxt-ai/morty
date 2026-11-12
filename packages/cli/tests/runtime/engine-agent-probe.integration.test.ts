@@ -10,7 +10,7 @@ import { listen, port } from "@morty-build/relay-test-support/websocket";
 import { expect, test, vi } from "vitest";
 import { type WebSocket, WebSocketServer } from "ws";
 import { RuntimeInstallationStore } from "../../src/engine/runtime/connection/runtime-installation-store.ts";
-import { MortyRuntimeEngine } from "../../src/engine/runtime/engine.ts";
+import { TestComputerHost } from "../support/computer-host.ts";
 
 interface ProbeOptions {
     readonly scenario:
@@ -114,8 +114,8 @@ async function createProbeEngine(options: ProbeOptions, signal: AbortSignal) {
     await listen(http);
     const shutdown = new AbortController();
     const loopSignal = AbortSignal.any([signal, shutdown.signal]);
-    const engine = new MortyRuntimeEngine({
-        engineDataDir: join(directory, "computer"),
+    const engine = new TestComputerHost({
+        dataDirectory: join(directory, "computer"),
         agentLaunchEnvironment: {
             PATH: "",
             MORTY_CODEX_PATH: agent,

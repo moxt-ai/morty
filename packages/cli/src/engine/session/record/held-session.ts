@@ -29,7 +29,7 @@ export async function resolveHeldSession(
     const resolved = await resolveSessionDirectory(directories, session.cwd, signal);
     return {
         options: {
-            ...(await resolveAgent(session.harness, signal, session.target)),
+            ...(await resolveAgent(session.harness, signal)),
             cwd: resolved.cwd,
             signal,
             target: session.target,

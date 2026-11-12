@@ -174,7 +174,6 @@ export class AgentSettingsSnapshot {
 export type ResolveAgent = (
     harness: string,
     signal: AbortSignal,
-    target?: NativeSessionTarget,
 ) => Promise<{
     readonly agent: AcpAgentDefinition;
     readonly adapter: Adapter;

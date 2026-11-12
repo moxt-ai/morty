@@ -42,6 +42,5 @@
             "includeEntryExports": true
         }
     },
-    "ignoreBinaries": ["openssl"],
     "ignore": ["packages/cli/src/engine/acp/harness/*/upstream/**"]
 }

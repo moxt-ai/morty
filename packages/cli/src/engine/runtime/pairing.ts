@@ -10,6 +10,7 @@ import { environmentProxyDispatcher } from "../util/network/environment-proxy.ts
 import { isRecord } from "../util/value-utils.ts";
 import { discoverRuntimeAgentInventory } from "./catalog/discover-agent-catalog.ts";
 import { publishAgentCatalog } from "./catalog/publish-agent-catalog.ts";
+import { discoverConfiguredAgents } from "./catalog/refresh-agent-catalog.ts";
 import { createCatalogAgentResolver } from "./catalog/resolve-catalog-agent.ts";
 import { createRuntimeConfig, type RuntimeConfig, RuntimeLocalContext } from "./config.ts";
 import type { VerifiedComputerConnection } from "./connection/computer-connection.ts";
@@ -111,12 +112,6 @@ async function resolveDefaultWorkspace(path: string): Promise<string> {
 }
 
 async function readJsonResponse(response: Response): Promise<unknown> {
-    if (response.headers.get("cf-mitigated") === "challenge") {
-        throw new PairingClientError(
-            "relay_challenge",
-            "Cloudflare is protecting this temporary preview. Claim the deployment or use an authenticated deployment, then pair again",
-        );
-    }
     const encoded = await response.text();
     try {
         return JSON.parse(encoded);
@@ -217,31 +212,11 @@ function buildSavedRuntimeConfig(
         },
         new RuntimeAgentDependencies(inventory.readyAgents()),
         localContext,
-        { kind: "managed" },
         createCatalogAgentResolver(
-            (refreshSignal) =>
-                discoverRuntimeAgentInventory(
-                    {
-                        defaultWorkspace,
-                        dataDirectory: localContext.stateDirectory,
-                        environment: localContext.agentLaunchEnvironment,
-                        signal: refreshSignal,
-                    },
-                    connection.computerId,
-                ),
+            (refreshSignal) => discoverConfiguredAgents(config, refreshSignal),
             () => config,
             publishAgentCatalog,
         ),
-        (refreshSignal: AbortSignal) =>
-            discoverRuntimeAgentInventory(
-                {
-                    defaultWorkspace,
-                    dataDirectory: localContext.stateDirectory,
-                    environment: localContext.agentLaunchEnvironment,
-                    signal: refreshSignal,
-                },
-                connection.computerId,
-            ).then((inventory) => inventory.readyAgents()),
     );
     return config;
 }
@@ -297,9 +272,8 @@ export async function prepareComputerConnection(
     connection: VerifiedComputerConnection,
     signal: AbortSignal,
     environment: Readonly<NodeJS.ProcessEnv>,
-    maxAcpProcesses: number,
 ): Promise<RuntimeConfig> {
-    const localContext = new RuntimeLocalContext(installation.stateDirectory, environment, maxAcpProcesses);
+    const localContext = new RuntimeLocalContext(installation.stateDirectory, environment);
     const defaultWorkspace = await resolveDefaultWorkspace(connection.defaultWorkspace);
     const inventory = await discoverRuntimeAgentInventory(
         {

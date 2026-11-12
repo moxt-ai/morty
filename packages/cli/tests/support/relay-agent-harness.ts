@@ -116,6 +116,7 @@ export async function createFakeAgentHarnessRuntime(options: {
             },
             harnesses.map((definition) => fakeAgentHarness(definition, harnessState)),
             localContext,
+            async (agent) => agent,
         );
         const online = Promise.withResolvers<void>();
         runtime = runRuntime(config, signal, undefined, {

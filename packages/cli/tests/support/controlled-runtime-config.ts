@@ -5,7 +5,6 @@ import {
     createRuntimeConfig,
     type RuntimeConfig,
     RuntimeLocalContext,
-    type RuntimeReconnectTarget,
 } from "../../src/engine/runtime/config.ts";
 import { readStateDirectory } from "../../src/storage/state-directory.ts";
 import { acpAdapters } from "./acp-adapters.ts";
@@ -15,16 +14,12 @@ export function createControlledRuntimeConfig(
     connection: ComputerConnectionConfig,
     agents: readonly CatalogAgent[] = [],
     context?: RuntimeLocalContext,
-    reconnectTarget?: RuntimeReconnectTarget | null,
-    resolveAgent?: RuntimeConfig["resolveAgent"],
-    rediscoverAgents?: RuntimeConfig["rediscoverAgents"],
+    resolveAgent: RuntimeConfig["resolveAgent"] = async (agent) => agent,
 ): RuntimeConfig {
     return createRuntimeConfig(
         connection,
         new RuntimeAgentDependencies(agents, acpAdapters),
         context ?? new RuntimeLocalContext(readStateDirectory(), process.env),
-        reconnectTarget,
         resolveAgent,
-        rediscoverAgents,
     );
 }
