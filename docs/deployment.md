@@ -49,8 +49,7 @@ account-level storage permission must stay in the Morty-only account. Bucket-sco
 object credentials require a separately verified S3 upload path.
 
 Ordinary deployment does not need D1, DNS, zone administration, member management
-or API-token provisioning permissions. Retained D1 data is outside the active
-application; any maintenance needs separately authorized credentials.
+or API-token provisioning permissions.
 
 Deployment and restore verify account ownership, active status and a valid future
 expiration before making changes, and warn when expiry is within 30 days. The
@@ -61,8 +60,8 @@ never use a personal User API Token or a Global API key as a fallback.
 Never log credentials.
 
 Morty enforces identity, sharing, pairing and authorization at the owning execution
-boundary. Preserve retained computer and Agent data; historical database migrations
-are immutable.
+boundary. Preserve active computer and Agent data; the migration history of every
+bound database is immutable.
 
 Deployment checks account authority, artifact identity, required secrets and the
 destination resources before writes. Production refuses to activate an installer until the exact
@@ -99,7 +98,7 @@ must pass the exact-archive acceptance gates first. Keep the existing installer
 available until the accepted npm archive exists; then activate the matching cloud
 artifact and verify health, assets, pairing and Session access.
 
-D1 migrations run before Worker activation and are never reversed. For ordinary
+Database migrations are never reversed. For ordinary
 updates, a failed deployment restores the previous Worker only when Durable
 Object lifecycle history permits it. Creation or deletion of a DO namespace
 requires forward repair; do not claim an ordinary version rollback restored it.

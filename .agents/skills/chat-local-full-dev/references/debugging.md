@@ -17,7 +17,7 @@ Durable Objects, so most deployed failure modes reproduce locally.
 | --- | --- |
 | Morty Worker output | `chatLog` from `prepare` |
 | Runtime manager diagnostics | `setupLog` from the stack `runtimes` record (`logs --worker runtime`); read the daemon log with the checkout CLI as shown below |
-| D1 / Durable Objects | `chatPersist` |
+| Durable Objects | `chatPersist` |
 | Stack record (pids, origins, paths) | `<stateDir>/stack.json` |
 
 Read Worker and setup logs with
@@ -46,18 +46,16 @@ response alone does not establish that the requested Agent operation completed.
 
 ## Inspecting persisted state
 
-Directory D1 tables live under `<chatPersist>/v3/d1/<hash>/`. Durable Object SQLite
-lives under `<chatPersist>/v3/do/<class-name>/<id>.sqlite`. Inspect either with
-the `sqlite3` CLI:
+Durable Object SQLite lives under `<chatPersist>/v3/do/<class-name>/<id>.sqlite`.
+Inspect it with the `sqlite3` CLI:
 
 ```sh
 sqlite3 <path.sqlite> '.tables'
 ```
 
-The current conversation directory is owned by the connected Runtime. Retained
-cloud tables from earlier releases are not evidence of current managed Sessions.
+The current conversation directory is owned by the connected Runtime.
 
-Durable Object and D1 files are WAL-backed. Inspect them through SQLite so the WAL
+Durable Object files are WAL-backed. Inspect them through SQLite so the WAL
 is included. To stop the stack before inspection while retaining its evidence,
 use `node scripts/local-dev.cjs remove --state-dir <stateDir> --keep-state`;
 `remove` without `--keep-state` deletes the isolated state directory.

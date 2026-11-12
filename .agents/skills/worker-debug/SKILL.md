@@ -153,12 +153,12 @@ Do not assume the current checkout was deployed at the failure time. Distinguish
 an already-fixed deployment mismatch from a defect still present on current
 `main`.
 
-### Read deployed D1 or Durable Object data
+### Read deployed Durable Object data
 
 When retained telemetry cannot reveal the persisted value needed to diagnose a
 production failure, deploy a separate, short-lived, token-gated
-Worker in the same account and bind the target deployment's D1 database or
-Durable Object class with `script_name`. Query only the records required for the
+Worker in the same account and bind the target deployment's Durable Object
+class with `script_name`. Query only the records required for the
 diagnosis through an existing internal read boundary, then delete the helper on
 success or failure.
 
