@@ -17,6 +17,29 @@ jobs:
         with:
           persist-credentials: false
           fetch-depth: 0
+      - name: Install pinned workflow analyzers
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # zizmor 1.32.0 and actionlint 1.7.12, Linux x64 release assets.
+          gh api repos/zizmorcore/zizmor/releases/assets/703541932 \
+            --header 'Accept: application/octet-stream' > "$RUNNER_TEMP/zizmor.tar.gz"
+          gh api repos/rhysd/actionlint/releases/assets/384924896 \
+            --header 'Accept: application/octet-stream' > "$RUNNER_TEMP/actionlint.tar.gz"
+          printf '%s  %s\n' 'bb110cc765eca9cd7efb2e284a956be5974c60027b0970f16397d86208a9957b' "$RUNNER_TEMP/zizmor.tar.gz" | sha256sum --check --strict
+          printf '%s  %s\n' '8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8' "$RUNNER_TEMP/actionlint.tar.gz" | sha256sum --check --strict
+          tar -xzf "$RUNNER_TEMP/zizmor.tar.gz" -C "$RUNNER_TEMP" zizmor
+          tar -xzf "$RUNNER_TEMP/actionlint.tar.gz" -C "$RUNNER_TEMP" actionlint
+      - name: Check workflow syntax and shell scripts
+        run: |
+          # Require the hosted runner's ShellCheck instead of silently skipping it.
+          shellcheck --version
+          "$RUNNER_TEMP/actionlint" -color
+      - name: Check workflow security
+        # Block medium/high findings; low-severity modernization is outside this security gate.
+        # Offline analysis needs no API token or production credentials.
+        run: |
+          "$RUNNER_TEMP/zizmor" --offline --strict-collection --min-severity medium --format github .github/workflows
       - name: Scan every commit for credentials
         env:
           GH_TOKEN: ${{ github.token }}

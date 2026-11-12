@@ -1,7 +1,7 @@
 name: Markdown PR policy
 
 on:
-  pull_request_target:
+  pull_request_target: # zizmor: ignore[dangerous-triggers] Base-branch policy reads PR metadata and writes statuses; no PR checkout or code execution.
     types: [opened, reopened, synchronize, edited, ready_for_review]
   merge_group:
     types: [checks_requested]
