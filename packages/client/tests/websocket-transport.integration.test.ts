@@ -431,7 +431,10 @@ it("Given an idle Session stream whose subscription ends, When the retry delay e
     vi.useFakeTimers({ toFake: ["Date", "clearTimeout", "setTimeout"] });
     vi.setSystemTime(new Date("2030-01-01T00:00:00.000Z"));
     const peer = await liveEventPeer();
+    const transport = new WsTransport();
+    onTestFinished(transport.close);
     const client = new MortyClient({
+        transport,
         credentialProvider: {
             credential: async (signal: AbortSignal) => {
                 signal.throwIfAborted();
@@ -480,7 +483,10 @@ it("Given a live Session stream cannot reconnect, When its retry budget expires,
     vi.useFakeTimers({ toFake: ["Date", "clearTimeout", "setTimeout"] });
     vi.setSystemTime(new Date("2030-01-01T00:00:00.000Z"));
     const peer = await liveEventPeer(1);
+    const transport = new WsTransport();
+    onTestFinished(transport.close);
     const client = new MortyClient({
+        transport,
         credentialProvider: {
             credential: async (signal: AbortSignal) => {
                 signal.throwIfAborted();
@@ -515,7 +521,10 @@ it("Given caller-owned Session recovery, When its live stream disconnects, Then 
     vi.useFakeTimers({ toFake: ["Date", "clearTimeout", "setTimeout"] });
     vi.setSystemTime(new Date("2030-01-01T00:00:00.000Z"));
     const peer = await liveEventPeer();
+    const transport = new WsTransport();
+    onTestFinished(transport.close);
     const client = new MortyClient({
+        transport,
         credentialProvider: {
             credential: async (signal: AbortSignal) => {
                 signal.throwIfAborted();
@@ -546,7 +555,10 @@ it("Given caller-owned Session recovery, When its live stream receives nothing p
     vi.useFakeTimers({ toFake: ["Date", "clearTimeout", "setTimeout"] });
     vi.setSystemTime(new Date("2030-01-01T00:00:00.000Z"));
     const peer = await liveEventPeer(0, "silent");
+    const transport = new WsTransport();
+    onTestFinished(transport.close);
     const client = new MortyClient({
+        transport,
         credentialProvider: {
             credential: async (signal: AbortSignal) => {
                 signal.throwIfAborted();

@@ -167,7 +167,7 @@ function sessionEntry(app: TestApp, title: string): HTMLElement {
     return entry;
 }
 
-test("Given four completed Sessions visited in turn, When I leave each Session for New Session, Then its browser connection closes instead of accumulating heartbeat transports", {
+test("Given completed Sessions on one Computer, When I switch between them and New Session, Then one browser connection carries the correct history and new replies", {
     timeout: dedicatedEnvironmentTimeout,
 }, async () => {
     const environment = await createChatWorkerEnvironment(true);
@@ -189,9 +189,29 @@ test("Given four completed Sessions visited in turn, When I leave each Session f
             expect(app.optionalElementByTestId(dataTestId.workingIndicator)).toBeNull();
         });
         await network.waitForBrowserConnections(1, AbortSignal.timeout(10_000));
+        expect(network.browserConnectionsOpened).toBe(1);
         await app.user.click(await app.queryElementByTestId(dataTestId.newConversation));
-        await network.waitForBrowserConnections(0, AbortSignal.timeout(10_000));
     }
+    for (const title of ["First completed Session", "Fourth completed Session", "First completed Session"]) {
+        await app.user.click(await app.waitForView(() => sessionEntry(app, title)));
+        await app.waitForView(() => {
+            const messages = getByRole(document.body, "log", { name: "Messages" }).textContent;
+            expect(messages).toContain(title);
+            expect(messages).not.toContain(
+                title === "First completed Session" ? "Fourth completed Session" : "First completed Session",
+            );
+            expect(app.elementByTestId(dataTestId.messageComposer)).toHaveProperty("disabled", false);
+        });
+        expect(network.browserConnectionsOpened).toBe(1);
+    }
+    await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "Reply after switching");
+    await app.waitForView(() => {
+        expect(app.elementsByTestId(dataTestId.agentResponse).at(-1)?.textContent).toContain("Reply after switching");
+        expect(app.optionalElementByTestId(dataTestId.workingIndicator)).toBeNull();
+    });
+    expect(network.browserConnectionsOpened).toBe(1);
+    await app.close();
+    await network.waitForBrowserConnections(0, AbortSignal.timeout(10_000));
 });
 
 test("Given a message the network has not delivered yet, When I switch to another Session, it finishes in the background and I switch back, Then it shows once with its reply and I can keep chatting", {

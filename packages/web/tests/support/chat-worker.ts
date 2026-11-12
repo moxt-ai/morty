@@ -1,5 +1,5 @@
 import { resolve } from "node:path";
-import { MortyClient } from "@morty-build/client";
+import { MortyClient, WsTransport } from "@morty-build/client";
 import * as v from "valibot";
 import type { ControlledAgent } from "../../../../tests/support/fake-daemon/runtime.ts";
 import { createResponseLossProxy } from "../../../relay-test-support/src/response-loss-proxy.ts";
@@ -91,7 +91,10 @@ export async function createChatWorkerEnvironment(
                 }
                 const access = v.parse(v.object({ credential: v.string() }), await response.json());
                 signal.throwIfAborted();
+                const transport = new WsTransport();
                 return new MortyClient({
+                    transport,
+                    onClose: transport.close,
                     endpoint: cloud.directOrigin,
                     computerId: runtime.computerId,
                     credentialProvider: {

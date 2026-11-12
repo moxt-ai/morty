@@ -3,7 +3,7 @@ import { createServer } from "node:http";
 import type { SessionEvent } from "@morty-build/client/protocol";
 import { afterEach, describe, expect, it } from "vitest";
 import { WebSocketServer } from "ws";
-import { MortyClient, MortyPageRequest } from "../src/index.ts";
+import { MortyClient, MortyPageRequest, WsTransport } from "../src/index.ts";
 
 const recordedAt = "2026-10-07T00:00:00.000Z";
 
@@ -81,7 +81,9 @@ describe("Session Event Log V2 SDK", () => {
         if (address === null || typeof address === "string") {
             throw new Error("Expected an IP server address");
         }
+        const transport = new WsTransport();
         const client = new MortyClient({
+            transport,
             credentialProvider: {
                 credential: async (signal: AbortSignal) => {
                     signal.throwIfAborted();
@@ -105,6 +107,7 @@ describe("Session Event Log V2 SDK", () => {
             });
         } finally {
             client.close();
+            transport.close();
             for (const socket of peer.clients) {
                 socket.terminate();
             }

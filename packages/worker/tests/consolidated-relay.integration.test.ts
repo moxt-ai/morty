@@ -1,4 +1,4 @@
-import { MortyClient, MortyPageRequest } from "@morty-build/client";
+import { MortyClient, MortyPageRequest, WsTransport } from "@morty-build/client";
 import { prepareTestMortyRelayBindings } from "@morty-build/relay-test-support/cloudflare";
 import * as v from "valibot";
 import { afterEach, beforeAll, beforeEach, expect, test, vi } from "vitest";
@@ -109,7 +109,9 @@ test("Given the default SDK transport and caller-neutral Morty API paths, When a
     );
     expect(access.endpoint).toBe(bindings.origin);
     const session = `/v1/computers/${owner.computerId}/harnesses/${access.target.harness}/sessions/${access.target.sessionId}`;
+    const transport = new WsTransport();
     const client = new MortyClient({
+        transport,
         endpoint: access.endpoint,
         computerId: owner.computerId,
         credentialProvider: { credential: async () => access.credential },
@@ -178,5 +180,6 @@ test("Given the default SDK transport and caller-neutral Morty API paths, When a
         expect(audienceEndpoint.status).toBe(404);
     } finally {
         client.close();
+        transport.close();
     }
 });
