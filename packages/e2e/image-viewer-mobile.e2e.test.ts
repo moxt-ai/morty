@@ -13,11 +13,16 @@ test("Given mobile draft images, When the user opens the gallery and goes Back, 
 }, testInfo) => {
     const { page } = runtime;
     await runtime.openPairedChat();
-    await page.getByRole("textbox", { name: "Message" }).fill("Mobile draft");
+    await expect(page.getByRole("button", { name: "Configure agent" })).toBeEnabled();
+    const composer = page.getByRole("textbox", { name: "Message" });
+    await composer.tap();
+    await composer.fill("Mobile draft");
+    await expect(composer).toHaveValue("Mobile draft");
     await page.getByLabel("Choose attachments").setInputFiles([
         { name: "tall.png", mimeType: "image/png", buffer: tallImage },
         { name: "small.png", mimeType: "image/png", buffer: smallImage },
     ]);
+    await expect(composer).toHaveValue("Mobile draft");
     const url = page.url();
     await page.getByRole("button", { name: "View image: tall.png" }).tap();
     const viewer = page.getByRole("dialog", { name: "Image viewer" });
@@ -32,5 +37,5 @@ test("Given mobile draft images, When the user opens the gallery and goes Back, 
     await page.goBack();
     await expect(viewer).toBeHidden();
     await expect(page).toHaveURL(url);
-    await expect(page.getByRole("textbox", { name: "Message" })).toHaveValue("Mobile draft");
+    await expect(composer).toHaveValue("Mobile draft");
 });

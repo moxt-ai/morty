@@ -14,8 +14,7 @@ installation requirements, data handling and known limitations.
 For a reproducible bug or a feature request, use this repository's
 [issue tracker](https://github.com/moxt-ai/morty/issues). Include your
 operating system, Node version, Morty version, Agent and version, reproduction
-steps, expected behavior and actual result. If you cannot access the tracker,
-email [acmerfight@gmail.com](mailto:acmerfight@gmail.com).
+steps, expected behavior and actual result.
 
 Run `npx --yes @morty-build/cli status` and `npx --yes @morty-build/cli doctor`
 when diagnosing installation problems. Inspect diagnostic output before sharing

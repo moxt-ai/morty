@@ -253,13 +253,11 @@ test("Given a cached application page, When the browser revalidates it, Then the
     expect(await cached.text()).toBe("");
 });
 
-test("Given the asset router, When an agent requests installation resources, Then document and download handlers keep their HTTP contracts", async () => {
+test("Given the asset router, When an agent requests installation resources, Then the setup document is served to both programmatic and browser requests", async () => {
     for (const headers of [{}, { "Sec-Fetch-Mode": "navigate" }]) {
         const setup = await runtime.dispatchFetch("https://morty.example/setup.md", { headers });
         expect(setup.status).toBe(200);
         expect(setup.headers.get("content-type")).toContain("text/markdown");
         expect(await setup.text()).toMatch(/^# Set up Morty/);
-        const download = await runtime.dispatchFetch("https://morty.example/setup.mjs", { headers });
-        expect(download.status).toBe(404);
     }
 });

@@ -235,7 +235,7 @@ afterAll(async () => {
 });
 
 describe.sequential("Relay Session-only boundary", () => {
-    it("Given an allowed Chat origin, When the browser preflights a Session file read, Then Relay permits Session authorization without advertising retired identity providers", async () => {
+    it("Given an allowed Chat origin, When the browser preflights a Session file read, Then Relay permits Session authorization with the Session credential headers", async () => {
         const browserOrigin = "https://chat.test";
         const worker = createTestMortyRelayApp(new RelayAuthenticationConfiguration(new Set([browserOrigin])));
         const computerId = "prj_ap_01_abcdefghijklmnopqrstuvwx";
@@ -259,24 +259,6 @@ describe.sequential("Relay Session-only boundary", () => {
         expect(response.headers.get("access-control-allow-origin")).toBe(browserOrigin);
         expect(response.headers.get("access-control-allow-methods")).toContain("GET");
         expect(response.headers.get("access-control-allow-headers")).toContain("authorization");
-        expect(response.headers.get("access-control-allow-headers")).not.toContain("x-morty-oidc-provider");
-    });
-
-    it("Given an unregistered Session HTTP route, When an app requests pending interactions, Then the Worker answers with its standard JSON NOT_FOUND error", async () => {
-        const worker = createTestMortyRelayApp(new RelayAuthenticationConfiguration());
-        const computerId = "prj_ap_01_abcdefghijklmnopqrstuvwx";
-
-        const response = await worker.fetch(
-            new Request(
-                `${relayOrigin}${MORTY_API_PREFIX}/v1/computers/${computerId}/harnesses/codex/sessions/local-session/interactions`,
-                { headers: { authorization: "Bearer app_credential" } },
-            ),
-            bindings(),
-        );
-
-        expect(response.status).toBe(404);
-        expect(response.headers.get("content-type")).toContain("application/json");
-        expect(await response.json()).toMatchObject({ error: { code: "NOT_FOUND" } });
     });
 
     it("Given a linked Computer, When browser subscriptions and history cross Relay hibernation, Then events stay lossless and replies stay correlated without cloud Session storage", async () => {

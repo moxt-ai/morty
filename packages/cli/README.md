@@ -49,10 +49,10 @@ sharing links and revoke access when it is no longer needed.
 
 See the [product guide](https://github.com/moxt-ai/morty/blob/main/README.md)
 for full data handling and limitations. For installation help and ordinary bugs,
-use [support](https://github.com/moxt-ai/morty/blob/main/SUPPORT.md) or email
-[acmerfight@gmail.com](mailto:acmerfight@gmail.com) if the source repository is not
-accessible. Report security vulnerabilities privately to that email; never put
-credentials or pairing links in a public issue.
+use [support](https://github.com/moxt-ai/morty/blob/main/SUPPORT.md). Report
+security vulnerabilities privately through the
+[Security tab](https://github.com/moxt-ai/morty/security) of the repository; never
+put credentials or pairing links in a public issue.
 
 ## License
 
