@@ -4,9 +4,15 @@ import { once } from "node:events";
 import { createServer } from "node:http";
 import { afterEach, expect, it, onTestFinished, vi } from "vitest";
 import { WebSocketServer } from "ws";
-import { MortyClient, MortyConnectionError, type MortyWebSocketConnector, WsTransport } from "../src/index.ts";
+import {
+    MortyClient,
+    MortyConnectionError,
+    type MortyTransportCall,
+    type MortyWebSocketConnector,
+    WsTransport,
+} from "../src/index.ts";
 
-// The transport routes by the claims it decodes; only the Relay verifies the signature.
+// Only the Relay verifies the credential; routing uses the explicit endpoint target.
 const sessionClaims = btoa(
     JSON.stringify({
         issuedAtEpochMilliseconds: 0,
@@ -22,7 +28,11 @@ const sessionClaims = btoa(
     .replace(/=+$/u, "");
 const sessionCredential = `msession_${sessionClaims}.${"A".repeat(43)}`;
 
-function computerRequest(address: string, init?: RequestInit): Request {
+function computerRequest(
+    address: string,
+    init?: { readonly body?: string; readonly headers?: HeadersInit; readonly method?: "GET" | "POST" | "PUT" },
+    computerId = "computer-1",
+): MortyTransportCall {
     const url = new URL(address);
     if (!url.pathname.startsWith("/morty/api/v1/computers/")) {
         url.pathname = `/morty/api/v1/computers/computer-1/harnesses/claude/sessions/session-1${url.pathname}`;
@@ -31,7 +41,19 @@ function computerRequest(address: string, init?: RequestInit): Request {
     }
     const headers = new Headers(init?.headers);
     headers.set("authorization", `Bearer ${sessionCredential}`);
-    return new Request(url, { ...init, headers });
+    return {
+        endpoint: {
+            scope: "session",
+            computerId,
+            method: init?.method ?? "GET",
+            path: `${url.pathname}${url.search}`,
+            transport: "websocket",
+        },
+        origin: url,
+        headers: Object.fromEntries(headers.entries()),
+        body: init?.body ?? null,
+        signal: new AbortController().signal,
+    };
 }
 
 class BrowserWebSocket extends EventTarget implements WebSocket {
@@ -223,6 +245,8 @@ it("Given a browser bound to one computer, When it opens another Session or addr
             transport.fetch(
                 computerRequest(
                     "https://relay.example.test/morty/api/v1/computers/computer-2/harnesses/claude/sessions/session-1/configuration",
+                    undefined,
+                    "computer-2",
                 ),
             ),
         ).rejects.toThrow("cannot connect to multiple computers");

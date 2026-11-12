@@ -1,4 +1,5 @@
 import * as v from "valibot";
+import { type IdentityOperation, identityEndpoint } from "../api/api-endpoints.ts";
 import type { ApiTransport } from "../api/api-transport.ts";
 import { browserAccessEntry } from "../local-storage/central-local-storage.ts";
 import { CloudApiError, ManagementApi } from "../management/management-api.ts";
@@ -103,8 +104,14 @@ export type LostAccess = { readonly kind: "revoked" } | { readonly kind: "gone" 
 const ACCESS_REVOKED = "ACCESS_REVOKED";
 
 interface Options {
-    readonly fetchRequest: (request: Request) => Promise<Response>;
+    readonly fetchRequest: ApiTransport["fetch"];
     readonly origin: string;
+}
+
+interface IdentityRequest {
+    readonly computerId?: string;
+    readonly headers: Readonly<Record<string, string>>;
+    readonly body?: string;
 }
 
 /**
@@ -125,7 +132,7 @@ function transferRedemptionKey(code: string): string {
 }
 
 export class AnonymousIdentityApi {
-    readonly #fetchRequest: (request: Request) => Promise<Response>;
+    readonly #fetchRequest: ApiTransport["fetch"];
     readonly #origin: string;
 
     constructor(options: Options) {
@@ -216,7 +223,6 @@ export class AnonymousIdentityApi {
             await this.#request(
                 "/identity/transfers",
                 {
-                    method: "POST",
                     headers: {
                         authorization: `Bearer ${v.parse(tokenSchema, token)}`,
                         "content-type": "application/json",
@@ -251,7 +257,6 @@ export class AnonymousIdentityApi {
             await this.#request(
                 "/identity/transfers/redeem",
                 {
-                    method: "POST",
                     headers: { "content-type": "application/json" },
                     body: JSON.stringify({
                         code,
@@ -274,13 +279,11 @@ export class AnonymousIdentityApi {
         waitForChange: ApiTransport["waitForChange"],
         signal: AbortSignal,
     ): Promise<void> =>
-        await waitForChange(
-            new Request(this.#url("/identity/devices"), {
-                method: "GET",
-                headers: { authorization: `Bearer ${v.parse(tokenSchema, token)}` },
-                signal,
-            }),
-        );
+        await waitForChange({
+            endpoint: this.#endpoint("/identity/devices"),
+            headers: { authorization: `Bearer ${v.parse(tokenSchema, token)}` },
+            signal,
+        });
 
     /** When this access ends: the browser's device term, the latest among the links it opened; null without one. */
     readonly accessExpiresAt = async (token: string, signal: AbortSignal): Promise<string | null> =>
@@ -288,7 +291,7 @@ export class AnonymousIdentityApi {
             accessTermSchema,
             await this.#request(
                 "/session",
-                { method: "GET", headers: { authorization: `Bearer ${v.parse(tokenSchema, token)}` } },
+                { headers: { authorization: `Bearer ${v.parse(tokenSchema, token)}` } },
                 signal,
             ),
         ).accessExpiresAt;
@@ -299,7 +302,7 @@ export class AnonymousIdentityApi {
             linkedDevicesSchema,
             await this.#request(
                 "/identity/devices",
-                { method: "GET", headers: { authorization: `Bearer ${v.parse(tokenSchema, token)}` } },
+                { headers: { authorization: `Bearer ${v.parse(tokenSchema, token)}` } },
                 signal,
             ),
         ).devices;
@@ -313,7 +316,7 @@ export class AnonymousIdentityApi {
             otherBrowserAccessEndedSchema,
             await this.#request(
                 "/identity/v1/other-browser-access",
-                { method: "DELETE", headers: { authorization: `Bearer ${v.parse(tokenSchema, token)}` } },
+                { headers: { authorization: `Bearer ${v.parse(tokenSchema, token)}` } },
                 signal,
             ),
         );
@@ -325,7 +328,7 @@ export class AnonymousIdentityApi {
             deviceAccessEndedSchema,
             await this.#request(
                 `/identity/v1/devices/${encodeURIComponent(deviceId)}`,
-                { method: "DELETE", headers: { authorization: `Bearer ${v.parse(tokenSchema, token)}` } },
+                { headers: { authorization: `Bearer ${v.parse(tokenSchema, token)}` } },
                 signal,
             ),
         );
@@ -337,11 +340,11 @@ export class AnonymousIdentityApi {
         access: StoredAccessWriter,
     ): Promise<void> => {
         const headers = { authorization: `Bearer ${v.parse(tokenSchema, token)}` };
-        const session = await this.#response("/session", { method: "GET", headers }, signal);
+        const session = await this.#response("/session", { headers }, signal);
         await session.body?.cancel();
         // The Worker names the deletion that ends this credential's kind.
         const path = v.parse(credentialRevocationPathSchema, session.headers.get("Morty-Credential-Revocation"));
-        await this.#request(path, { method: "DELETE", headers }, signal);
+        await this.#request(path, { headers }, signal);
         const scope = readIdentityScope();
         if (scope !== null) {
             access.forget(scope);
@@ -363,9 +366,9 @@ export class AnonymousIdentityApi {
             return v.parse(
                 anonymousSessionSchema,
                 await this.#request(
-                    `/computers/${encodeURIComponent(identity.computerId)}/session`,
+                    "/session",
                     {
-                        method: "GET",
+                        computerId: identity.computerId,
                         headers: {
                             authorization: `Bearer ${identity.computerToken}`,
                         },
@@ -385,26 +388,32 @@ export class AnonymousIdentityApi {
         }
     };
 
-    readonly #request = async (path: string, init: RequestInit, requestSignal: AbortSignal): Promise<unknown> => {
+    readonly #request = async (
+        path: IdentityOperation,
+        init: IdentityRequest,
+        requestSignal: AbortSignal,
+    ): Promise<unknown> => {
         const response = await this.#response(path, init, requestSignal);
         const value: unknown = response.status === 204 ? null : await response.json();
         requestSignal.throwIfAborted();
         return value;
     };
 
-    readonly #url = (path: string): URL => {
-        const scope = readIdentityScope();
-        const scopedPath =
-            scope !== null && !path.startsWith("/computers/") && path !== "/identity/transfers/redeem"
-                ? `/computers/${encodeURIComponent(scope.computerId)}${path}`
-                : path;
-        return new URL(`/morty/api${scopedPath}`, this.#origin);
-    };
+    readonly #endpoint = (path: IdentityOperation, computerId = readIdentityScope()?.computerId ?? null) =>
+        identityEndpoint(this.#origin, computerId, path);
 
-    readonly #response = async (path: string, init: RequestInit, requestSignal: AbortSignal): Promise<Response> => {
+    readonly #response = async (
+        path: IdentityOperation,
+        init: IdentityRequest,
+        requestSignal: AbortSignal,
+    ): Promise<Response> => {
         const signal = AbortSignal.any([requestSignal, AbortSignal.timeout(30_000)]);
-        const headers = new Headers(init.headers);
-        const response = await this.#fetchRequest(new Request(this.#url(path), { ...init, headers, signal }));
+        const response = await this.#fetchRequest({
+            endpoint: this.#endpoint(path, init.computerId),
+            body: init.body ?? null,
+            headers: init.headers,
+            signal,
+        });
         signal.throwIfAborted();
         if (!response.ok) {
             const value: unknown = await response.json();

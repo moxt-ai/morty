@@ -1,10 +1,9 @@
-import { computerRequestTarget } from "@morty-build/client";
 import { decodeFileReadCommand, MORTY_API_PREFIX } from "@morty-build/client/protocol";
 import { Hono, type MiddlewareHandler } from "hono";
 import * as v from "valibot";
 import { COMPUTER_INTERNAL_PREFIX } from "../../contracts/computer-relay-http.ts";
 import { validateIdentifier } from "../../contracts/relay/pairing.ts";
-import { computerIdFromApiPath } from "../../http/computer-api-target.ts";
+import { computerIdFromApiPath, matchesComputerApiTarget } from "../../http/computer-api-target.ts";
 import { computerFromPath, computerFromRuntimeCredential } from "../../http/computer-target.ts";
 import { errorHandler } from "../../http/error-middleware.ts";
 import { json } from "../../http/json.ts";
@@ -88,12 +87,7 @@ export function createComputerHttpRoutes(
                         const authorized = await authorizeSessionContentUpload(operation, sessionAccess);
                         return authorized instanceof Response ? authorized : new Response(null, { status: 204 });
                     },
-                    validateTarget: (operation) => {
-                        const target = computerRequestTarget(operation);
-                        const targetId =
-                            target?.kind === "operation" ? target.computerId : computerIdFromApiPath(operation);
-                        return targetId === computerId;
-                    },
+                    validateTarget: (operation) => matchesComputerApiTarget(operation, computerId),
                 });
             },
         )

@@ -1,4 +1,4 @@
-import { MortyClient, MortyPageRequest, WsTransport } from "@morty-build/client";
+import { MortyClient, MortyPageRequest, sessionEndpoints, WsTransport } from "@morty-build/client";
 import * as v from "valibot";
 import { afterEach, beforeEach, expect, onTestFinished, test, vi } from "vitest";
 import worker from "../src/worker/application.ts";
@@ -142,12 +142,13 @@ test("Given a device with an open Session, When its owner disconnects it while t
         const transport = new WsTransport();
         onTestFinished(() => transport.close());
         const readAccess = () =>
-            transport.fetch(
-                new Request(
-                    `${cloud.origin}/morty/api/v1/computers/${window.computerId}/harnesses/${window.target.harness}/sessions/${window.target.sessionId}/configuration`,
-                    { headers: { authorization: `Bearer ${window.credential}` }, signal: AbortSignal.timeout(15_000) },
-                ),
-            );
+            transport.fetch({
+                endpoint: sessionEndpoints.readConfiguration(window.computerId, window.target),
+                origin: new URL("/morty/api/", cloud.origin),
+                headers: { authorization: `Bearer ${window.credential}` },
+                body: null,
+                signal: AbortSignal.timeout(15_000),
+            });
         expect((await readAccess()).status).toBe(200);
         await runtime.disconnect();
         const failed = await request(

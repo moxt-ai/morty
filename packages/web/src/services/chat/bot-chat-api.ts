@@ -18,10 +18,11 @@ import {
     type SessionConfigurationSelection,
 } from "@morty-build/client/protocol";
 import * as v from "valibot";
-import type { ApiResponseSnapshot, ApiTransport } from "../api/api-transport.ts";
+import { type ChatOperation, chatEndpoint, managementEndpoint } from "../api/api-endpoints.ts";
+import type { ApiEndpoint, ApiResponseSnapshot, ApiTransport } from "../api/api-transport.ts";
 import { recordBrowserDiagnostic } from "../diagnostics/browser-diagnostics.ts";
 import { type AgentModelCatalog, modelSelections } from "../diagnostics/model-catalog.ts";
-import { CloudApiError, computerPairingUrl, ManagementApi } from "../management/management-api.ts";
+import { CloudApiError, ManagementApi } from "../management/management-api.ts";
 
 const identifier = v.custom<Identifier>(isIdentifier);
 const sessionCredentialSchema = v.pipe(
@@ -158,7 +159,7 @@ function continuedSession(value: unknown) {
 }
 
 export class BotChatApi {
-    readonly #fetchRequest: (request: Request) => Promise<Response>;
+    readonly #fetchRequest: ApiTransport["fetch"];
     readonly #origin: string;
     readonly #computerId: string;
     readonly #getToken: (signal: AbortSignal) => Promise<string | null>;
@@ -170,7 +171,7 @@ export class BotChatApi {
     readonly #waitForChange: ApiTransport["waitForChange"];
     readonly readComputerPairing: ManagementApi["readComputerPairing"];
     constructor(options: {
-        readonly fetchRequest: (request: Request) => Promise<Response>;
+        readonly fetchRequest: ApiTransport["fetch"];
         /** Borrow the application's Computer connection; this API owns only its Session clients. */
         readonly sessionTransport: () => WsTransport;
         readonly origin: string;
@@ -321,8 +322,7 @@ export class BotChatApi {
         decodeWorkspaceEntriesEvent(JSON.stringify(await this.#request("workspace/directory", { directory }, signal)));
     /** Resolves once the watched resource differs from the snapshot this client last read, or from its first sample. */
     readonly #waitForResourceChange = async (
-        url: URL,
-        method: "GET" | "POST",
+        endpoint: ApiEndpoint,
         parent: AbortSignal,
         onReady?: (snapshot: ApiResponseSnapshot) => void,
     ) => {
@@ -331,21 +331,20 @@ export class BotChatApi {
         if (token === null) {
             throw new CloudApiError("UNAUTHENTICATED", "Your session is unavailable.");
         }
-        await this.#waitForChange(
-            new Request(url, { method, headers: { authorization: `Bearer ${token}` }, signal }),
-            onReady,
-        );
+        await this.#waitForChange({ endpoint, headers: { authorization: `Bearer ${token}` }, signal }, onReady);
     };
     /** Resolves once the Computer's pairing differs from the pairing this client last read. */
     readonly waitForComputerPairingChange = async (parent: AbortSignal): Promise<void> =>
-        await this.#waitForResourceChange(computerPairingUrl(this.#origin, this.#computerId), "GET", parent);
+        await this.#waitForResourceChange(
+            managementEndpoint(this.#origin, this.#computerId, "/computer/pairing-state"),
+            parent,
+        );
     readonly waitForComputerConfigurationChange = async (
         parent: AbortSignal,
         onReady?: (configuration: BotComputerConfiguration) => void,
     ): Promise<void> =>
         await this.#waitForResourceChange(
-            new URL(`/morty/api/chat/computers/${encodeURIComponent(this.#computerId)}/workspace`, this.#origin),
-            "POST",
+            chatEndpoint(this.#origin, this.#computerId, "workspace"),
             parent,
             onReady === undefined
                 ? undefined
@@ -483,7 +482,7 @@ export class BotChatApi {
         this.#sessionClients.add(client);
         return client;
     };
-    readonly #request = async (operation: string, body: unknown, parent: AbortSignal): Promise<unknown> => {
+    readonly #request = async (operation: ChatOperation, body: unknown, parent: AbortSignal): Promise<unknown> => {
         const signal = AbortSignal.any([
             parent,
             AbortSignal.timeout(
@@ -501,24 +500,16 @@ export class BotChatApi {
             throw new CloudApiError("UNAUTHENTICATED", "Your session is unavailable.");
         }
         const send = (access: string) =>
-            this.#fetchRequest(
-                new Request(
-                    new URL(
-                        `/morty/api/chat/computers/${encodeURIComponent(this.#computerId)}/${operation}`,
-                        this.#origin,
-                    ),
-                    {
-                        method: "POST",
-                        signal,
-                        redirect: "error",
-                        headers: {
-                            authorization: `Bearer ${access}`,
-                            "content-type": "application/json",
-                        },
-                        body: body === undefined ? null : JSON.stringify(body),
-                    },
-                ),
-            );
+            this.#fetchRequest({
+                endpoint: chatEndpoint(this.#origin, this.#computerId, operation),
+                signal,
+                redirect: "error",
+                headers: {
+                    authorization: `Bearer ${access}`,
+                    "content-type": "application/json",
+                },
+                body: body === undefined ? null : JSON.stringify(body),
+            });
         let response = await send(token);
         if (response.status === 401 && this.#replacedToken !== undefined) {
             const replacement = await this.#replacedToken(token, signal);
