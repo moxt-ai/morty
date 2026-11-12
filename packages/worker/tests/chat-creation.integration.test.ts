@@ -1,5 +1,5 @@
 import { fileURLToPath } from "node:url";
-import { MortyClient, MortyPageRequest } from "@morty-build/client";
+import { MortyClient, MortyPageRequest, WsTransport } from "@morty-build/client";
 import * as v from "valibot";
 import { afterEach, test as baseTest, beforeEach, expect, onTestFinished, vi } from "vitest";
 import type { ControlledAgent } from "../../../tests/support/fake-daemon/runtime.ts";
@@ -691,7 +691,10 @@ test("Given a chat opened with a Session credential, When the computer's owner r
         v.object({ computerId: v.string(), target: targetSchema, credential: v.string() }),
         await opened.json(),
     );
+    const transport = new WsTransport();
+    onTestFinished(transport.close);
     const client = new MortyClient({
+        transport,
         endpoint: cloud.origin,
         computerId: access.computerId,
         credentialProvider: { credential: async () => access.credential },
@@ -753,7 +756,10 @@ test("Given two browsers joined through links, When one disconnects the other br
         v.object({ computerId: v.string(), target: targetSchema, credential: v.string() }),
         await opened.json(),
     );
+    const transport = new WsTransport();
+    onTestFinished(transport.close);
     const client = new MortyClient({
+        transport,
         endpoint: cloud.origin,
         computerId: window.computerId,
         credentialProvider: { credential: async () => window.credential },

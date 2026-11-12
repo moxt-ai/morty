@@ -236,6 +236,7 @@ export class WsTransport implements MortyHttpTransport {
         request.signal.throwIfAborted();
         const requestUrl = new URL(request.url);
         const socket = await this.#socket(request);
+        request.signal.throwIfAborted();
         const id = crypto.randomUUID();
         const abort = (): void => {
             const subscription = this.#subscriptions.get(id);

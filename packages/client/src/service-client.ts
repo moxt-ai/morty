@@ -41,7 +41,7 @@ import type {
 } from "./resources.ts";
 
 import type { MortyTransportSessionEvent } from "./transport/http-transport.ts";
-import { WsTransport } from "./transport/ws-transport.ts";
+import type { WsTransport } from "./transport/ws-transport.ts";
 
 const DEFAULT_OPERATION_TIMEOUT_MILLISECONDS = 20_000;
 const STREAM_CONNECTION_TIMEOUT_MILLISECONDS = 15_000;
@@ -144,6 +144,8 @@ export interface MortyEndpointOptions {
 
 export interface MortyClientOptions extends MortyEndpointOptions {
     readonly computerId: string;
+    /** Owned by the Computer; closing this client does not close its transport. */
+    readonly transport: WsTransport;
     /** Releases the owner's registration after this client's resources close. */
     readonly onClose?: () => void;
 }
@@ -330,9 +332,11 @@ export class MortyRequestExecutor {
     readonly #endpoint: URL;
     readonly #operationTimeoutMilliseconds: number;
     readonly #observeResponse: ((metadata: MortyResponseMetadata) => void) | undefined;
-    readonly #transport = new WsTransport();
+    readonly #transport: WsTransport;
+    readonly #lifetime = new AbortController();
 
-    constructor(options: MortyEndpointOptions) {
+    constructor(options: MortyEndpointOptions, transport: WsTransport) {
+        this.#transport = transport;
         this.#credentialProvider = options.credentialProvider;
         this.#endpoint = normalizeEndpoint(options.endpoint);
         this.#operationTimeoutMilliseconds = validatePositiveInteger(
@@ -342,7 +346,7 @@ export class MortyRequestExecutor {
         this.#observeResponse = options.observeResponse;
     }
 
-    readonly close = (): void => this.#transport.close();
+    readonly close = (): void => this.#lifetime.abort(new MortyConnectionError("The Morty client is closed"));
 
     readonly get = async (path: string, signal: AbortSignal): Promise<unknown> =>
         await this.request(path, "GET", "", false, signal);
@@ -357,7 +361,10 @@ export class MortyRequestExecutor {
         readonly modifiedAt: string;
         readonly name: string;
     }> => {
-        const deadline = new RequestDeadline(signal, this.#operationTimeoutMilliseconds);
+        const deadline = new RequestDeadline(
+            AbortSignal.any([signal, this.#lifetime.signal]),
+            this.#operationTimeoutMilliseconds,
+        );
         try {
             const credential = validateCredential(await this.#credentialProvider.credential(deadline.signal));
             const response = await this.#transport.fetch(
@@ -402,6 +409,9 @@ export class MortyRequestExecutor {
                 name,
             };
         } catch (cause) {
+            if (!signal.aborted) {
+                this.#lifetime.signal.throwIfAborted();
+            }
             return deadline.translate(cause);
         } finally {
             deadline.finish();
@@ -430,7 +440,10 @@ export class MortyRequestExecutor {
         metadata: { readonly contentKind: "image" | "resource"; readonly mediaType: string; readonly name: string },
         signal: AbortSignal,
     ): Promise<unknown> => {
-        const deadline = new RequestDeadline(signal, this.#operationTimeoutMilliseconds);
+        const deadline = new RequestDeadline(
+            AbortSignal.any([signal, this.#lifetime.signal]),
+            this.#operationTimeoutMilliseconds,
+        );
         try {
             const credential = validateCredential(await this.#credentialProvider.credential(deadline.signal));
             const headers = this.authenticationHeaders(credential, "application/json");
@@ -456,6 +469,9 @@ export class MortyRequestExecutor {
             }
             return await responseValue(response);
         } catch (cause) {
+            if (!signal.aborted) {
+                this.#lifetime.signal.throwIfAborted();
+            }
             return deadline.translate(cause);
         } finally {
             deadline.finish();
@@ -463,6 +479,8 @@ export class MortyRequestExecutor {
     };
 
     readonly openLiveEventStream = async (path: string, signal: AbortSignal): Promise<LiveEventConnection> => {
+        signal = AbortSignal.any([signal, this.#lifetime.signal]);
+        signal.throwIfAborted();
         const controller = new AbortController();
         const abort = (): void => controller.abort(signal.reason);
         signal.addEventListener("abort", abort, { once: true });
@@ -503,7 +521,10 @@ export class MortyRequestExecutor {
         hasBody: boolean,
         signal: AbortSignal,
     ): Promise<unknown> => {
-        const deadline = new RequestDeadline(signal, this.#operationTimeoutMilliseconds);
+        const deadline = new RequestDeadline(
+            AbortSignal.any([signal, this.#lifetime.signal]),
+            this.#operationTimeoutMilliseconds,
+        );
         try {
             const credential = validateCredential(await this.#credentialProvider.credential(deadline.signal));
             const headers = this.authenticationHeaders(credential, "application/json");
@@ -527,6 +548,9 @@ export class MortyRequestExecutor {
             }
             return await responseValue(response);
         } catch (cause) {
+            if (!signal.aborted) {
+                this.#lifetime.signal.throwIfAborted();
+            }
             return deadline.translate(cause);
         } finally {
             deadline.finish();
@@ -998,7 +1022,7 @@ export class MortyClient {
     readonly turns: MortyTurnResources;
 
     constructor(options: MortyClientOptions) {
-        const executor = new MortyRequestExecutor(options);
+        const executor = new MortyRequestExecutor(options, options.transport);
         this.#executor = executor;
         this.#onClose = options.onClose;
         this.events = new MortyEventResources(executor, options.computerId);

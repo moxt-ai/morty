@@ -209,7 +209,10 @@ async function sharedComputer(cloud: Awaited<ReturnType<typeof createIdentityFix
             }),
             await opened.json(),
         );
+        const transport = new WsTransport();
+        onTestFinished(transport.close);
         const client = new MortyClient({
+            transport,
             endpoint: cloud.origin,
             computerId: window.computerId,
             credentialProvider: { credential: async () => window.credential },

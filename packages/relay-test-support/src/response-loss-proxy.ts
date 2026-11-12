@@ -103,6 +103,7 @@ export async function createResponseLossProxy(upstream: string) {
     let holdConfiguration: { readonly resolve: () => void } | null = null;
     const sockets = new Set<WebSocket>();
     const browserSockets = new Set<WebSocket>();
+    let browserConnectionsOpened = 0;
     const webSockets = new WebSocketServer({ server });
     let armed: "before-acceptance" | "after-acceptance" | "held" | null = null;
     let lostSubmission: { readonly client: WebSocket; readonly requestId: string } | null = null;
@@ -125,6 +126,7 @@ export async function createResponseLossProxy(upstream: string) {
         }
         sockets.add(client);
         if (!computer) {
+            browserConnectionsOpened += 1;
             browserSockets.add(client);
             turnArrivals.emit("browser-connections", browserSockets.size);
         }
@@ -284,6 +286,9 @@ export async function createResponseLossProxy(upstream: string) {
     return {
         origin: `http://127.0.0.1:${port(server)}`,
         submissions,
+        get browserConnectionsOpened(): number {
+            return browserConnectionsOpened;
+        },
         waitForBrowserConnections: async (count: number, signal: AbortSignal): Promise<void> => {
             signal.throwIfAborted();
             if (browserSockets.size === count) {

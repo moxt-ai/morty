@@ -364,7 +364,10 @@ it("Given a live Session stream, When it disconnects, Then the subscription fail
     vi.useFakeTimers({ toFake: ["Date", "clearTimeout", "setTimeout"] });
     vi.setSystemTime(new Date("2030-01-01T00:00:00.000Z"));
     const peer = await liveEventPeer();
+    const transport = new WsTransport();
+    onTestFinished(transport.close);
     const client = new MortyClient({
+        transport,
         credentialProvider: {
             credential: async (signal: AbortSignal) => {
                 signal.throwIfAborted();
@@ -392,7 +395,10 @@ it("Given a live Session stream, When its peer stops answering heartbeats, Then 
     vi.useFakeTimers({ toFake: ["Date", "clearTimeout", "setTimeout"] });
     vi.setSystemTime(new Date("2030-01-01T00:00:00.000Z"));
     const peer = await liveEventPeer("silent");
+    const transport = new WsTransport();
+    onTestFinished(transport.close);
     const client = new MortyClient({
+        transport,
         credentialProvider: {
             credential: async (signal: AbortSignal) => {
                 signal.throwIfAborted();

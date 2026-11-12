@@ -1,4 +1,4 @@
-import { MortyClient, MortyPageRequest } from "@morty-build/client";
+import { MortyClient, MortyPageRequest, WsTransport } from "@morty-build/client";
 import { prepareTestMortyRelayBindings } from "@morty-build/relay-test-support/cloudflare";
 import * as v from "valibot";
 import { afterEach, beforeAll, beforeEach, expect, onTestFinished, test, vi } from "vitest";
@@ -210,7 +210,9 @@ test.each(["http", "websocket"] as const)(
             issued,
         );
         const session = `/v1/computers/${owner.computerId}/harnesses/${access.target.harness}/sessions/${access.target.sessionId}`;
+        const transport = new WsTransport();
         const client = new MortyClient({
+            transport,
             endpoint: bindings.origin,
             computerId: owner.computerId,
             credentialProvider: { credential: async () => access.credential },
@@ -281,6 +283,7 @@ test.each(["http", "websocket"] as const)(
             expect(audienceEndpoint.status).toBe(404);
         } finally {
             client.close();
+            transport.close();
         }
     },
 );

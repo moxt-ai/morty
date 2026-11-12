@@ -1,5 +1,5 @@
 import type { ForkMortyNativeSessionRequest } from "@morty-build/client";
-import { MortyClient } from "@morty-build/client";
+import { MortyClient, WsTransport } from "@morty-build/client";
 import { sameNativeSession } from "@morty-build/client/native-session";
 import type { NativeSessionRequest } from "@morty-build/client/protocol";
 import {
@@ -165,6 +165,8 @@ export class BotChatApi {
     readonly #replacedToken: ((rejected: string, signal: AbortSignal) => Promise<string | null>) | undefined;
     readonly #credentialRejected: (() => void) | undefined;
     readonly #sessionClients = new Set<MortyClient>();
+    readonly #sessionTransport = new WsTransport();
+    readonly #lifetime = new AbortController();
     readonly #waitForChange: ApiTransport["waitForChange"];
     readonly readComputerPairing: ManagementApi["readComputerPairing"];
     constructor(options: {
@@ -192,10 +194,12 @@ export class BotChatApi {
         this.readComputerPairing = management.readComputerPairing;
     }
     readonly close = (): void => {
+        this.#lifetime.abort(new DOMException("The Computer workspace was closed.", "AbortError"));
         for (const client of this.#sessionClients) {
             client.close();
         }
         this.#sessionClients.clear();
+        this.#sessionTransport.close();
     };
     readonly daemonDiagnostics = async (signal: AbortSignal) =>
         decodeComputerDiagnosticsResult(JSON.stringify(await this.#request("daemon-diagnostics", undefined, signal)));
@@ -421,6 +425,8 @@ export class BotChatApi {
         signal: AbortSignal,
         initialAccess?: ChatAccess,
     ): Promise<MortyClient> => {
+        signal = AbortSignal.any([signal, this.#lifetime.signal]);
+        signal.throwIfAborted();
         const readAccess = async (parent: AbortSignal) => {
             for (let attempt = 0; attempt < 2; attempt += 1) {
                 try {
@@ -442,9 +448,11 @@ export class BotChatApi {
         if (computerId !== this.#computerId || !sameNativeSession(access.target, target)) {
             throw new CloudApiError("INVALID_SESSION_ACCESS", "The selected Session could not be verified.");
         }
+        signal.throwIfAborted();
         const client = new MortyClient({
             endpoint: this.#origin,
             computerId,
+            transport: this.#sessionTransport,
             operationTimeoutMilliseconds: 120000,
             onClose: () => {
                 this.#sessionClients.delete(client);
