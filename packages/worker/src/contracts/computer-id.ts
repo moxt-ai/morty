@@ -1,4 +1,5 @@
-import { ComputerManagementError, type ComputerManagementPlacement } from "./relay/computer-management.ts";
+import { ComputerManagementError } from "./computer-management.ts";
+import type { ComputerManagementPlacement } from "./relay/computer-management.ts";
 
 const placements: ReadonlyMap<string, ComputerManagementPlacement> = new Map([
     ["wn", { locationHint: "wnam" }],

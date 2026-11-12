@@ -96,7 +96,6 @@ test("Given a discovered executable with a known version, When diagnostics are r
                             event: "agent_inventory",
                             harness: "custom",
                             agentVersion: "1.0.0",
-                            adapterVersion: "1.0.0",
                             executableOverride: "unknown",
                             versionSource: "runtime_catalog",
                         }),

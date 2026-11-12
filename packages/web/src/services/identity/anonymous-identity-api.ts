@@ -17,19 +17,14 @@ import {
     withStoredAccessLock,
 } from "./remembered-computers.ts";
 
-const tokenSchema = v.pipe(
-    v.string(),
-    v.regex(
-        /^(?:morty_computer_v1_[A-Za-z0-9_-]{43}|morty_recovery_v1\.prj_(?:wn|en|sa|we|ee|ap|an|as|oc|af|me)_01_[A-Za-z0-9_-]{24}\.[A-Za-z0-9_-]{43})$/u,
-    ),
-);
+const tokenSchema = v.pipe(v.string(), v.regex(/^morty_computer_v1_[A-Za-z0-9_-]{43}$/u));
 const computerIdSchema = v.pipe(v.string(), v.regex(/^prj_(wn|ap|an|as)_01_[A-Za-z0-9_-]{24}$/u));
 const identityFields = { computerToken: tokenSchema, computerId: computerIdSchema };
 const identitySchema = v.pipe(v.object(identityFields), v.readonly());
 /**
- * The Project a well-formed transfer code names, or null when the code cannot
+ * The Computer a well-formed transfer code names, or null when the code cannot
  * name one. A code that was already redeemed in this browser still names its
- * Project, which is what lets a dead link fall back to the access it issued.
+ * Computer, which is what lets a dead link fall back to the access it issued.
  */
 export function transferCodeProject(code: string): string | null {
     const parts = code.split(".");
@@ -62,7 +57,6 @@ const transferSchema = v.pipe(
 );
 const deviceSharerSchema = v.variant("kind", [
     v.object({ kind: v.literal("computer") }),
-    v.object({ kind: v.literal("recovery") }),
     v.object({ kind: v.literal("device"), label: v.nullable(v.string()) }),
 ]);
 const linkedDeviceSchema = v.pipe(
@@ -86,11 +80,7 @@ export type LinkedDevice = v.InferOutput<typeof linkedDeviceSchema>;
 const linkedDevicesSchema = v.object({ devices: v.array(linkedDeviceSchema) });
 const deviceAccessEndedSchema = v.object({ status: v.literal("device_access_ended") });
 const otherBrowserAccessEndedSchema = v.object({ status: v.literal("other_browser_access_ended") });
-const credentialRevocationPathSchema = v.picklist([
-    "/identity/v1/local-credential",
-    "/identity/v1/browser-access",
-    "/identity/v1/recovery-credential",
-]);
+const credentialRevocationPathSchema = v.picklist(["/identity/v1/local-credential", "/identity/v1/browser-access"]);
 export type AnonymousIdentity = v.InferOutput<typeof identitySchema>;
 export type IdentityTransfer = v.InferOutput<typeof transferSchema>;
 /** What a new link grants, and the unopened link from this page it replaces. */
@@ -246,7 +236,7 @@ export class AnonymousIdentityApi {
 
     /**
      * Opens a link in this browser. A browser keeps one access per Computer: the access it already holds for the link's
-     * Project is replaced by the new one, which also takes over the links it came from.
+     * Computer is replaced by the new one, which also takes over the links it came from.
      */
     readonly redeemTransfer = async (code: string, signal: AbortSignal): Promise<AnonymousIdentity> =>
         await withStoredAccessLock(signal, (access) => this.#redeemTransfer(code, signal, access));

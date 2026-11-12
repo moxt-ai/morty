@@ -35,13 +35,9 @@
         "packages/relay-test-support": {
             "entry": ["src/worker-entry.ts"]
         },
-        "packages/local-state": {
-            "includeEntryExports": true
-        },
         "packages/runtime-test-support": {
             "includeEntryExports": true
         }
     },
-    "ignoreBinaries": ["openssl"],
     "ignore": ["packages/cli/src/engine/acp/harness/*/upstream/**"]
 }

@@ -169,6 +169,7 @@ describe("daemon narration delivery", () => {
             },
             [agent],
             new RuntimeLocalContext(stateDirectory, process.env),
+            async (agent) => agent,
         );
         const cancellation = new AbortController();
         const runtime = runRuntime(config, cancellation.signal);

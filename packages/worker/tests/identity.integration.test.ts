@@ -269,7 +269,7 @@ test("Given a device that shared links before and after renewing its credential,
     expect((await redeem(unusedAfterRenewal)).status).toBe(410);
 });
 
-test("Given links shared by a recovery credential and by the computer's own credential, When each sharing credential is revoked, Then its unused links add no device while links shared by access still held keep working", async () => {
+test("Given links shared by the computer's own credential, When that credential is revoked, Then its unused links add no device while redeemed links keep their device", async () => {
     const environment = fixture.environment();
     const owner = await fixture.createAnonymousUser();
     const request = (path: string, token: string, method = "GET", body?: object) =>
@@ -295,14 +295,7 @@ test("Given links shared by a recovery credential and by the computer's own cred
             }),
             environment,
         );
-    const recoveryResponse = await request("/identity/recovery-token", owner.token, "POST");
-    expect(recoveryResponse.status).toBe(201);
-    const recovery = v.parse(v.object({ token: v.string() }), await recoveryResponse.json()).token;
-    const sharedByRecovery = await share(recovery);
     const sharedByLocal = await share(owner.token);
-
-    expect((await request("/identity/v1/recovery-credential", recovery, "DELETE")).status).toBe(204);
-    expect((await redeem(sharedByRecovery)).status).toBe(410);
     expect((await redeem(sharedByLocal)).status).toBe(200);
 
     const unusedLocalLink = await share(owner.token);
@@ -527,18 +520,6 @@ test("Given an anonymous user, When computer access is shared, Then the link add
     });
     expect((await worker.fetch(accountRequest(device, owner.computerId), environment)).status).toBe(200);
 
-    const recoveryResponse = await worker.fetch(
-        new Request(`${APP_ORIGIN}/morty/api/computers/${owner.computerId}/identity/recovery-token`, {
-            method: "POST",
-            headers: { authorization: `Bearer ${owner.token}` },
-        }),
-        environment,
-    );
-    expect(recoveryResponse.status).toBe(201);
-    const recoveryToken = v.parse(
-        v.object({ token: v.pipe(v.string(), v.startsWith("morty_recovery_v1.")) }),
-        await recoveryResponse.json(),
-    ).token;
     const ended = await worker.fetch(
         new Request(`${APP_ORIGIN}/morty/api/computers/${owner.computerId}/identity/v1/browser-access`, {
             method: "DELETE",
@@ -548,7 +529,6 @@ test("Given an anonymous user, When computer access is shared, Then the link add
     );
     expect(ended.status).toBe(204);
     expect((await worker.fetch(accountRequest(device, owner.computerId), environment)).status).toBe(401);
-    expect((await worker.fetch(accountRequest(recoveryToken, owner.computerId), environment)).status).toBe(200);
     expect((await worker.fetch(accountRequest(owner.token, owner.computerId), environment)).status).toBe(200);
 });
 
@@ -586,32 +566,6 @@ test("Given an anonymous user with a Computer, When a transfer link is redeemed,
     expect(await redeemed.json()).toMatchObject({
         computerId: identity.computerId,
     });
-});
-
-test("Given the first browser for Morty, When it retires its local credential after a recovery token is created, Then that credential is revoked and recovery remains available", async () => {
-    const environment = fixture.environment();
-    const identity = await fixture.createAnonymousUser();
-    const recoveryResponse = await worker.fetch(
-        new Request(`${APP_ORIGIN}/morty/api/computers/${identity.computerId}/identity/recovery-token`, {
-            method: "POST",
-            headers: { authorization: `Bearer ${identity.token}` },
-        }),
-        environment,
-    );
-    expect(recoveryResponse.status).toBe(201);
-    const recoveryToken = v.parse(v.object({ token: v.string() }), await recoveryResponse.json()).token;
-
-    const ended = await worker.fetch(
-        new Request(`${APP_ORIGIN}/morty/api/computers/${identity.computerId}/identity/v1/local-credential`, {
-            method: "DELETE",
-            headers: { authorization: `Bearer ${identity.token}` },
-        }),
-        environment,
-    );
-
-    expect(ended.status).toBe(204);
-    expect((await worker.fetch(accountRequest(identity.token, identity.computerId), environment)).status).toBe(401);
-    expect((await worker.fetch(accountRequest(recoveryToken, identity.computerId), environment)).status).toBe(200);
 });
 
 test("Given anonymous Morty sessions, When the account endpoint authenticates them, Then only valid active identities are disclosed", async () => {

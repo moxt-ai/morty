@@ -61,8 +61,4 @@ export type ConnectionFeedback =
           readonly title: string;
           readonly description: string;
       }
-    | {
-          readonly kind: "closed";
-          readonly description: string;
-          readonly reopen: "available" | "reopening" | "offline" | "failed";
-      };
+    | { readonly kind: "closed"; readonly description: string };

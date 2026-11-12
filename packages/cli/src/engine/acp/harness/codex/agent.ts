@@ -70,7 +70,7 @@ export class CodexAcpAgent {
                 onServerRequest: async (request) => await this.#sessionAgent.onServerRequest(request),
             },
         });
-        this.#settings = new CodexSettings(this.#appServer, options.environment);
+        this.#settings = new CodexSettings(this.#appServer);
         this.#sessionAgent = new CodexOwnedAcpAgent({
             client: this.#appServer,
             settings: this.#settings,

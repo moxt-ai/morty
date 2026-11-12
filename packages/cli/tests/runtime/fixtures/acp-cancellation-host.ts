@@ -121,6 +121,7 @@ const config = createRuntimeConfig(
         ),
     ],
     new RuntimeLocalContext(directory, { PATH: process.env["PATH"] }),
+    async (agent) => agent,
 );
 try {
     await new RuntimeLoop(async () => config).run(controller.signal);

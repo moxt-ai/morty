@@ -291,6 +291,7 @@ describe("daemon session configuration boundary", () => {
             },
             [agent],
             new RuntimeLocalContext(stateDirectory, process.env),
+            async (agent) => agent,
         );
         const cancellation = new AbortController();
         const runtime = runRuntime(config, cancellation.signal);
@@ -395,6 +396,7 @@ describe("daemon session configuration boundary", () => {
             },
             [agent],
             new RuntimeLocalContext(stateDirectory, process.env),
+            async (agent) => agent,
         );
         const cancellation = new AbortController();
         const runtime = runRuntime(config, cancellation.signal);
@@ -506,6 +508,7 @@ describe("daemon session configuration boundary", () => {
             },
             [agent],
             new RuntimeLocalContext(stateDirectory, process.env),
+            async (agent) => agent,
         );
         const cancellation = new AbortController();
         const runtime = runRuntime(config, cancellation.signal);
@@ -627,6 +630,7 @@ describe("daemon session configuration boundary", () => {
             },
             [agent],
             new RuntimeLocalContext(stateDirectory, process.env),
+            async (agent) => agent,
         );
         const cancellation = new AbortController();
         const runtime = runRuntime(config, cancellation.signal);
@@ -731,6 +735,7 @@ describe("daemon session configuration boundary", () => {
             },
             [agent],
             new RuntimeLocalContext(stateDirectory, process.env),
+            async (agent) => agent,
         );
         const cancellation = new AbortController();
         const runtime = runRuntime(config, cancellation.signal);
@@ -843,6 +848,7 @@ describe("daemon session configuration boundary", () => {
             },
             [agent],
             new RuntimeLocalContext(stateDirectory, process.env),
+            async (agent) => agent,
         );
         const cancellation = new AbortController();
         const runtime = runRuntime(config, cancellation.signal);
@@ -966,6 +972,7 @@ describe("daemon session configuration boundary", () => {
             },
             [agent],
             new RuntimeLocalContext(stateDirectory, process.env),
+            async (agent) => agent,
         );
         const cancellation = new AbortController();
         const runtime = runRuntime(config, cancellation.signal);

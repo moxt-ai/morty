@@ -99,7 +99,7 @@ await using _runtime = await connectControlledAgentRuntime({
     },
 });
 const chat = `/morty/api/chat/computers/${owner.computerId}`;
-await request(`${chat}/setup`, 202, owner.computerToken, { computerId: owner.computerId, harness: "codex" });
+await request(`${chat}/setup`, 202, owner.computerToken, { harness: "codex" });
 const access = v.parse(
     v.object({ credential: v.string(), target: v.object({ harness: v.string(), sessionId: v.string() }) }),
     await request(`${chat}/access`, 200, owner.computerToken, {

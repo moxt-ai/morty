@@ -11,7 +11,7 @@ import { RequestError } from "../http/request-error.ts";
 import { logger } from "../infra/logger.ts";
 import { errorMiddleware, relayErrorHandler } from "../middleware/error-middleware.ts";
 import { requestTimeoutMiddleware } from "../middleware/request-timeout-middleware.ts";
-import { instructionDocumentRoutes } from "./components/instruction-documents/http/index.ts";
+import { instructionDocumentRoutes } from "./components/instruction-documents/http/instruction-document-routes.ts";
 import { cloudRoutes } from "./composition/cloud-http.ts";
 import { forwardToComputer } from "./gateway/computer-object-routing.ts";
 import { notFoundPage, webPages } from "./http/web-pages.ts";
@@ -72,13 +72,11 @@ function createComputerForwardingRoutes() {
         .post("/morty/api/computers/:computerId/identity/link", computerFromPath, forward)
         .all("/morty/api/computers/:computerId/session", computerFromPath, forward)
         .post("/morty/api/computers/:computerId/identity/transfers", computerFromPath, forward)
-        .post("/morty/api/computers/:computerId/identity/recovery-token", computerFromPath, forward)
         .get("/morty/api/computers/:computerId/identity/devices", computerFromPath, forward)
         .post("/morty/api/computers/:computerId/identity/revoke-all-access", computerFromPath, forward)
         .delete("/morty/api/computers/:computerId/identity/v1/other-browser-access", computerFromPath, forward)
         .delete("/morty/api/computers/:computerId/identity/v1/devices/:deviceId", computerFromPath, forward)
         .delete(`/morty/api/computers/:computerId${credentialRevocationPaths.browser}`, computerFromPath, forward)
-        .delete(`/morty/api/computers/:computerId${credentialRevocationPaths.recovery}`, computerFromPath, forward)
         .delete(`/morty/api/computers/:computerId${credentialRevocationPaths.local}`, computerFromPath, forward)
         .get("/morty/api/computers/:computerId/management/computer/pairing-state", computerFromPath, forward)
         .get("/morty/api/computers/:computerId/management/computer", computerFromPath, forward)

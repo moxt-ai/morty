@@ -1,5 +1,4 @@
 import { resolve } from "node:path";
-import type { NativeSessionTarget } from "@morty-build/client/protocol";
 import type { CatalogAgent } from "../agent/catalog.ts";
 import { LocalAgentCatalog } from "../agent/catalog.ts";
 import type { RuntimeAgentDependencies } from "../agent/runtime-agents.ts";
@@ -31,34 +30,20 @@ export function withRuntimeEnvironment(agent: CatalogAgent, environment: Readonl
     return agent.withEnvironment({ ...launchEnvironment, ...agent.environment });
 }
 
-export interface RuntimeReconnectTarget {
-    readonly kind: "managed";
-}
-
 export interface RuntimeConfig {
     readonly adapters: RuntimeAgentDependencies["adapters"];
-    readonly agents: readonly CatalogAgent[];
     readonly defaultWorkspace: string;
 
     readonly catalog: LocalAgentCatalog;
     readonly computerId: string;
     readonly localContext: RuntimeLocalContext;
-    readonly reconnectTarget: RuntimeReconnectTarget | null;
     readonly relayUrl: URL;
     readonly credentials: ComputerCredentials;
-    /** Stable embedding context for one Session; applied to a copied Agent before process reuse is checked. */
-    readonly sessionEnvironment?: (context: NativeSessionTarget) => Readonly<Record<string, string>>;
     /**
-     * Serves the definition a command should run against, re-discoving the Agent when its
-     * executable changed since the catalog snapshot was taken. Undefined keeps the boot-time
-     * snapshot: a changed executable fails the command instead of being re-discovered.
+     * Serves the definition a command should run against, re-discovering the Agent when its
+     * executable changed since the catalog snapshot was taken.
      */
-    readonly resolveAgent?: (agent: CatalogAgent, signal: AbortSignal) => Promise<CatalogAgent>;
-    /**
-     * Re-runs the ready Agent inventory this config was built from, serving the Agent catalog
-     * discovery command. Undefined keeps the boot-time catalog: the command fails instead.
-     */
-    readonly rediscoverAgents?: (signal: AbortSignal) => Promise<readonly CatalogAgent[]>;
+    readonly resolveAgent: (agent: CatalogAgent, signal: AbortSignal) => Promise<CatalogAgent>;
 }
 
 export interface ComputerConnectionConfig {
@@ -72,24 +57,19 @@ export function createRuntimeConfig(
     connection: ComputerConnectionConfig,
     dependencies: RuntimeAgentDependencies,
     localContext: RuntimeLocalContext,
-    reconnectTarget: RuntimeReconnectTarget | null = null,
-    resolveAgent?: RuntimeConfig["resolveAgent"],
-    rediscoverAgents?: RuntimeConfig["rediscoverAgents"],
+    resolveAgent: RuntimeConfig["resolveAgent"],
 ): RuntimeConfig {
     const runtimeAgents = dependencies.agents.map((agent) =>
         withRuntimeEnvironment(agent, localContext.agentLaunchEnvironment),
     );
     return {
         adapters: dependencies.adapters,
-        agents: runtimeAgents,
         defaultWorkspace: connection.defaultWorkspace,
         catalog: new LocalAgentCatalog(runtimeAgents),
         computerId: connection.computerId,
         localContext,
-        reconnectTarget,
         relayUrl: connection.relayUrl,
         credentials: connection.credentials,
-        ...(resolveAgent === undefined ? {} : { resolveAgent }),
-        ...(rediscoverAgents === undefined ? {} : { rediscoverAgents }),
+        resolveAgent,
     };
 }

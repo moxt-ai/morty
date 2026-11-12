@@ -43,7 +43,6 @@ test.each(["request", "result"] as const)(
         });
         await connected.promise;
         await runtime.api.nativeSessions(
-            runtime.computerId,
             {
                 action: "list",
                 harness: "claude",
@@ -59,7 +58,7 @@ test.each(["request", "result"] as const)(
             directory: ".",
             sessionId: "native-fork-source",
         };
-        const fork = () => runtime.api.forkNativeSession(runtime.computerId, operationId, input, signal);
+        const fork = () => runtime.api.forkNativeSession(operationId, input, signal);
         await expect(fork()).rejects.toMatchObject({ code: "computer_offline" });
         const lost = await proxy.lost;
         await disconnected.promise;
@@ -94,7 +93,6 @@ test("Given a Fork succeeds but its response is lost, When the same operation is
         new Set(["recovery-native-source", "another-native-source"]),
     );
     const body = JSON.stringify({
-        computerId: project.computerId,
         harness: "claude",
         directory: ".",
         sessionId: "recovery-native-source",
@@ -153,7 +151,6 @@ test("Given a Fork succeeds but its response is lost, When the same operation is
             method: "POST",
             headers: { authorization: `Bearer ${project.token}`, "content-type": "application/json" },
             body: JSON.stringify({
-                computerId: project.computerId,
                 harness: "claude",
                 directory: ".",
                 sessionId: "another-native-source",

@@ -58,7 +58,6 @@ type NewChatInput = {
 };
 type OpenChatInput = NativeSessionTarget | NewChatInput;
 type AgentSetupInput = {
-    readonly computerId: string;
     readonly harness: string;
 };
 
@@ -190,15 +189,6 @@ export class ChatService {
         return this.#sessionOperations.run(sessionKey, signal, operation);
     };
 
-    readonly #requireNativeSessionComputer = async (scope: ChatScope, requestedComputerId: string) => {
-        // The client names the Computer its native-session identity came from. Discovery and entry identifiers belong to
-        // that Computer and must not be silently redirected to another one.
-        if (requestedComputerId !== scope.computerId) {
-            throw new ComputerManagementError("BOT_COMPUTER_FIXED", "This request names a different computer.", 409);
-        }
-        await this.#requirePairedComputer(scope);
-    };
-
     readonly #requireComputerAgent = async (scope: ChatScope, harness: string) => {
         const computer = await this.#relay.getChatComputerAgents(scope.computerId, scope.signal);
         if (!computer.agents.some((agent) => agent.harness === harness)) {
@@ -234,11 +224,7 @@ export class ChatService {
     ) => {
         await this.#requirePairedComputer(scope);
         await this.#requireComputerAgent(scope, draft.harness);
-        const discovered = await this.#relay.discoverChatAgentSettings(
-            scope.computerId,
-            { computerId: scope.computerId, ...draft },
-            scope.signal,
-        );
+        const discovered = await this.#relay.discoverChatAgentSettings(scope.computerId, draft, scope.signal);
         return { settings: discovered };
     };
 
@@ -338,8 +324,8 @@ export class ChatService {
         }));
     };
 
-    readonly nativeSessions = async (scope: ChatScope, requestedComputerId: string, input: NativeListInput) => {
-        await this.#requireNativeSessionComputer(scope, requestedComputerId);
+    readonly nativeSessions = async (scope: ChatScope, input: NativeListInput) => {
+        await this.#requirePairedComputer(scope);
         const result = await this.#relay.nativeSessions(scope.computerId, input, scope.signal);
         if (result.action !== "list") {
             throw new ComputerManagementError(
@@ -387,12 +373,8 @@ export class ChatService {
         return { harness: agent.harness, result, entry };
     };
 
-    readonly previewNativeSession = async (
-        scope: ChatScope,
-        requestedComputerId: string,
-        input: NativePreviewInput,
-    ) => {
-        await this.#requireNativeSessionComputer(scope, requestedComputerId);
+    readonly previewNativeSession = async (scope: ChatScope, input: NativePreviewInput) => {
+        await this.#requirePairedComputer(scope);
         const events = await this.#relay.previewComputerNativeEvents(
             scope.computerId,
             { harness: input.harness, sessionId: input.sessionId },
@@ -403,13 +385,8 @@ export class ChatService {
         return events;
     };
 
-    readonly importNativeSession = async (
-        scope: ChatScope,
-        requestedComputerId: string,
-        sessionId: string,
-        input: NativeEntryInput,
-    ) => {
-        await this.#requireNativeSessionComputer(scope, requestedComputerId);
+    readonly importNativeSession = async (scope: ChatScope, sessionId: string, input: NativeEntryInput) => {
+        await this.#requirePairedComputer(scope);
         const result = await this.#relay.nativeSessions(
             scope.computerId,
             { ...input, sessionId, action: "import" },
@@ -425,13 +402,8 @@ export class ChatService {
         return result;
     };
 
-    readonly recoverableNativeFork = async (
-        scope: ChatScope,
-        requestedComputerId: string,
-        operationId: string,
-        input: NativePreviewInput,
-    ) => {
-        await this.#requireNativeSessionComputer(scope, requestedComputerId);
+    readonly recoverableNativeFork = async (scope: ChatScope, operationId: string, input: NativePreviewInput) => {
+        await this.#requirePairedComputer(scope);
         // Operation identity belongs to this Computer, regardless of which browser requests it.
         const scopedOperationId = await scopedNativeForkOperationId(scope.computerId, `fork\u0000${operationId}`);
         return await this.#relay.forkNativeSession(scope.computerId, scopedOperationId, input, scope.signal);
@@ -442,9 +414,6 @@ export class ChatService {
      * working directory. It records nothing: whether the Computer has a Runtime is the Relay's pairing.
      */
     readonly verifyAgent = async (scope: ChatScope, input: AgentSetupInput) => {
-        if (input.computerId !== scope.computerId) {
-            throw new ComputerManagementError("BOT_COMPUTER_FIXED", "This request names a different computer.", 409);
-        }
         await this.#requireComputerAgent(scope, input.harness);
         await this.#relay.discoverChatAgentSettings(scope.computerId, { ...input, workspaceRef: "." }, scope.signal);
         return { status: "active" };

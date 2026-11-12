@@ -367,7 +367,6 @@ function settingsRevision(
     return createHash("sha256")
         .update(
             JSON.stringify({
-                adapterVersion: agent.adapterVersion,
                 harness: agent.harness,
                 agentVersion: agent.agentVersion,
                 modelEffort: revisionModelEffort,

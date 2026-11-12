@@ -63,15 +63,6 @@ const FULL_ACCESS_MODE: AgentMode = Object.freeze({
 const AGENT_MODES: readonly AgentMode[] = Object.freeze([READ_ONLY_MODE, AGENT_MODE, FULL_ACCESS_MODE]);
 const DEFAULT_MODE = FULL_ACCESS_MODE;
 
-/** Initial approval mode selected by the host configuration. */
-function initialMode(environment: Readonly<Record<string, string>>): string {
-    const requested = environment["INITIAL_AGENT_MODE"];
-    if (requested === undefined) {
-        return DEFAULT_MODE.id;
-    }
-    return AGENT_MODES.some((mode) => mode.id === requested) ? requested : DEFAULT_MODE.id;
-}
-
 function capitalize(value: string): string {
     return value.length === 0 ? value : value.charAt(0).toUpperCase() + value.slice(1);
 }
@@ -235,13 +226,13 @@ export class CodexSettings {
     #collaborationModeSupported: boolean | null = null;
     #selection: SessionSelection;
 
-    constructor(appServer: CodexAppServerClient, environment: Readonly<Record<string, string>>) {
+    constructor(appServer: CodexAppServerClient) {
         this.#appServer = appServer;
         this.#selection = {
             collaborationMode: "default",
             effort: "",
             fastMode: false,
-            mode: initialMode(environment),
+            mode: DEFAULT_MODE.id,
             model: "",
         };
     }

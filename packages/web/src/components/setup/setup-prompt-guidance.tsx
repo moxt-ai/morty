@@ -61,7 +61,7 @@ export function SetupPromptDetails({ prompt }: { readonly prompt: string }) {
                     >
                         <li>
                             Installs the Morty CLI (<code>@morty-build/cli</code>) from npm. Use{" "}
-                            <code>morty update</code> to install updates.
+                            <code>npx @morty-build/cli@latest restart</code> to install updates.
                         </li>
                         <li>
                             Runs a background connection until restart or <code>morty stop</code>.

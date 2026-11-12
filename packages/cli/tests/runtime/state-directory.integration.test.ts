@@ -9,7 +9,7 @@ const execute = promisify(execFile);
 const entry = resolve(import.meta.dirname, "../../dist/cli.js");
 
 it.each(["empty", "existing"] as const)(
-    "Given an %s private state directory, When the user lists pairings, Then Morty works without an installation marker and preserves unrelated files",
+    "Given an %s private state directory, When the user releases idle Agent sessions, Then Morty works without an installation marker and preserves unrelated files",
     async (kind) => {
         const root = await mkdtemp(join(tmpdir(), "morty-markerless-state-"));
         try {
@@ -17,7 +17,7 @@ it.each(["empty", "existing"] as const)(
             if (kind === "existing") {
                 await writeFile(unrelated, "keep this file");
             }
-            await execute(process.execPath, [entry, "pair", "list"], {
+            await execute(process.execPath, [entry, "release"], {
                 env: { ...process.env, MORTY_STATE_DIRECTORY: root },
                 timeout: 10_000,
             });
@@ -38,7 +38,7 @@ it("Given an existing setup root, When computer is mistakenly selected as the st
         await mkdir(computer);
         await writeFile(join(root, "config.json"), "{}");
         await expect(
-            execute(process.execPath, [entry, "pair", "list"], {
+            execute(process.execPath, [entry, "release"], {
                 env: { ...process.env, MORTY_STATE_DIRECTORY: computer },
                 timeout: 10_000,
             }),

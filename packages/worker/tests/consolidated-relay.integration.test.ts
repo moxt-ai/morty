@@ -72,7 +72,7 @@ test("Given the default SDK transport and caller-neutral Morty API paths, When a
         },
     });
     const chat = `/chat/computers/${owner.computerId}`;
-    const setup = await request(`${chat}/setup`, owner.token, { computerId: owner.computerId, harness: "codex" });
+    const setup = await request(`${chat}/setup`, owner.token, { harness: "codex" });
     expect(setup.status, await setup.clone().text()).toBe(202);
     const workspace = await request(`${chat}/workspace`, owner.token, {});
     expect(workspace.status).toBe(200);
@@ -102,17 +102,15 @@ test("Given the default SDK transport and caller-neutral Morty API paths, When a
     const access = v.parse(
         v.object({
             credential: v.string(),
-            endpoint: v.string(),
             target: v.object({ harness: v.string(), sessionId: v.string() }),
         }),
         issued,
     );
-    expect(access.endpoint).toBe(bindings.origin);
     const session = `/v1/computers/${owner.computerId}/harnesses/${access.target.harness}/sessions/${access.target.sessionId}`;
     const transport = new WsTransport();
     const client = new MortyClient({
         transport,
-        endpoint: access.endpoint,
+        endpoint: bindings.origin,
         computerId: owner.computerId,
         credentialProvider: { credential: async () => access.credential },
     });

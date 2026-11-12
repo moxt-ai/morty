@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, rm } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -13,16 +13,14 @@ import { listen, port } from "@morty-build/relay-test-support/websocket";
 import { expect, it } from "vitest";
 import { WebSocketServer } from "ws";
 import { RuntimeInstallationStore } from "../../src/engine/runtime/connection/runtime-installation-store.ts";
-import { MortyRuntimeEngine } from "../../src/engine/runtime/engine.ts";
+import { TestComputerHost } from "../support/computer-host.ts";
 
-it("Given an explicit data directory, When a host constructs Engine and reopens its store, Then construction has no side effects and saved connections survive", async () => {
+it("Given an explicit data directory, When a host saves a connection and reopens its store, Then saved connections survive", async () => {
     const directory = await mkdtemp(join(tmpdir(), "morty-engine-api-"));
     const signal = AbortSignal.timeout(5_000);
-    const params = { engineDataDir: join(directory, "data"), agentLaunchEnvironment: { PATH: "" } };
+    const params = { dataDirectory: join(directory, "data"), agentLaunchEnvironment: { PATH: "" } };
     try {
-        new MortyRuntimeEngine(params);
-        expect(await readdir(directory)).toEqual([]);
-        const store = await RuntimeInstallationStore.open(params.engineDataDir, signal);
+        const store = await RuntimeInstallationStore.open(params.dataDirectory, signal);
         const connection = await store.saveConnection(
             {
                 computerId: "embedded_channel",
@@ -32,7 +30,7 @@ it("Given an explicit data directory, When a host constructs Engine and reopens 
             },
             signal,
         );
-        const reopened = await RuntimeInstallationStore.open(params.engineDataDir, signal);
+        const reopened = await RuntimeInstallationStore.open(params.dataDirectory, signal);
         expect(await reopened.readConnection(connection.pairingGeneration, signal)).toEqual(connection);
         expect(await reopened.listConnections(signal)).toEqual([connection]);
         await reopened.setConnectionActivation(connection.pairingGeneration, "stopped", signal);
@@ -123,8 +121,8 @@ it("Given a saved connection with an opaque credential, When a host serves and c
     const deadline = AbortSignal.timeout(20_000);
     try {
         const origin = `http://127.0.0.1:${port(http)}`;
-        const engine = new MortyRuntimeEngine({
-            engineDataDir: join(directory, "data"),
+        const engine = new TestComputerHost({
+            dataDirectory: join(directory, "data"),
             agentLaunchEnvironment: {
                 PATH: "",
                 MORTY_CLAUDE_PATH: "",

@@ -1,4 +1,4 @@
-import type { RuntimeAgentProcesses } from "../session/process/runtime-agent-processes.ts";
+import type { AgentProcessPool } from "../session/process/agent-process-pool.ts";
 import type { RuntimeConfig } from "./config.ts";
 import { runRuntime } from "./run.ts";
 
@@ -45,25 +45,18 @@ export class RuntimeLoop {
         // Claim this execution before asynchronous preparation can yield.
         this.#state = { kind: "preparing" };
         try {
-            const prepared = await this.#prepare(signal);
+            const config = await this.#prepare(signal);
             signal.throwIfAborted();
-            const config =
-                this.#options.sessionEnvironment === undefined
-                    ? prepared
-                    : { ...prepared, sessionEnvironment: this.#options.sessionEnvironment };
             validateComputerRelay(config.relayUrl);
             this.#state = { kind: "running" };
             await runRuntime(config, signal, undefined, {
-                ...(this.#options.agentProcesses === undefined ? {} : { agentProcesses: this.#options.agentProcesses }),
+                ...(this.#options.processes === undefined ? {} : { processes: this.#options.processes }),
                 onExecutionCountChange: (count) => {
                     this.#options.onExecutionCountChange?.(count);
                 },
                 ...(this.#options.onConnectionStatus === undefined
                     ? {}
                     : { onConnectionStatus: this.#options.onConnectionStatus }),
-                ...(this.#options.processLogsDirectory === undefined
-                    ? {}
-                    : { processLogsDirectory: this.#options.processLogsDirectory }),
             });
         } finally {
             this.#state = { kind: "finished" };
@@ -73,15 +66,7 @@ export class RuntimeLoop {
 }
 
 export interface RuntimeLoopOptions {
-    /** Session-scoped Agent environment for this execution only; never persisted with the connection. */
-    readonly sessionEnvironment?: RuntimeConfig["sessionEnvironment"];
-    readonly agentProcesses?: RuntimeAgentProcesses;
+    readonly processes?: AgentProcessPool;
     readonly onConnectionStatus?: (status: "online" | "reconnecting") => void;
     readonly onExecutionCountChange?: (count: number) => void;
-    /**
-     * State directory of the daemon processes supervising this Runtime. Passed
-     * through to `runRuntime` so the local bug-report log can read the
-     * manager-written worker lifecycle and unhandled-rejection logs. Read-only.
-     */
-    readonly processLogsDirectory?: string;
 }

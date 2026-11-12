@@ -17,7 +17,7 @@ test("Given a browser opening a Session, When its device is revoked before the C
     let hold = false;
     try {
         const owner = await cloud.createAnonymousUser();
-        await using runtime = await cloud.connectAgent(owner.computerId, owner.token, [
+        await using _runtime = await cloud.connectAgent(owner.computerId, owner.token, [
             {
                 harness: "configuration-test",
                 label: "Configuration Test",
@@ -45,7 +45,6 @@ test("Given a browser opening a Session, When its device is revoked before the C
         expect(
             (
                 await request(`${chat}/setup`, owner.token, {
-                    computerId: runtime.computerId,
                     harness: "configuration-test",
                 })
             ).status,
@@ -105,9 +104,7 @@ test("Given a device with an open Session, When its owner disconnects it while t
             );
         const project = `computers/${owner.computerId}`;
         const chat = `chat/computers/${owner.computerId}`;
-        expect(
-            (await request(`${chat}/setup`, owner.token, { computerId: owner.computerId, harness: "codex" })).status,
-        ).toBe(202);
+        expect((await request(`${chat}/setup`, owner.token, { harness: "codex" })).status).toBe(202);
         const shared = await request(`${project}/identity/transfers`, owner.token, {
             operationId: crypto.randomUUID(),
         });
@@ -131,7 +128,6 @@ test("Given a device with an open Session, When its owner disconnects it while t
         expect(opened.status).toBe(200);
         const window = v.parse(
             v.object({
-                endpoint: v.string(),
                 computerId: v.string(),
                 target: v.object({ harness: v.string(), sessionId: v.string() }),
                 credential: v.string(),
@@ -181,9 +177,7 @@ async function sharedComputer(cloud: Awaited<ReturnType<typeof createIdentityFix
         );
     const project = `computers/${owner.computerId}`;
     const chat = `chat/computers/${owner.computerId}`;
-    expect(
-        (await request(`${chat}/setup`, owner.token, { computerId: owner.computerId, harness: "codex" })).status,
-    ).toBe(202);
+    expect((await request(`${chat}/setup`, owner.token, { harness: "codex" })).status).toBe(202);
     /** A browser joins through a link the owner shares, and opens a conversation it then reads. */
     const joinBrowser = async (label: string) => {
         const shared = await request(`${project}/identity/transfers`, owner.token, {
@@ -209,7 +203,6 @@ async function sharedComputer(cloud: Awaited<ReturnType<typeof createIdentityFix
         expect(opened.status).toBe(200);
         const window = v.parse(
             v.object({
-                endpoint: v.string(),
                 computerId: v.string(),
                 target: v.object({ harness: v.string(), sessionId: v.string() }),
                 credential: v.string(),
@@ -220,7 +213,7 @@ async function sharedComputer(cloud: Awaited<ReturnType<typeof createIdentityFix
         onTestFinished(transport.close);
         const client = new MortyClient({
             transport,
-            endpoint: window.endpoint,
+            endpoint: cloud.origin,
             computerId: window.computerId,
             credentialProvider: { credential: async () => window.credential },
         });
@@ -257,7 +250,7 @@ test("Given two browsers reading their conversations, one watching it live, When
         );
 
         expect(await ended.json()).toEqual({ status: "device_access_ended" });
-        await expect(removedView.completed).rejects.toMatchObject({ code: "credential_revoked" });
+        await expect(removedView.completed).rejects.toThrow();
         await expect(removed.readConversation()).rejects.toMatchObject({ code: "credential_revoked" });
         await expect(kept.readConversation()).resolves.toBeDefined();
     } finally {

@@ -76,7 +76,7 @@ In scope:
 
 - this repository and the deployed application at `morty.build`
 - pairing, sharing links, access revocation, and session authorization
-- the setup path served at `morty.build/setup.md` and `morty.build/setup.mjs`
+- the setup instructions served at `morty.build/setup.md`
 
 The internal client library, relay and local Runtime are part of this product and
 use the same reporting channel.

@@ -37,7 +37,7 @@ export function createOwnerApi(options: {
                     method: "POST",
                     signal,
                     headers: { authorization: `Bearer ${options.credential}`, "content-type": "application/json" },
-                    body: JSON.stringify({ computerId: options.computerId, harness: input.harness }),
+                    body: JSON.stringify({ harness: input.harness }),
                 }),
             );
             if (setup.status !== 202) {

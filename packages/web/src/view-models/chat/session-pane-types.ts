@@ -1,6 +1,8 @@
-import type { SessionElicitationRequestedEvent, SessionPermissionRequestedEvent } from "@morty-build/client";
-
-import type { NativeSessionTarget } from "@morty-build/client/protocol";
+import type {
+    NativeSessionTarget,
+    SessionElicitationRequestedEvent,
+    SessionPermissionRequestedEvent,
+} from "@morty-build/client/protocol";
 
 type PermissionInteractionDetails = Pick<
     SessionPermissionRequestedEvent,

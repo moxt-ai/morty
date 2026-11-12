@@ -88,9 +88,6 @@ export class PairingDirectoryService {
             {
                 computerId: rotation.access.computerId,
                 now: Date.now(),
-                actorKind: "relay",
-                actorId: "computer_credential_reuse",
-                auditId: `rpa_${crypto.randomUUID()}`,
             },
             signal,
         );
@@ -152,10 +149,6 @@ export class PairingDirectoryService {
                     expiresAt,
                     idempotencyKey: normalizedKey,
                     ownerId: owner.computerId,
-                    actorKind: "application",
-                    actorId: owner.computerId,
-                    auditId: `rpa_${crypto.randomUUID()}`,
-                    rejectionAuditId: `rpa_${crypto.randomUUID()}`,
                 },
                 signal,
             );
@@ -218,8 +211,6 @@ export class PairingDirectoryService {
                 computerName,
                 workspaceName,
                 agents: JSON.stringify(agents),
-                auditId: `rpa_${crypto.randomUUID()}`,
-                rejectionAuditId: `rpa_${crypto.randomUUID()}`,
             },
             signal,
         );

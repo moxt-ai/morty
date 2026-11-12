@@ -1,74 +1,123 @@
-import { decodeContentChunkFrame, type ServiceToDaemonMessage } from "@morty-build/client/protocol";
+import { decodeContentChunkFrame, type ServiceToDaemonRequest } from "@morty-build/client/protocol";
+import { createAgentSettingsDiscoveryHandler } from "../agent-settings-discovery.ts";
 import type { CommandContext } from "../context.ts";
-import type { RuntimeCommand } from "../definition.ts";
-import { createAgentCatalogCommands } from "./agent-catalog.ts";
-import { createAgentSettingsCommands } from "./agent-settings.ts";
-import { computerDiagnosticsCommand, computerPingCommand } from "./computer.ts";
+import { createNativeSessionRequestHandler } from "../native-session-requests.ts";
+import { handleComputerDiagnostics, handleComputerPing } from "./computer.ts";
 import { createContentWriteCommands } from "./content-write/index.ts";
-import { fileReadCommand } from "./file-read/index.ts";
-import { previewHistoryPageLoadCommand, sessionHistoryPageLoadCommand } from "./history.ts";
+import { handleFileRead } from "./file-read/index.ts";
+import { handlePreviewHistoryPageLoad, handleSessionHistoryPageLoad } from "./history.ts";
 import {
-    elicitationRespondCommand,
-    permissionRespondCommand,
-    promptDispositionCommand,
-    sessionArchiveCommand,
-    sessionCancelBeforeStartCommand,
-    sessionCancelCommand,
-    sessionCloseCommand,
+    handleElicitationRespond,
+    handlePermissionRespond,
+    handlePromptDisposition,
+    handleSessionArchive,
+    handleSessionCancel,
+    handleSessionCancelBeforeStart,
 } from "./interactions.ts";
-import { createNativeSessionCommands } from "./native-sessions.ts";
-import { sessionPromptCommand } from "./prompt.ts";
+import { handleSessionList, handleSessionQuery } from "./native-sessions.ts";
+import { handleSessionPrompt } from "./prompt.ts";
 import {
-    sessionConfigReadCommand,
-    sessionConfigureCommand,
-    sessionCreateCommand,
-    sessionCreationReadCommand,
-    sessionPrepareCommand,
-    sessionRenameCommand,
-    sessionRestoreCommand,
-    workspaceListCommand,
+    handleSessionConfigRead,
+    handleSessionConfigure,
+    handleSessionCreate,
+    handleSessionPrepare,
+    handleSessionRename,
+    handleSessionRestore,
+    handleWorkspaceList,
 } from "./session.ts";
 
 export function createCommandRegistry(context: CommandContext): {
-    readonly dispatch: (message: ServiceToDaemonMessage) => void;
+    readonly dispatch: (message: ServiceToDaemonRequest) => void;
     readonly dispatchChunk: (message: unknown) => void;
     readonly settle: () => Promise<void>;
 } {
     const contentWrites = createContentWriteCommands(context);
-    const commands: readonly RuntimeCommand[] = [
-        computerDiagnosticsCommand,
-        computerPingCommand,
-        sessionHistoryPageLoadCommand,
-        previewHistoryPageLoadCommand,
-        ...createNativeSessionCommands(context),
-        ...createAgentCatalogCommands(context),
-        ...createAgentSettingsCommands(context),
-        ...contentWrites.commands,
-        fileReadCommand,
-        sessionCancelBeforeStartCommand,
-        sessionCancelCommand,
-        sessionCloseCommand,
-        sessionArchiveCommand,
-        promptDispositionCommand,
-        workspaceListCommand,
-        sessionPrepareCommand,
-        sessionCreateCommand,
-        sessionCreationReadCommand,
-        sessionConfigureCommand,
-        sessionConfigReadCommand,
-        sessionRenameCommand,
-        sessionRestoreCommand,
-        permissionRespondCommand,
-        elicitationRespondCommand,
-        sessionPromptCommand,
-    ];
+    const nativeRequests = createNativeSessionRequestHandler(context);
+    const agentSettings = createAgentSettingsDiscoveryHandler(context);
     return {
         dispatch: (message): void => {
-            const command = commands.find((candidate) => candidate.kind === message.kind);
-            if (command === undefined) {
-                throw new Error("Unsupported protocol message");
+            switch (message.kind) {
+                case "computer.diagnostics.read":
+                    handleComputerDiagnostics(context, message);
+                    return;
+                case "computer.ping":
+                    handleComputerPing(context, message);
+                    return;
+                case "session.live-history.v2.page.load":
+                    handleSessionHistoryPageLoad(context, message);
+                    return;
+                case "session.preview-history.page.load":
+                    handlePreviewHistoryPageLoad(context, message);
+                    return;
+                case "native.session.cancel":
+                    nativeRequests.cancel(message);
+                    return;
+                case "native.session.request":
+                    nativeRequests.handle(message);
+                    return;
+                case "session.list":
+                    handleSessionList(context, message);
+                    return;
+                case "session.query":
+                    handleSessionQuery(context, message);
+                    return;
+                case "agent.settings.discover":
+                    agentSettings.handle(message);
+                    return;
+                case "content.write":
+                    contentWrites.write(message);
+                    return;
+                case "content.commit":
+                    contentWrites.commit(message);
+                    return;
+                case "file.read":
+                    handleFileRead(context, message);
+                    return;
+                case "session.cancel-before-start":
+                    handleSessionCancelBeforeStart(context, message);
+                    return;
+                case "session.cancel":
+                    handleSessionCancel(context, message);
+                    return;
+                case "session.archive":
+                    handleSessionArchive(context, message);
+                    return;
+                case "session.prompt.disposition":
+                    handlePromptDisposition(context, message);
+                    return;
+                case "workspace.list":
+                    handleWorkspaceList(context, message);
+                    return;
+                case "session.prepare":
+                    handleSessionPrepare(context, message);
+                    return;
+                case "session.create":
+                    handleSessionCreate(context, message);
+                    return;
+                case "session.configure":
+                    handleSessionConfigure(context, message);
+                    return;
+                case "session.config.read":
+                    handleSessionConfigRead(context, message);
+                    return;
+                case "session.rename":
+                    handleSessionRename(context, message);
+                    return;
+                case "session.restore":
+                    handleSessionRestore(context, message);
+                    return;
+                case "session.permission.respond":
+                    handlePermissionRespond(context, message);
+                    return;
+                case "session.elicitation.respond":
+                    handleElicitationRespond(context, message);
+                    return;
+                case "session.prompt":
+                    handleSessionPrompt(context, message);
+                    return;
+                default:
+                    message satisfies never;
             }
-            command.handle(context, message);
         },
         dispatchChunk: (message): void => {
             // A future binary format must not disconnect unrelated Sessions.
@@ -88,10 +137,7 @@ export function createCommandRegistry(context: CommandContext): {
             }
         },
         settle: async (): Promise<void> => {
-            await Promise.all([
-                contentWrites.settle(),
-                ...commands.flatMap((command) => (command.settle === undefined ? [] : [command.settle()])),
-            ]);
+            await Promise.all([contentWrites.settle(), nativeRequests.settle(), agentSettings.settle()]);
         },
     };
 }

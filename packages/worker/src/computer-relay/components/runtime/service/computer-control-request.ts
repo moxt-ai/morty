@@ -36,14 +36,11 @@ import {
     type SessionArchivedEvent,
     type SessionCancelBeforeStartCommand,
     type SessionCancelCommand,
-    type SessionCloseCommand,
-    type SessionClosedEvent,
     type SessionConfigReadCommand,
     type SessionConfigReadResult,
     type SessionConfigUpdatedEvent,
     type SessionConfigureCommand,
     type SessionCreateCommand,
-    type SessionCreationReadCommand,
     type SessionElicitationRespondCommand,
     type SessionHistoryPageLoad,
     type SessionHistoryWirePageLoaded,
@@ -88,11 +85,9 @@ export type ComputerControlCommand =
     | NativeSessionRequest
     | SessionPrepareCommand
     | SessionCreateCommand
-    | SessionCreationReadCommand
     | SessionConfigureCommand
     | SessionConfigReadCommand
     | SessionRenameCommand
-    | SessionCloseCommand
     | SessionArchiveCommand
     | SessionCancelBeforeStartCommand
     | SessionCancelCommand
@@ -114,7 +109,6 @@ export type ComputerControlResult =
     | SessionConfigUpdatedEvent
     | SessionConfigReadResult
     | SessionRenamedEvent
-    | SessionClosedEvent
     | SessionArchivedEvent
     | SessionPromptAcceptedEvent
     | SessionPromptSteeredEvent

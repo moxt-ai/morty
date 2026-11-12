@@ -9,7 +9,6 @@ import type {
     SessionCommand,
     SessionConfigOption,
     SessionElicitationResolvedEvent,
-    SessionInfoUpdatedEvent,
     SessionLiveEvent,
     SessionPermissionResolvedEvent,
     SessionStatusChangedEvent,
@@ -103,13 +102,11 @@ export type PromptResult = AgentPromptResponse;
 export interface SessionObserver {
     readonly onBackgroundActivity?: (source: object, activity: BackgroundActivity) => void;
     readonly onSessionEvent?: (event: SessionLiveEvent) => Promise<void>;
-    readonly onInfo: (event: SessionInfoUpdatedEvent) => Promise<void>;
 }
 
 export class NullSessionObserver implements SessionObserver {
     readonly onBackgroundActivity = (_source: object, _activity: BackgroundActivity): void => {};
     readonly onSessionEvent = (_event: SessionLiveEvent): Promise<void> => Promise.resolve();
-    readonly onInfo = (_event: SessionInfoUpdatedEvent): Promise<void> => Promise.resolve();
 }
 
 export interface SessionConfigurationSnapshot {
@@ -177,7 +174,6 @@ export class AgentSettingsSnapshot {
 export type ResolveAgent = (
     harness: string,
     signal: AbortSignal,
-    target?: NativeSessionTarget,
 ) => Promise<{
     readonly agent: AcpAgentDefinition;
     readonly adapter: Adapter;
@@ -191,6 +187,5 @@ export type ReportFailure = (event: string, requestId: string, details: Readonly
 export interface SessionEventSink {
     readonly publish: (event: SessionLiveEvent) => void;
     readonly publishClosed: (event: SessionCloseNoticeEvent) => void;
-    readonly publishInfo: (event: SessionInfoUpdatedEvent) => void;
     readonly publishStatus: (event: SessionStatusChangedEvent) => void;
 }

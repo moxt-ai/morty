@@ -80,11 +80,7 @@ test("Given Codex publishes complete model settings and defaults to Full access,
     const recording = join(directory, "turn-policy.json");
     const launches = join(directory, "launches.log");
     await writeTurnPolicyRecorder(codex, launcher, recording, launches);
-    const environment = Object.fromEntries(
-        Object.entries({ ...codex.environment, MORTY_CODEX_PATH: launcher }).filter(
-            ([name]) => name !== "INITIAL_AGENT_MODE",
-        ),
-    );
+    const environment = { ...codex.environment, MORTY_CODEX_PATH: launcher };
     try {
         await withRealDaemon(new CodexAgentSpecification(), environment, async (peer) => {
             const launchesBeforeSettings = await launchCount(launches);

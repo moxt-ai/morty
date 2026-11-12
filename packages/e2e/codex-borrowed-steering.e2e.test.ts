@@ -5,7 +5,7 @@ import { CodexAppServerClient } from "../../packages/cli/src/engine/acp/harness/
 import { stopProcessTree } from "../../packages/cli/src/engine/util/process/executable.ts";
 import { CodexFixture } from "../../packages/cli/tests/support/agents/codex.ts";
 import { FakeOpenAiProvider } from "../../packages/cli/tests/support/llm/openai.ts";
-import { MortyRuntimeEngine } from "../cli/src/engine/runtime/engine.ts";
+import { TestComputerHost } from "../cli/tests/support/computer-host.ts";
 import { dataTestId } from "../web/src/data-testid.ts";
 import { ANONYMOUS_CREDENTIAL_KEY_NAME } from "../web/src/services/identity/anonymous-identity-api.ts";
 import { encodeIdentityScope } from "../web/src/services/identity/identity-scope-url.ts";
@@ -84,8 +84,8 @@ test("Given desktop Codex owns a conversation, When I open it in Morty and queue
         // biome-ignore lint/correctness/useHookAtTopLevel: ChatApi authentication is not a React hook.
         await chat.useBrowserIdentity({ computerId, computerToken: token });
         const pairing = await chat.createPairing();
-        const engine = new MortyRuntimeEngine({
-            engineDataDir: join(harness.workDirectory, "computer"),
+        const engine = new TestComputerHost({
+            dataDirectory: join(harness.workDirectory, "computer"),
             agentLaunchEnvironment: environment,
         });
         const paired = await engine.pair(
@@ -109,8 +109,8 @@ test("Given desktop Codex owns a conversation, When I open it in Morty and queue
         });
         void running.catch(ready.reject);
         await Promise.race([ready.promise, running]);
-        const pairedAgent = await chat.readPairedAgent(text(pairing["computerId"], "pairing ID"), "codex");
-        await chat.bindAgent(pairedAgent.computerId, "codex");
+        await chat.readPairedAgent("codex");
+        await chat.bindAgent("codex");
         // The harness owns the browser so a failure keeps its trace, page and browser events.
         const browser = await { chromium, firefox, webkit }[browserName].launch({ headless: true });
         const page = await (async () => {

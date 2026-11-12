@@ -102,7 +102,6 @@ it("Given two harnesses own the same native session ID without prior discovery, 
         for (const harness of ["claude", "codex"]) {
             const workspace = { harness: harness, directory: "." };
             const opened = await runtime.api.nativeSessions(
-                runtime.computerId,
                 {
                     ...workspace,
                     action: "import",

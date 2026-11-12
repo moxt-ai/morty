@@ -73,6 +73,7 @@ function controlledRuntime(
         connection,
         new RuntimeAgentDependencies(agents, acpAdapters),
         new RuntimeLocalContext(directory, process.env),
+        async (agent) => agent,
     );
     return {
         start: (onConnectionStatus) => new RuntimeLoop(async () => config, { onConnectionStatus }),
