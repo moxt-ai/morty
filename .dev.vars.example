@@ -1,2 +1,0 @@
-APP_ORIGIN=http://localhost:5173
-MORTY_SESSION_SIGNING_SECRET=local-development-only-session-signing-secret

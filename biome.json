@@ -7,15 +7,7 @@
         "useIgnoreFile": true
     },
     "files": {
-        "includes": [
-            "**",
-            "!!**/dist",
-            "!!**/coverage",
-            "!!**/.wrangler",
-            "!!worker-configuration.d.ts",
-            "!!**/test-results",
-            "!!**/worker-configuration.d.ts"
-        ]
+        "includes": ["**", "!!**/dist", "!!**/.wrangler", "!!**/test-results", "!!**/worker-configuration.d.ts"]
     },
     "linter": {
         "enabled": true,

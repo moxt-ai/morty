@@ -22,6 +22,7 @@
         },
         "packages/cli": {
             "entry": [
+                "src/cli/entrypoint.ts",
                 "tests/**/*.test.{ts,mjs}",
                 "src/engine/acp/harness/claude/upstream/src/lib.ts",
                 "src/engine/acp/harness/pi/upstream/acp/agent.ts"

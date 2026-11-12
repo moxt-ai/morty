@@ -1,5 +1,5 @@
 import { fileURLToPath } from "node:url";
-import { coverageConfigDefaults, defineConfig } from "vitest/config";
+import { defineConfig } from "vitest/config";
 
 export default defineConfig({
     resolve: {
@@ -27,13 +27,5 @@ export default defineConfig({
         // Scenarios start real isolates, and the harness waits up to 12 s for a view (`waitForView`) and 10 s for the
         // WebSocket bridge. The test budget must outlast those waits so a stuck wait fails with what it waited for.
         testTimeout: 30_000,
-        coverage: {
-            provider: "istanbul",
-            reporter: ["text-summary", "json"],
-            reportsDirectory: "../../coverage/web",
-            reportOnFailure: true,
-            include: ["src/**/*.{ts,tsx}"],
-            exclude: ["src/**/*.d.ts", "src/routeTree.gen.ts", "tests/**", ...coverageConfigDefaults.exclude],
-        },
     },
 });

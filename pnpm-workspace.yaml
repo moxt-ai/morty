@@ -29,7 +29,6 @@ catalog:
   "@types/react": 19.3.0
   "@types/react-dom": 19.3.0
   "@vitejs/plugin-react": ^6.2.1
-  "@vitest/coverage-istanbul": 4.1.12
   clsx: ^2.1.1
   dependency-cruiser: 18.7.2
   drizzle-kit: 0.31.8
@@ -37,9 +36,6 @@ catalog:
   esbuild: 0.28.2
   happy-dom: 21.0.4
   hono: ^4.13.16
-  istanbul-lib-coverage: 3.2.2
-  istanbul-lib-report: 3.0.1
-  istanbul-reports: 3.2.0
   jsqr: ^1.4.0
   katex: 0.19.1
   knip: ^6.44.1

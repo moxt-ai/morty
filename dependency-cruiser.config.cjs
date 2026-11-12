@@ -12,8 +12,8 @@ module.exports = {
             to: {
                 reachable: true,
                 path: [
-                    "^packages/worker/src/(?:(?:worker|computer-relay)/)?(service|http|composition|gateway|do)/",
-                    "^packages/worker/src/(?:worker|computer-relay)/components/[^/]+/(service|http|composition|gateway|do)/",
+                    "^packages/worker/src/(?:(?:worker|computer-relay)/)?(service|http|composition|gateway)/",
+                    "^packages/worker/src/(?:worker|computer-relay)/components/[^/]+/(service|http|composition|gateway)/",
                 ],
             },
         },
@@ -124,7 +124,7 @@ module.exports = {
         },
     ],
     options: {
-        doNotFollow: { path: "node_modules|third-party" },
+        doNotFollow: { path: "node_modules" },
         tsPreCompilationDeps: true,
         enhancedResolveOptions: { exportsFields: ["exports"], conditionNames: ["import", "types", "default"] },
     },
