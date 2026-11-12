@@ -5,9 +5,9 @@ import type { AccountProvisioner } from "../../../../contracts/account-provision
 import type { CloudBindings } from "../../../../contracts/cloud-bindings.ts";
 import { anonymousCreationKey } from "../../../../contracts/computer-bootstrap.ts";
 import { projectLocationHint } from "../../../../contracts/project-location.ts";
+import { accountProvisioner } from "../../../../directory/composition.ts";
 import { readJsonBody } from "../../../../http/body-parser.ts";
 import { RequestDeadline } from "../../../../http/request-deadline.ts";
-import { accountProvisioner } from "../../../composition/account-provisioning.ts";
 import { admitAnonymousCreation } from "../../../gateway/anonymous-creation-admission.ts";
 import { computerObject } from "../../../gateway/computer-object-routing.ts";
 
