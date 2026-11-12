@@ -8,9 +8,7 @@
         "typecheck": "tsc --project tsconfig.json"
     },
     "exports": {
-        "./fake-daemon": "./src/fake-daemon/index.ts",
-        "./fake-daemon/fake-harness": "./src/fake-daemon/fake-harness/index.ts",
-        "./fake-daemon/fake-harness/model": "./src/fake-daemon/fake-harness/model.ts"
+        "./fake-daemon": "./src/fake-daemon/index.ts"
     },
     "dependencies": {
         "@agentclientprotocol/sdk": "catalog:",

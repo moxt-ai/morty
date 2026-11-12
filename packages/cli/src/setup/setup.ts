@@ -7,12 +7,12 @@ import { isAbsolute, join, resolve } from "node:path";
 import { setTimeout as delay } from "node:timers/promises";
 import { parseArgs } from "node:util";
 import { decodeIdentifier, isIdentifier } from "@morty-build/client/protocol";
-import { mortyStateDirectory } from "@morty-build/local-state";
 import jsQrImport from "jsqr";
 import { PNG } from "pngjs";
 import QRCode from "qrcode";
 import { validateLocalPath } from "../engine/util/filesystem/private-path.ts";
 import { spawnProcess, stopProcessTree } from "../engine/util/process/executable.ts";
+import { readStateDirectory } from "../storage/state-directory.ts";
 
 export interface SetupRuntime {
     /** Runs a Morty command; `input`, when given, is written to its standard input, which is then closed. */
@@ -1762,7 +1762,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
 
     async function revokeAllAccess(options: RevokeAllAccessOptions) {
         const directory = await prepareStateDirectory(
-            mortyStateDirectory({ ...process.env, MORTY_STATE_DIRECTORY: host.state }),
+            readStateDirectory({ ...process.env, MORTY_STATE_DIRECTORY: host.state }),
         );
         const saved = await readSavedState(directory);
         if (saved === null || saved.identity.kind !== "ready") {
@@ -1812,7 +1812,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     async function setup(options: SetupOptions) {
         const cwd = await resolveWorkingDirectory(options.cwd);
         const directory = await prepareStateDirectory(
-            mortyStateDirectory({ ...process.env, MORTY_STATE_DIRECTORY: host.state }),
+            readStateDirectory({ ...process.env, MORTY_STATE_DIRECTORY: host.state }),
         );
         const location: StateLocation = { directory, base: options.base };
         // Refuses a state that belongs to another service before anything runs, and explains a previous replacement
