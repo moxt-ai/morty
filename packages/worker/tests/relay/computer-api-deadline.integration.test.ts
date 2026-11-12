@@ -57,7 +57,7 @@ it("Given a Computer API with a 120-second deadline mounted beside Session route
                 request: new Request(`${ownerOrigin}/morty/api/v1/computers/${owner.computerId}/transport`, {
                     headers: { Upgrade: "websocket" },
                 }),
-                dispatch: async (request) => await router.fetch(request),
+                dispatch: async (operation) => await router.fetch(operation.request, { operation }),
             });
             const socket = response.webSocket;
             if (socket === null) {

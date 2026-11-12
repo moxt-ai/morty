@@ -14,8 +14,8 @@ import { DurableComputerAccount } from "./components/management/storage/durable-
 import { IdentityStorage } from "./components/management/storage/identity-storage.ts";
 import { DaemonWebSocketRoutes } from "./components/runtime/daemon-websocket-routes.ts";
 import { SessionAccessSigner } from "./components/runtime/entity/session-access-credential.ts";
-import { WebSocketUploadBudget } from "./components/runtime/http/websocket-http-transport.ts";
 import { createLocalSessionOperations } from "./components/runtime/service/local-session-operations.ts";
+import { createComputerApplication } from "./composition/computer-application.ts";
 import type { ComputerRouteContext } from "./composition/computer-route-context.ts";
 import { ComputerServices } from "./composition/computer-services.ts";
 import { createRelayDurableObjectContext } from "./composition/relay-durable-object-context.ts";
@@ -46,7 +46,6 @@ export class ComputerRelay extends DurableObject<ConfiguredRelayBindings> {
         this.#account,
     );
 
-    readonly #uploads = new WebSocketUploadBudget();
     readonly #http = this.#createHttpRoutes();
 
     #createHttpRoutes() {
@@ -59,7 +58,6 @@ export class ComputerRelay extends DurableObject<ConfiguredRelayBindings> {
                     return computer.#connectionsForComputer.context.services.runtime;
                 },
             },
-            resources: { uploads: this.#uploads },
             utilities: {
                 connectionOpened: () => this.#scheduleConnectionChecks(),
             },
@@ -90,9 +88,22 @@ export class ComputerRelay extends DurableObject<ConfiguredRelayBindings> {
             context.set("computerAccount", this.#account);
             await next();
         };
+        const application = createComputerApplication(ctx, (computerId) => {
+            const { access } = this.#services(computerId, this.#operate(computerId));
+            return {
+                sessions: access.sessionAccess,
+                operations: createLocalSessionOperations(this.#connectionsForComputer.context, computerId),
+            };
+        });
+        const initializeBrowser: MiddlewareHandler<ComputerHttpEnvironment> = async (context, next) => {
+            return await initialize(context, async () => {
+                context.set("browserDispatch", application.browser(context.var.computerId));
+                await next();
+            });
+        };
         return new Hono<ComputerHttpEnvironment>()
             .onError(errorHandler)
-            .route("/", createComputerHttpRoutes(ctx, initialize, initializeInternal))
+            .route("/", createComputerHttpRoutes(ctx, initialize, initializeInternal, initializeBrowser, application))
             .notFound(() =>
                 Response.json(
                     { error: { code: "not_found", message: "The requested Morty resource does not exist" } },

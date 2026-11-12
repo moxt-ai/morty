@@ -1,5 +1,6 @@
 import type { MiddlewareHandler } from "hono";
 import type { ConfiguredRelayBindings } from "../../contracts/relay-bindings.ts";
+import type { WebSocketHttpDispatch } from "../../contracts/websocket-http-dispatch.ts";
 import type { ComputerTargetEnvironment } from "../../http/computer-target.ts";
 import type { DurableComputerAccount } from "../components/management/storage/durable-computer-account.ts";
 import type { LocalSessionOperations } from "../components/runtime/service/local-session-operations.ts";
@@ -17,6 +18,7 @@ type RelayHttpEnvironment = {
         readonly sessionOperations: LocalSessionOperations;
         readonly sessionAccessTarget: SessionAccessTarget;
         readonly signal: AbortSignal;
+        readonly browserDispatch: WebSocketHttpDispatch;
     };
 };
 

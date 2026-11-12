@@ -10,6 +10,12 @@ import {
 import { Hono } from "hono";
 import { createMiddleware } from "hono/factory";
 import * as v from "valibot";
+import { WebSocketDispatchError, type WebSocketHttpOperation } from "../../../../contracts/websocket-http-dispatch.ts";
+import {
+    authorizeSessionContentUpload,
+    type SessionContentUploadTarget,
+    sessionContentUploadRequired,
+} from "../http/session-content-upload.ts";
 import {
     decodeSessionRequest,
     interactionResponseRequest,
@@ -21,18 +27,23 @@ import {
 import { toHttpError } from "../../../../contracts/http-error.ts";
 import { PairingDirectoryError, validateIdentifier } from "../../../../contracts/relay/pairing.ts";
 import { RequestDeadline } from "../../../../http/request-deadline.ts";
-import { authorizeSessionContentUpload } from "../http/session-content-upload.ts";
 import type { LocalSessionOperations } from "../service/local-session-operations.ts";
 import type { SessionAccessService } from "../service/session-access-service.ts";
 import type { TurnAdmission } from "../service/session-control.ts";
 import { SessionControl } from "../service/session-control.ts";
 
+export type BrowserSessionServices = {
+    readonly sessions: SessionAccessService;
+    readonly operations: LocalSessionOperations;
+};
+
 type BrowserSessionEnvironment = {
+    readonly Bindings: { readonly operation: WebSocketHttpOperation };
     readonly Variables: {
+        readonly credential: string;
         readonly access: Awaited<ReturnType<SessionAccessService["authenticate"]>>;
         readonly control: SessionControl;
         readonly target: NativeSessionTarget;
-        readonly computerId: string;
     };
 };
 
@@ -44,55 +55,71 @@ const notFound = (): Response =>
         { status: 404 },
     );
 
-/** Session routes are mounted only in the browser WebSocket dispatcher, never in the public HTTP router. */
+/** Session commands belong only to the WebSocket application's route tree. */
 export function createBrowserWebSocketRoutes(ctx: {
     readonly computerId: string;
-    readonly services: {
-        readonly sessions: SessionAccessService;
-        readonly operations: LocalSessionOperations;
-    };
+    readonly services: BrowserSessionServices;
 }) {
+    const initialize = createMiddleware<BrowserSessionEnvironment>(async (context, next) => {
+        // Preserve the established admission error for a missing or malformed bearer header.
+        const credential = (context.req.header("authorization") ?? "").match(/^Bearer ([^\s]+)$/u)?.[1];
+        if (credential === undefined) {
+            throw new WebSocketDispatchError();
+        }
+        context.set("credential", credential);
+        context.set("target", {
+            harness: validateIdentifier(context.req.param("harness") ?? "", "harness"),
+            sessionId: validateIdentifier(context.req.param("sessionId") ?? "", "session_id"),
+        });
+        await next();
+        return;
+    });
+    const admitContentUpload = createMiddleware<BrowserSessionEnvironment>(async (context, next) => {
+        if (context.env.operation.kind === "upload-admission") {
+            const authorized = await authorizeSessionContentUpload(context.req.raw, ctx.services.sessions, {
+                computerId: ctx.computerId,
+                target: context.var.target,
+                contentKey: context.req.param("contentKey") ?? "",
+            });
+            return authorized instanceof Response ? authorized : new Response(null, { status: 204 });
+        }
+        await next();
+        return;
+    });
     const authenticate = createMiddleware<BrowserSessionEnvironment>(async (context, next) => {
+        if (context.env.operation.kind === "upload-admission") {
+            return sessionContentUploadRequired();
+        }
         using deadline = new RequestDeadline(context.req.raw.signal, 30_000);
         context.req.raw = new Request(context.req.raw, { signal: deadline.signal });
         const request = context.req.raw;
-        const computerId = validateIdentifier(context.req.param("computerId") ?? "", "computer_id");
-        if (computerId !== ctx.computerId) {
-            return Response.json({ error: { code: "runtime_access_denied" } }, { status: 403 });
-        }
-        const target = {
-            harness: validateIdentifier(context.req.param("harness") ?? "", "harness"),
-            sessionId: validateIdentifier(context.req.param("sessionId") ?? "", "session_id"),
-        };
-        const credential = (request.headers.get("authorization") ?? "").match(/^Bearer ([^\s]+)$/u)?.[1];
-        if (credential === undefined) {
-            return Response.json(
-                { error: { code: "session_access_required", message: "A Session credential is required" } },
-                { status: 401 },
-            );
-        }
-        const access = await ctx.services.sessions.authenticate(
+        const computerId = ctx.computerId;
+        const target = context.var.target;
+        const services = ctx.services;
+        const credential = context.var.credential;
+        const access = await services.sessions.authenticate(
             { kind: "session", computerId, target },
             credential,
             request.signal,
         );
-        context.set("computerId", computerId);
-        context.set("target", target);
         context.set("access", access);
         context.set(
             "control",
             new SessionControl(async (command) => {
                 await access.authorize(request.signal);
-                return ctx.services.operations.requestControl(computerId, command, request.signal);
+                return services.operations.requestControl(computerId, command, request.signal);
             }, target),
         );
         await next();
         return;
     });
-    const sessionPath = `${MORTY_API_PREFIX}/v1/computers/:computerId/harnesses/:harness/sessions/:sessionId`;
+    const sessionPath = `${MORTY_API_PREFIX}/v1/computers/${ctx.computerId}/harnesses/:harness/sessions/:sessionId`;
     return new Hono<BrowserSessionEnvironment>()
         .onError((cause, context) => {
             context.req.raw.signal.throwIfAborted();
+            if (cause instanceof WebSocketDispatchError) {
+                throw cause;
+            }
             const error = toHttpError(cause);
             return Response.json(error.body, {
                 status: error.status,
@@ -100,8 +127,16 @@ export function createBrowserWebSocketRoutes(ctx: {
             });
         })
         .notFound(notFound)
-        .put(`${sessionPath}/content/:contentKey`, authenticate, (context) =>
-            uploadContent(context.req.raw, ctx.services),
+        .all(`${sessionPath}/access-credentials/*`, () => {
+            throw new WebSocketDispatchError();
+        })
+        .use(`${sessionPath}/*`, initialize)
+        .put(`${sessionPath}/content/:contentKey`, admitContentUpload, authenticate, (context) =>
+            uploadContent(context.req.raw, ctx.services, {
+                computerId: ctx.computerId,
+                target: context.var.target,
+                contentKey: context.req.param("contentKey"),
+            }),
         )
         .get(`${sessionPath}/configuration`, authenticate, async (context) =>
             json(await context.var.control.readConfiguration()),
@@ -165,7 +200,7 @@ export function createBrowserWebSocketRoutes(ctx: {
             await access.authorize(request.signal);
             if (request.headers.get("upgrade")?.toLowerCase() === "websocket") {
                 return ctx.services.operations.openPublicSessionEvents(
-                    context.var.computerId,
+                    ctx.computerId,
                     context.var.target,
                     {
                         signingKeyId: access.signingKeyId,
@@ -187,7 +222,10 @@ export function createBrowserWebSocketRoutes(ctx: {
                     ),
                 }),
             );
-        });
+        })
+        .all(`${sessionPath}/*`, (context) =>
+            context.env.operation.kind === "upload-admission" ? sessionContentUploadRequired() : notFound(),
+        );
 }
 
 function submittedTurnState(state: TurnAdmission["state"], answeredAt: string): TurnState {
@@ -210,8 +248,9 @@ async function uploadContent(
         readonly sessions: SessionAccessService;
         readonly operations: LocalSessionOperations;
     },
+    location: SessionContentUploadTarget,
 ): Promise<Response> {
-    const authorized = await authorizeSessionContentUpload(request, dependencies.sessions);
+    const authorized = await authorizeSessionContentUpload(request, dependencies.sessions, location);
     if (authorized instanceof Response) {
         return authorized;
     }
