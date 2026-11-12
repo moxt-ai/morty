@@ -147,9 +147,22 @@ if (existing && !existing.draft) {
     console.log(`Release ${tag} is already finalized at ${release.revision}`);
     process.exit(0);
 }
+// Release notes name what changed: GitHub lists the pull requests merged since the previous release.
+const { body: changes } = JSON.parse(
+    gh(
+        "api",
+        "--method",
+        "POST",
+        `repos/${repository}/releases/generate-notes`,
+        "--raw-field",
+        `tag_name=${tag}`,
+        "--raw-field",
+        `target_commitish=${release.revision}`,
+    ),
+);
 await writeFile(
     ".release/notes.txt",
-    `Source: ${release.revision}\n\nCLI: @morty-build/cli@${release.version}\nSHA-256: ${release.sha256}\n\nPublished with npm trusted publishing, verified against the accepted archive, and deployed to production before finalizing this release.\n\nAcceptance: https://github.com/${repository}/actions/runs/${process.env.ACCEPTANCE_RUN_ID}\nDeployment: https://github.com/${repository}/actions/runs/${process.env.GITHUB_RUN_ID}\n`,
+    `${changes}\n\nSource: ${release.revision}\n\nCLI: @morty-build/cli@${release.version}\nSHA-256: ${release.sha256}\n\nPublished with npm trusted publishing, verified against the accepted archive, and deployed to production before finalizing this release.\n\nAcceptance: https://github.com/${repository}/actions/runs/${process.env.ACCEPTANCE_RUN_ID}\nDeployment: https://github.com/${repository}/actions/runs/${process.env.GITHUB_RUN_ID}\n`,
 );
 if (!existing) {
     gh(
