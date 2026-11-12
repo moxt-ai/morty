@@ -527,39 +527,6 @@ export class SessionManager {
             );
         });
 
-    /**
-     * Retained for Agents that expose a separate persisted configuration channel.
-     * Use inspectAgentSettings for Agent-scoped settings discovery.
-     */
-    readonly inspectSession = async (
-        options: SessionPrepareOptions,
-        metrics: OperationMetrics = unmeasuredOperationMetrics,
-    ): Promise<PreparedSession> =>
-        this.#operations.run(options, async (options) => {
-            if (
-                this.#executionProcesses.pending(options.target) !== undefined ||
-                this.#executionProcesses.get(options.target) !== undefined
-            ) {
-                throw new AcpExecutionError(
-                    "The configuration inspection session is already in use",
-                    {},
-                    "session_busy",
-                );
-            }
-            return await this.#executionProcesses.use(options.target, async () => {
-                const runtime = await this.#startPreparation(options, { kind: "interactive-only" }, metrics);
-                try {
-                    return runtime.prepared();
-                } finally {
-                    try {
-                        await this.#retireSessionProcess(options.target, runtime, async () => await runtime.close());
-                    } finally {
-                        this.#store.remove(options.target);
-                    }
-                }
-            });
-        });
-
     readonly prepareExecutionSession = async (options: SessionPrepareOptions): Promise<PreparedSession> =>
         this.#operations.run(options, async (options) => {
             const recovery: SessionRecovery = options.recovery ?? { kind: "interactive-only" };

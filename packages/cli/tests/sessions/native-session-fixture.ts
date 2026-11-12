@@ -27,7 +27,6 @@ const acpUrl = new URL("./fixtures/acp-peer.ts", import.meta.url).toString();
 // loads. These ACP subprocesses maintain their own disposable session files.
 class NativeSessionObserver extends NullSessionObserver {
     readonly updates: AcpSessionUpdate[] = [];
-    readonly loading = Promise.withResolvers<void>();
     readonly #waiters: { readonly matches: (update: AcpSessionUpdate) => boolean; readonly resolve: () => void }[] = [];
     override readonly onSessionEvent = (event: SessionLiveEvent): Promise<void> => {
         if (event.type === "acp") {
@@ -52,9 +51,6 @@ class NativeSessionObserver extends NullSessionObserver {
         const arrived = Promise.withResolvers<void>();
         this.#waiters.push({ matches, resolve: arrived.resolve });
         return arrived.promise;
-    };
-    override readonly onInfo = async (): Promise<void> => {
-        this.loading.resolve();
     };
 }
 

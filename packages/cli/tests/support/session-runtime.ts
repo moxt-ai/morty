@@ -55,9 +55,6 @@ export class SessionRuntimeFixture {
         closed?: ClosedSessionHandling,
     ) => this.sessions.restoreSession({ ...options, adapter: this.adapters.resolve(options.agent) }, metrics, closed);
 
-    readonly inspectSession = (options: TestSessionPrepareOptions, metrics?: OperationMetrics) =>
-        this.sessions.inspectSession({ ...options, adapter: this.adapters.resolve(options.agent) }, metrics);
-
     readonly prepareExecutionSession = (options: TestSessionPrepareOptions) =>
         this.sessions.prepareExecutionSession({ ...options, adapter: this.adapters.resolve(options.agent) });
 

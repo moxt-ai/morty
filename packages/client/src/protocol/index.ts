@@ -50,20 +50,6 @@ export {
     decodeSessionAccessGrant,
 } from "./session/access/index.ts";
 
-export type {
-    AgentCatalogDiscoverCommand,
-    AgentCatalogDiscoveredEvent,
-} from "./session/agent/catalog.ts";
-
-export {
-    AGENT_CATALOG_DISCOVER_KIND,
-    AGENT_CATALOG_DISCOVERED_KIND,
-    AGENT_CATALOG_DISCOVERY_FAILED_KIND,
-    decodeAgentCatalogDiscoveredEvent,
-    decodeAgentCatalogDiscoveryFailedEvent,
-    encodeAgentCatalogDiscoverCommand,
-} from "./session/agent/catalog.ts";
-
 export { MAX_LOCAL_AGENT_DIRECTORY_ENTRIES } from "./session/agent/directory.ts";
 
 export type {
@@ -235,8 +221,6 @@ export type {
     SessionClosedEvent,
     SessionCloseNoticeEvent,
     SessionCreateCommand,
-    SessionCreationReadCommand,
-    SessionInfoUpdatedEvent,
     SessionListCommand,
     SessionMetadata,
     SessionOperationFailedEvent,
@@ -257,7 +241,6 @@ export {
     decodeSessionClosedEvent,
     decodeSessionCloseNoticeEvent,
     decodeSessionCreateCommand,
-    decodeSessionInfoUpdatedEvent,
     decodeSessionListCommand,
     decodeSessionOperationFailedEvent,
     decodeSessionPrepareCommand,
@@ -272,7 +255,6 @@ export {
     encodeSessionCloseCommand,
     encodeSessionClosedEvent,
     encodeSessionCreateCommand,
-    encodeSessionInfoUpdatedEvent,
     encodeSessionListCommand,
     encodeSessionOperationFailedEvent,
     encodeSessionPrepareCommand,
@@ -287,8 +269,6 @@ export {
     SESSION_CLOSED_ERROR_CODE,
     SESSION_CLOSED_KIND,
     SESSION_CREATE_KIND,
-    SESSION_CREATION_READ_KIND,
-    SESSION_INFO_UPDATED_KIND,
     SESSION_LIST_KIND,
     SESSION_LISTED_KIND,
     SESSION_OPERATION_FAILED_KIND,
@@ -321,7 +301,6 @@ export {
     encodeNativeSessionCommand,
     encodeNativeSessionRequest,
     encodeNativeSessionResult,
-    NATIVE_SESSION_CANCEL_KIND,
     NATIVE_SESSION_REQUEST_KIND,
     NATIVE_SESSION_RESULT_KIND,
 } from "./session/native/index.ts";

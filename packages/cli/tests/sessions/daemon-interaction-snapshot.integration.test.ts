@@ -9,7 +9,6 @@ import {
     decodeSessionElicitationRequestedEvent,
     decodeSessionEventEnvelope,
     decodeSessionHistoryPageLoaded,
-    decodeSessionInfoUpdatedEvent,
     decodeSessionInteractionAnsweredEvent,
     decodeSessionOperationFailedEvent,
     decodeSessionPermissionRequestedEvent,
@@ -32,7 +31,6 @@ import {
     SESSION_ELICITATION_REQUESTED_KIND,
     SESSION_ELICITATION_RESOLVED_KIND,
     SESSION_EVENT_KIND,
-    SESSION_INFO_UPDATED_KIND,
     SESSION_PERMISSION_REQUESTED_KIND,
     SESSION_PERMISSION_RESOLVED_KIND,
     SESSION_PROMPT_ACCEPTED_KIND,
@@ -180,18 +178,6 @@ test("Given a newly created native Session, When its first Turn resolves interac
             );
             return decodeNativeSessionResult(await messages.nextKind(NATIVE_SESSION_RESULT_KIND));
         };
-        for (;;) {
-            const information = decodeSessionInfoUpdatedEvent(await messages.nextKind(SESSION_INFO_UPDATED_KIND));
-            if (information.updatedAt === "2026-09-04T00:01:00.000Z") {
-                expect(information).toEqual({
-                    kind: SESSION_INFO_UPDATED_KIND,
-                    target: sessionTarget,
-                    title: "ACP feature session",
-                    updatedAt: "2026-09-04T00:01:00.000Z",
-                });
-                break;
-            }
-        }
         const permission = decodeSessionPermissionRequestedEvent(
             await messages.nextKind(SESSION_PERMISSION_REQUESTED_KIND),
         );

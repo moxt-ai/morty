@@ -11,15 +11,14 @@ import type {
     WorkspaceListCommand,
 } from "@morty-build/client/protocol";
 import {
-    SESSION_CONFIG_READ_KIND,
+    type SESSION_CONFIG_READ_KIND,
     SESSION_CONFIG_READ_RESULT_KIND,
-    SESSION_CONFIGURE_KIND,
-    SESSION_CREATE_KIND,
-    SESSION_CREATION_READ_KIND,
-    SESSION_PREPARE_KIND,
-    SESSION_RENAME_KIND,
-    SESSION_RESTORE_KIND,
-    WORKSPACE_LIST_KIND,
+    type SESSION_CONFIGURE_KIND,
+    type SESSION_CREATE_KIND,
+    type SESSION_PREPARE_KIND,
+    type SESSION_RENAME_KIND,
+    type SESSION_RESTORE_KIND,
+    type WORKSPACE_LIST_KIND,
 } from "@morty-build/client/protocol";
 import type { WebSocket } from "undici";
 import { operationErrorCode } from "../../../infra/operation-error.ts";
@@ -35,7 +34,7 @@ import { resolveSessionDirectory } from "../../../session/workspace/resolve-sess
 import type { WorkspaceDirectoryService } from "../../../session/workspace/workspace-directory.ts";
 import type { RelayConnectionDiagnostics } from "../../relay/diagnostics.ts";
 import type { CommandContext } from "../context.ts";
-import type { RuntimeCommand } from "../definition.ts";
+import type { CommandHandler } from "../definition.ts";
 import { reportOperationFailure, send } from "../transport.ts";
 
 /** What a preparation of a Session asks for, apart from the Session itself. */
@@ -43,7 +42,6 @@ interface SessionPreparationRequest {
     readonly requestId: string;
     /** The complete settings a Session being created starts with. */
     readonly configurations?: readonly SessionConfigurationSelection[] | undefined;
-    readonly transient?: boolean | undefined;
 }
 
 /** Resolves the Session this Computer holds for `target`, measured as part of the preparation. */
@@ -72,9 +70,6 @@ async function prepareSession(
         const preparation = session.options;
         const { target } = preparation;
         const prepare = async (): Promise<PreparedSession> => {
-            if (command.transient === true) {
-                return await sessions.inspectSession(preparation, metrics);
-            }
             if (recovery.kind === "history-required") {
                 return await sessions.restoreSession(preparation, metrics, closed);
             }
@@ -314,32 +309,20 @@ async function executeSessionConfigure(
     }
 }
 
-export const workspaceListCommand: RuntimeCommand = {
-    kind: WORKSPACE_LIST_KIND,
-    handle: (context, message): void => {
-        if (message.kind !== WORKSPACE_LIST_KIND) {
-            throw new Error("Command kind mismatch");
-        }
-        void executeWorkspaceList(context.socket, message, context.directories, context.signal);
-    },
+export const handleWorkspaceList: CommandHandler<typeof WORKSPACE_LIST_KIND> = (context, message): void => {
+    void executeWorkspaceList(context.socket, message, context.directories, context.signal);
 };
 
-export const sessionPrepareCommand: RuntimeCommand = {
-    kind: SESSION_PREPARE_KIND,
-    handle: (context, message): void => {
-        if (message.kind !== SESSION_PREPARE_KIND) {
-            throw new Error("Command kind mismatch");
-        }
-        void executeSessionPrepare(
-            context.socket,
-            message,
-            context.resolveAgent,
-            context.directories,
-            context.sessions,
-            context.diagnostics,
-            context.signal,
-        );
-    },
+export const handleSessionPrepare: CommandHandler<typeof SESSION_PREPARE_KIND> = (context, message): void => {
+    void executeSessionPrepare(
+        context.socket,
+        message,
+        context.resolveAgent,
+        context.directories,
+        context.sessions,
+        context.diagnostics,
+        context.signal,
+    );
 };
 
 async function executeSessionCreate(context: CommandContext, command: SessionCreateCommand): Promise<void> {
@@ -418,100 +401,57 @@ async function executeSessionCreate(context: CommandContext, command: SessionCre
     }
 }
 
-export const sessionCreationReadCommand: RuntimeCommand = {
-    kind: SESSION_CREATION_READ_KIND,
-    handle: (context, message): void => {
-        if (message.kind !== SESSION_CREATION_READ_KIND) {
-            throw new Error("Command kind mismatch");
+export const handleSessionCreate: CommandHandler<typeof SESSION_CREATE_KIND> = (context, message): void => {
+    void executeSessionCreate(context, message).catch((cause: unknown) => {
+        if (!context.signal.aborted) {
+            context.diagnostics.daemonDiagnostic(
+                "session_create_failed",
+                message.requestId,
+                {
+                    harness: message.harness,
+                    operationId: message.operationId,
+                    code: operationErrorCode(cause),
+                },
+                cause,
+            );
         }
-        try {
-            context.signal.throwIfAborted();
-            send(context.socket, {
-                ...context.sessionCreations.read(message.operationId),
-                requestId: message.requestId,
-            });
-        } catch (cause) {
-            context.signal.throwIfAborted();
-            reportOperationFailure(context.socket, message.requestId, undefined, cause);
-        }
-    },
+    });
 };
 
-export const sessionCreateCommand: RuntimeCommand = {
-    kind: SESSION_CREATE_KIND,
-    handle: (context, message): void => {
-        if (message.kind !== SESSION_CREATE_KIND) {
-            throw new Error("Command kind mismatch");
-        }
-        void executeSessionCreate(context, message).catch((cause: unknown) => {
-            if (!context.signal.aborted) {
-                context.diagnostics.daemonDiagnostic(
-                    "session_create_failed",
-                    message.requestId,
-                    {
-                        harness: message.harness,
-                        operationId: message.operationId,
-                        code: operationErrorCode(cause),
-                    },
-                    cause,
-                );
-            }
-        });
-    },
+export const handleSessionConfigure: CommandHandler<typeof SESSION_CONFIGURE_KIND> = (context, message): void => {
+    void executeSessionConfigure(
+        context.socket,
+        message,
+        context.resolveAgent,
+        context.directories,
+        context.sessions,
+        context.signal,
+    );
 };
 
-export const sessionConfigureCommand: RuntimeCommand = {
-    kind: SESSION_CONFIGURE_KIND,
-    handle: (context, message): void => {
-        if (message.kind !== SESSION_CONFIGURE_KIND) {
-            throw new Error("Command kind mismatch");
-        }
-        void executeSessionConfigure(
-            context.socket,
-            message,
-            context.resolveAgent,
-            context.directories,
-            context.sessions,
-            context.signal,
-        );
-    },
+export const handleSessionRestore: CommandHandler<typeof SESSION_RESTORE_KIND> = (context, message): void => {
+    void executeSessionRestore(
+        context.socket,
+        message,
+        context.resolveAgent,
+        context.directories,
+        context.sessions,
+        context.nativeSessions,
+        context.diagnostics,
+        context.signal,
+    );
 };
 
-export const sessionRestoreCommand: RuntimeCommand = {
-    kind: SESSION_RESTORE_KIND,
-    handle: (context, message): void => {
-        if (message.kind !== SESSION_RESTORE_KIND) {
-            throw new Error("Command kind mismatch");
-        }
-        void executeSessionRestore(
-            context.socket,
-            message,
-            context.resolveAgent,
-            context.directories,
-            context.sessions,
-            context.nativeSessions,
-            context.diagnostics,
-            context.signal,
-        );
-    },
-};
-
-export const sessionRenameCommand: RuntimeCommand = {
-    kind: SESSION_RENAME_KIND,
-    handle: (context, message): void => {
-        if (message.kind !== SESSION_RENAME_KIND) {
-            throw new Error("Command kind mismatch");
-        }
-        void executeSessionRename(
-            context.socket,
-            message,
-            context.resolveAgent,
-            context.directories,
-            context.sessions,
-            context.nativeSessions,
-            context.signal,
-        );
-    },
+export const handleSessionRename: CommandHandler<typeof SESSION_RENAME_KIND> = (context, message): void => {
+    void executeSessionRename(
+        context.socket,
+        message,
+        context.resolveAgent,
+        context.directories,
+        context.sessions,
+        context.nativeSessions,
+        context.signal,
+    );
 };
 
 async function executeSessionConfigRead(
@@ -566,21 +506,15 @@ async function executeSessionConfigRead(
     }
 }
 
-export const sessionConfigReadCommand: RuntimeCommand = {
-    kind: SESSION_CONFIG_READ_KIND,
-    handle: (context, message): void => {
-        if (message.kind !== SESSION_CONFIG_READ_KIND) {
-            throw new Error("Command kind mismatch");
-        }
-        void executeSessionConfigRead(
-            context.socket,
-            message,
-            context.resolveAgent,
-            context.directories,
-            context.sessions,
-            context.nativeSessions,
-            context.diagnostics,
-            context.signal,
-        );
-    },
+export const handleSessionConfigRead: CommandHandler<typeof SESSION_CONFIG_READ_KIND> = (context, message): void => {
+    void executeSessionConfigRead(
+        context.socket,
+        message,
+        context.resolveAgent,
+        context.directories,
+        context.sessions,
+        context.nativeSessions,
+        context.diagnostics,
+        context.signal,
+    );
 };

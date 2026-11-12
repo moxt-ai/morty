@@ -4,7 +4,6 @@ import type {
     SessionElicitationRequestedEvent,
     SessionElicitationResolvedEvent,
     SessionEventPayload,
-    SessionInfoUpdatedEvent,
     SessionLiveEvent,
     SessionPermissionRequestedEvent,
 } from "@morty-build/client/protocol";
@@ -17,17 +16,11 @@ export const fakeAgentPath = fileURLToPath(new URL("./fixtures/acp-peer.ts", imp
 
 /** Folds the live session event stream into the shapes integration tests assert on. */
 export class RecordingObserver implements SessionObserver {
-    readonly information: SessionInfoUpdatedEvent[] = [];
     readonly elicitationResolutions: SessionElicitationResolvedEvent[] = [];
     readonly events: { readonly event: SessionEventPayload; readonly position: number }[] = [];
     readonly permissionArrived = Promise.withResolvers<SessionPermissionRequestedEvent>();
     readonly elicitationArrived = Promise.withResolvers<SessionElicitationRequestedEvent>();
     readonly #eventWaiters: Array<(event: SessionEventPayload) => void> = [];
-
-    readonly onInfo = (event: SessionInfoUpdatedEvent): Promise<void> => {
-        this.information.push(event);
-        return Promise.resolve();
-    };
 
     readonly onSessionEvent = (liveEvent: SessionLiveEvent): Promise<void> => {
         if (liveEvent.type === "lifecycle-metadata") {

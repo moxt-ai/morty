@@ -17,7 +17,6 @@ import {
     encodeSessionConfigReadResult,
     encodeSessionEventEnvelope,
     encodeSessionHistoryPageLoaded,
-    encodeSessionInfoUpdatedEvent,
     encodeSessionOperationFailedEvent,
     encodeSessionPromptAcceptedEvent,
     encodeSessionRenamedEvent,
@@ -397,14 +396,6 @@ describe.sequential("Relay Session-only boundary", () => {
                     kind: "session.status.changed",
                     target: nativeTarget(sessionId),
                     status: { commandId: "command-1", kind: "working" },
-                }),
-            );
-            daemon.send(
-                encodeSessionInfoUpdatedEvent({
-                    kind: "session.info.updated",
-                    target: nativeTarget(sessionId),
-                    title: "Renamed session",
-                    updatedAt: "2026-09-18T00:01:00.000Z",
                 }),
             );
             const historyPage = JSON.stringify({

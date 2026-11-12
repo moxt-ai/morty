@@ -41,7 +41,6 @@ export const computerControlRegistry = {
     "native.session.request": directReply("native.session.result", decodeNativeSessionResult),
     "session.prepare": directReply("session.ready", decodeSessionReadyEvent),
     "session.create": directReply("session.ready", decodeSessionReadyEvent),
-    "session.creation.read": directReply("session.ready", decodeSessionReadyEvent),
     "session.configure": directReply("session.config.updated", decodeSessionConfigUpdatedEvent),
     "session.config.read": directReply("session.config.read.result", decodeSessionConfigReadResult),
     "session.rename": directReply("session.renamed", decodeSessionRenamedEvent),

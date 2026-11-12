@@ -22,17 +22,6 @@ import {
     encodeComputerPongEvent,
 } from "../computer/liveness.ts";
 import {
-    AGENT_CATALOG_DISCOVER_KIND,
-    AGENT_CATALOG_DISCOVERED_KIND,
-    AGENT_CATALOG_DISCOVERY_FAILED_KIND,
-    decodeAgentCatalogDiscoverCommand,
-    decodeAgentCatalogDiscoveredEvent,
-    decodeAgentCatalogDiscoveryFailedEvent,
-    encodeAgentCatalogDiscoverCommand,
-    encodeAgentCatalogDiscoveredEvent,
-    encodeAgentCatalogDiscoveryFailedEvent,
-} from "../session/agent/catalog.ts";
-import {
     AGENT_SETTINGS_DISCOVER_KIND,
     AGENT_SETTINGS_DISCOVERED_KIND,
     AGENT_SETTINGS_DISCOVERY_FAILED_KIND,
@@ -116,8 +105,6 @@ import {
     decodeSessionClosedEvent,
     decodeSessionCloseNoticeEvent,
     decodeSessionCreateCommand,
-    decodeSessionCreationReadCommand,
-    decodeSessionInfoUpdatedEvent,
     decodeSessionListCommand,
     decodeSessionOperationFailedEvent,
     decodeSessionPrepareCommand,
@@ -135,8 +122,6 @@ import {
     encodeSessionClosedEvent,
     encodeSessionCloseNoticeEvent,
     encodeSessionCreateCommand,
-    encodeSessionCreationReadCommand,
-    encodeSessionInfoUpdatedEvent,
     encodeSessionListCommand,
     encodeSessionOperationFailedEvent,
     encodeSessionPrepareCommand,
@@ -154,8 +139,6 @@ import {
     SESSION_CLOSE_NOTICE_KIND,
     SESSION_CLOSED_KIND,
     SESSION_CREATE_KIND,
-    SESSION_CREATION_READ_KIND,
-    SESSION_INFO_UPDATED_KIND,
     SESSION_LIST_KIND,
     SESSION_LISTED_KIND,
     SESSION_OPERATION_FAILED_KIND,
@@ -264,11 +247,6 @@ const serviceToDaemonSignatures = {
         encodeAgentSettingsDiscoverCommand,
         decodeAgentSettingsDiscoverCommand,
     ),
-    [AGENT_CATALOG_DISCOVER_KIND]: defineMessageSignature(
-        AGENT_CATALOG_DISCOVER_KIND,
-        encodeAgentCatalogDiscoverCommand,
-        decodeAgentCatalogDiscoverCommand,
-    ),
     [FILE_READ_KIND]: defineMessageSignature(FILE_READ_KIND, encodeFileReadCommand, decodeFileReadCommand),
     [CONTENT_WRITE_KIND]: defineMessageSignature(
         CONTENT_WRITE_KIND,
@@ -375,11 +353,6 @@ const serviceToDaemonSignatures = {
         SESSION_CREATE_KIND,
         encodeSessionCreateCommand,
         decodeSessionCreateCommand,
-    ),
-    [SESSION_CREATION_READ_KIND]: defineMessageSignature(
-        SESSION_CREATION_READ_KIND,
-        encodeSessionCreationReadCommand,
-        decodeSessionCreationReadCommand,
     ),
     [SESSION_PREPARE_KIND]: defineMessageSignature(
         SESSION_PREPARE_KIND,
@@ -517,16 +490,6 @@ const daemonToServiceSignatures = {
         encodeAgentSettingsDiscoveryFailedEvent,
         decodeAgentSettingsDiscoveryFailedEvent,
     ),
-    [AGENT_CATALOG_DISCOVERED_KIND]: defineMessageSignature(
-        AGENT_CATALOG_DISCOVERED_KIND,
-        encodeAgentCatalogDiscoveredEvent,
-        decodeAgentCatalogDiscoveredEvent,
-    ),
-    [AGENT_CATALOG_DISCOVERY_FAILED_KIND]: defineMessageSignature(
-        AGENT_CATALOG_DISCOVERY_FAILED_KIND,
-        encodeAgentCatalogDiscoveryFailedEvent,
-        decodeAgentCatalogDiscoveryFailedEvent,
-    ),
     [FILE_BEGIN_KIND]: defineMessageSignature(FILE_BEGIN_KIND, encodeFileBeginEvent, decodeFileBeginEvent),
     [FILE_END_KIND]: defineMessageSignature(FILE_END_KIND, encodeFileEndEvent, decodeFileEndEvent),
     [FILE_FAILED_KIND]: defineMessageSignature(FILE_FAILED_KIND, encodeFileFailedEvent, decodeFileFailedEvent),
@@ -555,11 +518,6 @@ const daemonToServiceSignatures = {
         SESSION_STATUS_CHANGED_KIND,
         encodeSessionStatusChangedEvent,
         decodeSessionStatusChangedEvent,
-    ),
-    [SESSION_INFO_UPDATED_KIND]: defineMessageSignature(
-        SESSION_INFO_UPDATED_KIND,
-        encodeSessionInfoUpdatedEvent,
-        decodeSessionInfoUpdatedEvent,
     ),
     [NATIVE_SESSION_RESULT_KIND]: defineMessageSignature(
         NATIVE_SESSION_RESULT_KIND,

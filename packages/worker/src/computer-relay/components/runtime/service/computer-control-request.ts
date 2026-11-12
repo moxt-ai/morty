@@ -43,7 +43,6 @@ import {
     type SessionConfigUpdatedEvent,
     type SessionConfigureCommand,
     type SessionCreateCommand,
-    type SessionCreationReadCommand,
     type SessionElicitationRespondCommand,
     type SessionHistoryPageLoad,
     type SessionHistoryWirePageLoaded,
@@ -88,7 +87,6 @@ export type ComputerControlCommand =
     | NativeSessionRequest
     | SessionPrepareCommand
     | SessionCreateCommand
-    | SessionCreationReadCommand
     | SessionConfigureCommand
     | SessionConfigReadCommand
     | SessionRenameCommand

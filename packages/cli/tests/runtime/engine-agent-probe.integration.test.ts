@@ -241,39 +241,6 @@ async function diagnostics(socket: WebSocket, signal: AbortSignal) {
     return result;
 }
 
-test("Given three Runtime connections discovered delayed version output, When their catalogs refresh concurrently, Then every connection retains its ready Agent", async ({
-    signal,
-}) => {
-    vi.useFakeTimers({ now: new Date("2026-10-29T00:00:00Z"), toFake: ["Date"] });
-    const peers: Awaited<ReturnType<typeof createProbeEngine>>[] = [];
-    try {
-        for (let index = 0; index < 3; index += 1) {
-            const peer = await createProbeEngine({ scenario: "delayed", stream: "stdout" }, signal);
-            peers.push(peer);
-            await peer.online();
-        }
-        const results = await Promise.all(
-            peers.map(
-                async (peer, index) =>
-                    await request(
-                        await peer.online(),
-                        { kind: "agent.catalog.discover", requestId: `refresh-${index.toString()}` },
-                        peer.signal,
-                    ),
-            ),
-        );
-        for (const result of results) {
-            expect(result).toMatchObject({
-                kind: "agent.catalog.discovered",
-                agents: [expect.objectContaining({ harness: "codex", agentVersion: "codex-cli 0.154.0" })],
-            });
-        }
-    } finally {
-        await Promise.all(peers.map(async (peer) => await peer.close()));
-        vi.useRealTimers();
-    }
-});
-
 test.for([{ stream: "stdout" }, { stream: "stderr" }] as const)(
     "Given a version launcher exits before its inherited $stream pipe closes, When an Engine discovers the Agent, Then its catalog retains the Agent and a Session can be prepared",
     async (options, { signal }) => {
