@@ -9,9 +9,9 @@ import { createLocalSessionOperations } from "../../src/computer-relay/component
 import { SessionAccessService } from "../../src/computer-relay/components/runtime/service/session-access-service.ts";
 import { createBrowserWebSocketRoutes } from "../../src/computer-relay/components/runtime/websocket/browser-websocket-routes.ts";
 import { createRelayDurableObjectContext } from "../../src/computer-relay/composition/relay-durable-object-context.ts";
-import { ComputerRelayGateway } from "../../src/computer-relay/gateway/computer-relay.ts";
 import { DurableObjectDatabase } from "../../src/computer-relay/infra/durable-object-database.ts";
 import { computerDirectory } from "../../src/directory/composition.ts";
+import { ComputerRelayGateway } from "../../src/gateway/computer-relay.ts";
 import { RequestDeadline } from "../../src/http/request-deadline.ts";
 import { createOwner, ownerOrigin } from "./owner-fixture.ts";
 import { computerManagementStore } from "./registered-computer.ts";

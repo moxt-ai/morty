@@ -2,10 +2,10 @@ import { Hono, type MiddlewareHandler } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import * as v from "valibot";
 import {
+    computerToken,
     credentialRevocationPaths,
     defaultDeviceAccessDuration,
     deviceAccessDurations,
-    localCredentialToken,
 } from "../../../../contracts/authentication/credential.ts";
 import { clientLocationHeader, decodeClientLocation } from "../../../../contracts/client-location.ts";
 import { relayIdentifier } from "../../../../contracts/computer-management.ts";
@@ -16,7 +16,7 @@ import { json } from "../../../../http/json.ts";
 import { RequestDeadline } from "../../../../http/request-deadline.ts";
 import { requestTimeoutMiddleware } from "../../../../middleware/request-timeout-middleware.ts";
 import { requestHeaders } from "../../../middleware/request-headers.ts";
-import { credentialRejected, localIdentityRequired } from "./authenticated-session.ts";
+import { credentialRejected } from "./authenticated-session.ts";
 import type { ManagementHttpEnvironment } from "./management-http-environment.ts";
 
 const shareInput = v.pipe(
@@ -45,7 +45,7 @@ const transferInput = v.pipe(
 const revokeAllAccessInput = v.pipe(
     v.strictObject({
         /** The local credential that replaces the caller's; setup saved it before sending this request. */
-        successor: localCredentialToken,
+        successor: computerToken,
     }),
     v.readonly(),
 );
@@ -147,22 +147,6 @@ export function createAuthenticationRoutes() {
                 );
             },
         )
-        .post("/identity/recovery-token", async (context) => {
-            using deadline = new RequestDeadline(context.req.raw.signal, 15000);
-            const signal = deadline.signal;
-            const result = await context.var.application.services.authentication.createRecoveryToken(
-                context.get("bearerToken"),
-                signal,
-            );
-            switch (result.kind) {
-                case "issued":
-                    return json({ token: result.token }, 201, { "Cache-Control": "no-store" });
-                case "unauthenticated":
-                    throw new ManagementError("UNAUTHENTICATED", "Anonymous identity is required.", 401);
-                case "forbidden":
-                    throw localIdentityRequired();
-            }
-        })
         .get("/identity/devices", async (context) => {
             const result = await context.var.application.services.authentication.linkedDevices(
                 context.get("bearerToken"),
@@ -257,14 +241,6 @@ export function createAuthenticationRoutes() {
         .delete(credentialRevocationPaths.browser, async (context) => {
             return endAccessResponse(
                 await context.var.application.services.authentication.endBrowserAccess(
-                    context.get("bearerToken"),
-                    context.req.raw.signal,
-                ),
-            );
-        })
-        .delete(credentialRevocationPaths.recovery, async (context) => {
-            return endAccessResponse(
-                await context.var.application.services.authentication.revokeRecoveryCredential(
                     context.get("bearerToken"),
                     context.req.raw.signal,
                 ),

@@ -1,10 +1,8 @@
 import { styleText } from "node:util";
-import type { NativeSessionTarget } from "@morty-build/client/protocol";
 import { createRuntimeAdapterRegistry } from "../agent/runtime-agents.ts";
 import { buildSessionLayer } from "../session/api/session-layer.ts";
 import { LocalExternalContentStore } from "../session/content/external-content-store.ts";
 import { AgentProcessPool } from "../session/process/agent-process-pool.ts";
-import type { RuntimeAgentProcesses } from "../session/process/runtime-agent-processes.ts";
 import { runCleanup } from "../util/run-cleanup.ts";
 import { systemTimer, type Timer } from "../util/timer.ts";
 import { publishAgentCatalog } from "./catalog/publish-agent-catalog.ts";
@@ -66,16 +64,10 @@ async function publishAgentCatalogUntilAvailable(
 }
 
 export interface RunRuntimeOptions {
-    /** The daemon worker's registry of Runtime process pools, for releasing idle Agent processes on request. */
-    readonly agentProcesses?: RuntimeAgentProcesses;
+    /** The pool the Runtime's Agent processes run in; the daemon keeps it to release idle processes on request. */
+    readonly processes?: AgentProcessPool;
     readonly onExecutionCountChange?: (count: number) => void;
     readonly onConnectionStatus?: (status: "online" | "reconnecting") => void;
-    /**
-     * State directory of the daemon processes supervising this Runtime. Their
-     * lifecycle and rejection logs are the only witness of a silent worker death,
-     * so the local bug-report log reads them too. Never written from here.
-     */
-    readonly processLogsDirectory?: string;
 }
 
 export async function runRuntime(
@@ -90,32 +82,23 @@ export async function runRuntime(
     const diagnostics = new RelayConnectionDiagnostics(
         config.computerId,
         config.relayUrl,
-        new RuntimeDiagnosticLog(stateDirectory, {
-            ...(options.processLogsDirectory === undefined
-                ? {}
-                : { processLogsDirectory: options.processLogsDirectory }),
-        }),
+        new RuntimeDiagnosticLog(stateDirectory),
     );
     const publisher = new RuntimeSessionEventPublisher(timer);
     // Dispose media only after session and adapter operations have drained.
     await using externalContent = new LocalExternalContentStore(stateDirectory);
-    const processes = new AgentProcessPool(config.localContext.maxAcpProcesses, timer);
+    const processes = options.processes ?? new AgentProcessPool(config.localContext.maxAcpProcesses, timer);
     const { adapters, externalizeSessionUpdate } = createRuntimeAdapterRegistry(
         config.adapters,
         processes,
         (target, content, contentSignal) => externalContent.put({ ...content, target, signal: contentSignal }),
         externalContent.linkedResources,
     );
-    const resolveAgent = async (harness: string, resolveSignal: AbortSignal, target?: NativeSessionTarget) => {
-        const catalogAgent = await resolveCatalogAgent(config, harness, resolveSignal);
-        const environment = target === undefined ? undefined : config.sessionEnvironment?.(target);
-        const agent =
-            environment === undefined
-                ? catalogAgent
-                : catalogAgent.withEnvironment({ ...catalogAgent.environment, ...environment });
+    const resolveAgent = async (harness: string, resolveSignal: AbortSignal) => {
+        const agent = await resolveCatalogAgent(config, harness, resolveSignal);
         return {
             agent,
-            adapter: adapters.resolve(catalogAgent),
+            adapter: adapters.resolve(agent),
             externalizeSessionUpdate,
         };
     };
@@ -160,12 +143,9 @@ export async function runRuntime(
         }
         connectionAnnounced = true;
         process.stdout.write("Morty Computer connected to the relay.\n\n");
-        if (config.reconnectTarget !== null) {
-            const reconnectCommand = "morty start";
-            process.stdout.write(
-                `${styleText(["bold", "yellow"], `Reconnect this local connection later:\n  ${reconnectCommand}`)}\n\n`,
-            );
-        }
+        process.stdout.write(
+            `${styleText(["bold", "yellow"], "Reconnect this local connection later:\n  morty start")}\n\n`,
+        );
         announceReadiness();
     };
     const catalogPublication = publishAgentCatalogUntilAvailable(config, diagnostics, signal, timer);
@@ -177,7 +157,6 @@ export async function runRuntime(
         announceReadiness();
     });
 
-    const removeAgentProcesses = options.agentProcesses?.add(processes);
     try {
         while (!signal.aborted) {
             connectionEpoch += 1;
@@ -219,7 +198,6 @@ export async function runRuntime(
             await waitForRelayRetry(signal, timer);
         }
     } finally {
-        removeAgentProcesses?.();
         shutdown.abort();
         operations.beginShutdown();
         await activeSessions.close();

@@ -44,8 +44,7 @@ import type { MortyTransportSessionEvent } from "./transport/http-transport.ts";
 import { WsTransport } from "./transport/ws-transport.ts";
 
 const DEFAULT_OPERATION_TIMEOUT_MILLISECONDS = 20_000;
-const DEFAULT_STREAM_CONNECTION_TIMEOUT_MILLISECONDS = 15_000;
-const DEFAULT_STREAM_RECONNECT_ATTEMPTS = 7;
+const STREAM_CONNECTION_TIMEOUT_MILLISECONDS = 15_000;
 
 function sanitizedConnectionCauseMessage(value: string): string {
     return Array.from(value, (character) => {
@@ -139,11 +138,8 @@ export interface MortyResponseMetadata {
 export interface MortyEndpointOptions {
     readonly credentialProvider: MortyCredentialProvider;
     readonly endpoint: string;
-    /** Set to zero when the caller owns live-stream recovery. */
-    readonly maxStreamReconnectAttempts?: number;
     readonly observeResponse?: (metadata: MortyResponseMetadata) => void;
     readonly operationTimeoutMilliseconds?: number;
-    readonly streamConnectionTimeoutMilliseconds?: number;
 }
 
 export interface MortyClientOptions extends MortyEndpointOptions {
@@ -199,7 +195,7 @@ function decodeTurnCancellation(value: unknown, turnId: string): MortyTurnCancel
 
 function projectPath(computerId: string, resourcePath: string): string {
     if (!isIdentifier(computerId)) {
-        throw new MortyValidationError("The Morty project identifier is invalid");
+        throw new MortyValidationError("The Morty Computer identifier is invalid");
     }
     return `v1/computers/${encodeURIComponent(computerId)}/${resourcePath}`;
 }
@@ -334,7 +330,6 @@ export class MortyRequestExecutor {
     readonly #endpoint: URL;
     readonly #operationTimeoutMilliseconds: number;
     readonly #observeResponse: ((metadata: MortyResponseMetadata) => void) | undefined;
-    readonly #streamConnectionTimeoutMilliseconds: number;
     readonly #transport = new WsTransport();
 
     constructor(options: MortyEndpointOptions) {
@@ -345,10 +340,6 @@ export class MortyRequestExecutor {
             "operation timeout",
         );
         this.#observeResponse = options.observeResponse;
-        this.#streamConnectionTimeoutMilliseconds = validatePositiveInteger(
-            options.streamConnectionTimeoutMilliseconds ?? DEFAULT_STREAM_CONNECTION_TIMEOUT_MILLISECONDS,
-            "stream connection timeout",
-        );
     }
 
     readonly close = (): void => this.#transport.close();
@@ -405,7 +396,7 @@ export class MortyRequestExecutor {
                 throw new MortyProtocolError("The service returned an invalid file name", { cause });
             }
             return {
-                bytes: await readExactResponseBytes(response, byteLength, deadline.signal, false),
+                bytes: await readExactResponseBytes(response, byteLength, deadline.signal),
                 mediaType,
                 modifiedAt,
                 name,
@@ -477,7 +468,7 @@ export class MortyRequestExecutor {
         signal.addEventListener("abort", abort, { once: true });
         const timeoutId = globalThis.setTimeout(
             () => controller.abort(new Error("The live Session event connection timed out")),
-            this.#streamConnectionTimeoutMilliseconds,
+            STREAM_CONNECTION_TIMEOUT_MILLISECONDS,
         );
         const release = (): void => {
             globalThis.clearTimeout(timeoutId);
@@ -551,7 +542,6 @@ async function readExactResponseBytes(
     response: Response,
     expectedByteLength: number,
     signal: AbortSignal,
-    verifyDigest = true,
 ): Promise<Uint8Array> {
     const declaredLength = response.headers.get("content-length");
     if (
@@ -592,14 +582,6 @@ async function readExactResponseBytes(
     for (const chunk of chunks) {
         bytes.set(chunk, offset);
         offset += chunk.byteLength;
-    }
-    if (verifyDigest) {
-        const digest = await crypto.subtle.digest("SHA-256", bytes);
-        signal.throwIfAborted();
-        const sha256 = Array.from(new Uint8Array(digest), (byte) => byte.toString(16).padStart(2, "0")).join("");
-        if (sha256 !== response.headers.get("x-morty-sha256")) {
-            throw new MortyProtocolError("The service returned artifact content with an invalid digest");
-        }
     }
     return bytes;
 }
@@ -833,17 +815,16 @@ export class MortyInteractionResources {
     };
 }
 
-type MortySessionLiveEventConnection = { readonly kind: "initial" } | { readonly kind: "reconnected" };
-
 export interface MortySessionEventObserver {
     readonly receive: (events: SessionLiveEventBatch) => Promise<boolean>;
-    readonly reconcile: (connection: MortySessionLiveEventConnection) => Promise<void>;
+    /** Catches up on what the stream did not carry, once the stream is open and before its first events. */
+    readonly reconcile: () => Promise<void>;
 }
 
+/** One live event stream for a Session. Its owner recovers it: a lost stream fails `completed`. */
 export class MortyLiveEventSubscription {
     readonly #controller = new AbortController();
     readonly #executor: MortyRequestExecutor;
-    readonly #maximumReconnectAttempts: number;
     readonly #observer: MortySessionEventObserver;
     readonly #path: string;
     #closed = false;
@@ -855,10 +836,8 @@ export class MortyLiveEventSubscription {
         path: string,
         observer: MortySessionEventObserver,
         signal: AbortSignal,
-        maximumReconnectAttempts: number,
     ) {
         this.#executor = executor;
-        this.#maximumReconnectAttempts = maximumReconnectAttempts;
         this.#observer = observer;
         this.#path = path;
         const abort = (): void => this.#controller.abort(signal.reason);
@@ -867,13 +846,9 @@ export class MortyLiveEventSubscription {
         } else {
             signal.addEventListener("abort", abort, { once: true });
         }
-        let resolveConnected = (): void => undefined;
-        let rejectConnected = (_cause: unknown): void => undefined;
-        this.connected = new Promise<void>((resolve, reject) => {
-            resolveConnected = resolve;
-            rejectConnected = reject;
-        });
-        this.completed = this.run(resolveConnected, rejectConnected).finally(() =>
+        const connected = Promise.withResolvers<void>();
+        this.connected = connected.promise;
+        this.completed = this.run(connected.resolve, connected.reject).finally(() =>
             signal.removeEventListener("abort", abort),
         );
     }
@@ -890,108 +865,83 @@ export class MortyLiveEventSubscription {
         resolveConnected: () => void,
         rejectConnected: (cause: unknown) => void,
     ): Promise<void> => {
-        let attempts = 0;
-        let connectionState: MortySessionLiveEventConnection = { kind: "initial" };
-        while (!this.#closed) {
-            let connection: LiveEventConnection | null = null;
+        let connected = false;
+        let connection: LiveEventConnection | null = null;
+        try {
+            connection = await this.#executor.openLiveEventStream(this.#path, this.#controller.signal);
+            await this.#observer.reconcile();
+            connected = true;
+            resolveConnected();
+            const reader = connection.events.getReader();
             try {
-                connection = await this.#executor.openLiveEventStream(this.#path, this.#controller.signal);
-                await this.#observer.reconcile(connectionState);
-                if (connectionState.kind === "initial") {
-                    resolveConnected();
-                    connectionState = { kind: "reconnected" };
-                }
-                attempts = 0;
-                const reader = connection.events.getReader();
-                try {
-                    while (!this.#closed) {
-                        const result = await reader.read();
-                        if (result.done) {
-                            throw new MortyConnectionError("The live session event stream disconnected");
-                        }
-                        let value: unknown;
-                        try {
-                            value = JSON.parse(result.value.data);
-                        } catch (cause) {
-                            throw new MortyProtocolError("The live session event stream contains invalid JSON", {
-                                cause,
-                            });
-                        }
-                        const events = decodeKnownSessionLiveEventBatch(value);
-                        if (events.length === 0) {
-                            continue;
-                        }
-                        if (!(await this.#observer.receive(events))) {
-                            this.close();
-                        }
+                while (!this.#closed) {
+                    const result = await reader.read();
+                    if (result.done) {
+                        throw new MortyConnectionError("The live session event stream disconnected");
                     }
-                } finally {
-                    reader.releaseLock();
-                }
-            } catch (cause) {
-                if (this.#closed || this.#controller.signal.aborted) {
-                    if (connectionState.kind === "initial") {
-                        rejectConnected(new MortyCancellationError({ cause }));
+                    let value: unknown;
+                    try {
+                        value = JSON.parse(result.value.data);
+                    } catch (cause) {
+                        throw new MortyProtocolError("The live session event stream contains invalid JSON", {
+                            cause,
+                        });
                     }
-                    return;
-                }
-                if (
-                    cause instanceof MortyProtocolError ||
-                    (cause instanceof MortyApiError && cause.status < 500) ||
-                    (cause instanceof MortyError &&
-                        !(cause instanceof MortyConnectionError) &&
-                        !(cause instanceof MortyTimeoutError) &&
-                        !(cause instanceof MortyApiError))
-                ) {
-                    if (connectionState.kind === "initial") {
-                        rejectConnected(cause);
+                    const events = decodeKnownSessionLiveEventBatch(value);
+                    if (events.length === 0) {
+                        continue;
                     }
-                    throw cause;
-                }
-                attempts += 1;
-                if (attempts > this.#maximumReconnectAttempts) {
-                    const details = connectionCauseMessages(cause);
-                    const message = `The live session event stream could not recover${
-                        details.length > 0 ? `. Cause: ${details.join(". Caused by: ")}` : ""
-                    }`;
-                    const failure = new MortyConnectionError(message, { cause });
-                    if (connectionState.kind === "initial") {
-                        rejectConnected(failure);
+                    if (!(await this.#observer.receive(events))) {
+                        this.close();
                     }
-                    throw failure;
                 }
-                await this.reconnectDelay(attempts);
             } finally {
-                connection?.close();
+                reader.releaseLock();
             }
+        } catch (cause) {
+            if (this.#closed || this.#controller.signal.aborted) {
+                if (!connected) {
+                    rejectConnected(new MortyCancellationError({ cause }));
+                }
+                return;
+            }
+            const failure = liveStreamFailure(cause);
+            if (!connected) {
+                rejectConnected(failure);
+            }
+            throw failure;
+        } finally {
+            connection?.close();
         }
     };
+}
 
-    private readonly reconnectDelay = async (attempt: number): Promise<void> => {
-        const delayMilliseconds = Math.min(250 * 2 ** (attempt - 1), 2_000);
-        await new Promise<void>((resolve, reject) => {
-            const timeoutId = globalThis.setTimeout(() => {
-                this.#controller.signal.removeEventListener("abort", abort);
-                resolve();
-            }, delayMilliseconds);
-            const abort = (): void => {
-                globalThis.clearTimeout(timeoutId);
-                reject(new MortyCancellationError());
-            };
-            this.#controller.signal.addEventListener("abort", abort, { once: true });
-        });
-    };
+/** Protocol and request failures keep their meaning; a lost connection reports its sanitized causes. */
+function liveStreamFailure(cause: unknown): unknown {
+    if (
+        cause instanceof MortyProtocolError ||
+        (cause instanceof MortyApiError && cause.status < 500) ||
+        (cause instanceof MortyError &&
+            !(cause instanceof MortyConnectionError) &&
+            !(cause instanceof MortyTimeoutError) &&
+            !(cause instanceof MortyApiError))
+    ) {
+        return cause;
+    }
+    const details = connectionCauseMessages(cause);
+    return new MortyConnectionError(
+        `The live session event stream disconnected${details.length > 0 ? `. Cause: ${details.join(". Caused by: ")}` : ""}`,
+        { cause },
+    );
 }
 
 export class MortyEventResources {
     readonly #executor: MortyRequestExecutor;
-    readonly #maximumReconnectAttempts: number;
     readonly #computerId: string;
     readonly #liveSubscriptions = new Set<MortyLiveEventSubscription>();
 
-    constructor(executor: MortyRequestExecutor, computerId: string, maximumReconnectAttempts: number) {
+    constructor(executor: MortyRequestExecutor, computerId: string) {
         this.#executor = executor;
-        this.#maximumReconnectAttempts = maximumReconnectAttempts;
         this.#computerId = computerId;
     }
 
@@ -1005,7 +955,6 @@ export class MortyEventResources {
             sessionPath(this.#computerId, sessionTarget, "events-v2"),
             observer,
             signal,
-            this.#maximumReconnectAttempts,
         );
         this.#liveSubscriptions.add(subscription);
         void subscription.completed.finally(() => this.#liveSubscriptions.delete(subscription)).catch(() => undefined);
@@ -1052,11 +1001,7 @@ export class MortyClient {
         const executor = new MortyRequestExecutor(options);
         this.#executor = executor;
         this.#onClose = options.onClose;
-        const reconnectAttempts = options.maxStreamReconnectAttempts ?? DEFAULT_STREAM_RECONNECT_ATTEMPTS;
-        if (!Number.isSafeInteger(reconnectAttempts) || reconnectAttempts < 0) {
-            throw new MortyValidationError("The stream reconnect attempt limit is invalid");
-        }
-        this.events = new MortyEventResources(executor, options.computerId, reconnectAttempts);
+        this.events = new MortyEventResources(executor, options.computerId);
         this.interactions = new MortyInteractionResources(executor, options.computerId);
         this.sessions = new MortySessionResources(executor, options.computerId);
         this.turns = new MortyTurnResources(executor, options.computerId);

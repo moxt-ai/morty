@@ -438,7 +438,6 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
                                                       }
                                                       inline={inline}
                                                       onRetryNow={store.getState().retry}
-                                                      onReopen={store.getState().retry}
                                                   />
                                               )
                                     }

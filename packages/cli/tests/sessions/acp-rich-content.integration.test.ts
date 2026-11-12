@@ -41,8 +41,4 @@ it("Given image and embedded context input, When ACP returns structured tool con
                     (update.content ?? []).some((item) => item.type === "diff"),
             ),
     ).toBe(true);
-    expect(session.observer.information.at(-1)).toMatchObject({
-        title: "ACP feature session",
-        updatedAt: "2026-09-04T00:01:00.000Z",
-    });
 });

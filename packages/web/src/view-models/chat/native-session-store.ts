@@ -2,7 +2,7 @@ import type { NativeSessionEntry, NativeSessionResult } from "@morty-build/clien
 import { createStore } from "zustand/vanilla";
 import type { BotChatApi, ChatComputer, ManagedChatSession } from "../../services/chat/bot-chat-api.ts";
 import { formatError } from "../format-error.ts";
-import { harnessValue, type NativeSessionAgent, nativeSessionAgentTabs } from "./native-session-agents.ts";
+import { type NativeSessionAgent, nativeSessionAgentTabs } from "./native-session-agents.ts";
 import type { OpenMortySession } from "./open-session.ts";
 import { type SessionMessage, sessionEventLogPresentation } from "./session-presentation.ts";
 
@@ -16,8 +16,6 @@ type NativeSessionDirectory =
     | { readonly kind: "empty" }
     | {
           readonly kind: "ready";
-          readonly computerId: string;
-
           readonly harness: string;
           readonly capabilities: Extract<NativeSessionResult, { readonly action: "list" }>["capabilities"];
           readonly entries: readonly NativeSessionEntry[];
@@ -47,7 +45,7 @@ type ForkIntent = {
 };
 
 export interface NativeSessionStore {
-    /** The agent tab the user chose, by `computerId:harness`; the tabs themselves come from the Computer configuration. */
+    /** The agent tab the user chose, by harness; the tabs themselves come from the Computer configuration. */
     readonly selected: string;
     readonly directory: NativeSessionDirectory;
     readonly preview: NativeSessionPreview;
@@ -184,7 +182,6 @@ export const createNativeSessionStore = (
                 }
                 set({ selected });
                 const result = await requests.nativeSessions(
-                    agent.computerId,
                     {
                         action: "list",
                         harness: agent.harness,
@@ -201,7 +198,6 @@ export const createNativeSessionStore = (
                 set({
                     directory: {
                         kind: "ready",
-                        computerId: agent.computerId,
                         harness: agent.harness,
                         capabilities: result.capabilities,
                         entries,
@@ -242,7 +238,7 @@ export const createNativeSessionStore = (
                     : directory.kind === "agent-unavailable"
                       ? `agent-unavailable:${selected}`
                       : directory.kind === "ready"
-                        ? `ready:${harnessValue(directory.computerId, directory.harness)}`
+                        ? `ready:${directory.harness}`
                         : directory.kind === "loading"
                           ? directory.listing
                           : null;
@@ -273,7 +269,6 @@ export const createNativeSessionStore = (
             set({ preview: { kind: "loading", entry }, error: "" });
             try {
                 const content = await requests.nativeSession(
-                    directory.computerId,
                     {
                         harness: directory.harness,
                         directory: entry.directory,
@@ -318,7 +313,7 @@ export const createNativeSessionStore = (
                     sessionId: preview.entry.sessionId,
                 };
                 const retained = get().forkIntent;
-                const target = JSON.stringify([directory.computerId, input]);
+                const target = JSON.stringify(input);
                 const forkIntent =
                     retained !== null && retained.target === target
                         ? retained
@@ -328,9 +323,8 @@ export const createNativeSessionStore = (
                 }
                 const result =
                     action === "fork"
-                        ? await requests.forkNativeSession(directory.computerId, forkIntent.operationId, input, signal)
+                        ? await requests.forkNativeSession(forkIntent.operationId, input, signal)
                         : await requests.nativeSessions(
-                              directory.computerId,
                               {
                                   action,
                                   harness: directory.harness,
@@ -370,7 +364,6 @@ export const createNativeSessionStore = (
             set({ operation: "more", error: "" });
             try {
                 const result = await requests.nativeSessions(
-                    directory.computerId,
                     {
                         action: "list",
                         harness: directory.harness,

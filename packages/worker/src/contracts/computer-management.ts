@@ -3,10 +3,7 @@ import * as v from "valibot";
 import type { HttpError } from "./http-error.ts";
 
 export const relayIdentifier = v.custom<Identifier>(isIdentifier);
-export const computerManagementSchema = v.pipe(
-    v.object({ computerId: relayIdentifier, displayName: v.pipe(v.string(), v.minLength(1), v.maxLength(120)) }),
-    v.readonly(),
-);
+export const computerManagementSchema = v.pipe(v.object({ computerId: relayIdentifier }), v.readonly());
 export type ComputerManagement = v.InferOutput<typeof computerManagementSchema>;
 
 export class ComputerManagementError extends Error implements HttpError {

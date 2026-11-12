@@ -54,7 +54,6 @@ export function fakeAgentHarness(definition: FakeAgentHarnessDefinition, stateDi
         "1.0.0",
         undefined,
         fakeAgentHarnessCapabilities(definition),
-        "1.0.0",
     );
 }
 

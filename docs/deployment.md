@@ -22,7 +22,8 @@ Production is one `morty-production` Worker at `morty.build`. It serves the webs
 identity and computer management APIs, pairing and Session traffic. Each computer
 owns its state and Runtime connection in a `ComputerRelay` Durable Object. Relay
 is an internal responsibility of this deployment, not a separately deployed
-service. D1 holds the computer directory; R2 holds immutable web assets.
+service. The ComputerRelay Durable Object owns computer state; R2 holds immutable
+web assets.
 Conversation attachments remain on the connected computer. Local and CI stacks
 use the same topology with isolated storage.
 
@@ -41,11 +42,22 @@ in a private short-lived file and removed after deployment.
 
 Use a Cloudflare Account API Token for CI/CD so deployment authority belongs to
 the Morty account independently of its creator's user membership. Limit it to the
-account's required Workers, D1 and R2 write permissions and set an expiration.
-Deployment and restore verify account ownership and active
-status before making changes. Rotate the environment secret before expiry and
-verify a deployment before revoking the replaced token; never use a personal
-User API Token or a Global API key as a fallback.
+required Workers deployment and R2 asset-upload permissions in the Morty account
+and set an expiration. Scope Workers access to the production Worker where the
+deployed API supports it. R2 uploads currently use the Cloudflare REST API; its
+account-level storage permission must stay in the Morty-only account. Bucket-scoped
+object credentials require a separately verified S3 upload path.
+
+Ordinary deployment does not need D1, DNS, zone administration, member management
+or API-token provisioning permissions. Retained D1 data is outside the active
+application; any maintenance needs separately authorized credentials.
+
+Deployment and restore verify account ownership, active status and a valid future
+expiration before making changes, and warn when expiry is within 30 days. The
+Morty production operator owns rotation and must have access to both Cloudflare
+account tokens and the GitHub deployment environment. Rotate the environment
+secret before expiry and verify a deployment before revoking the replaced token;
+never use a personal User API Token or a Global API key as a fallback.
 Never log credentials.
 
 Morty enforces identity, sharing, pairing and authorization at the owning execution
@@ -142,10 +154,29 @@ Publishing for this repository, `morty-cli.yml`, and the `morty-npm` environment
 First-publication authorization must be established separately; scope membership
 alone does not configure a publisher. Verify registry integrity after publication.
 
-npm public provenance is available only for public source repositories. While this
-repository is private, OIDC still binds publishing authority to the configured
-workflow and environment, and the archived release records its source revision and
-checksums. Do not describe that release record as a public provenance attestation.
+This repository and the CLI package are public, and publication uses npm Trusted
+Publishing with provenance enabled. Keep provenance enabled for new releases.
+OIDC authorizes the configured publisher; npm provenance separately links the
+published archive to its source repository, revision and publishing workflow.
+Archived release records and checksums remain useful acceptance evidence, but
+are not substitutes for a public provenance attestation. Making an old release's
+source repository public does not retroactively add provenance to that version.
+
+To inspect a release, open that exact version of `@morty-build/cli` on npm and
+follow its provenance details. Check that the repository is `moxt-ai/morty`, the
+workflow is `morty-cli.yml`, and the source revision matches the accepted release.
+In an isolated directory, install the exact version with `npm install
+--ignore-scripts @morty-build/cli@<version>`, then run `npm audit signatures` with
+a current npm CLI to verify registry signatures and available attestations.
+Check that the selected CLI version has provenance: a successful audit of registry
+signatures alone does not establish that every installed package has an attestation.
+See npm's [provenance verification guidance](https://docs.npmjs.com/viewing-package-provenance/).
+
+Provenance establishes origin, not that the code or its dependencies are safe.
+It does not replace code review, exact-archive acceptance or deployment checks.
+Public npm provenance requires public source; if repository visibility changes,
+reassess publication and recovery rather than describing an unsigned release
+record as provenance.
 
 Activate matching cloud and CLI artifacts, then verify fresh installation, pairing,
 conversation, attachments and reconnect. Preserve accepted release archives and

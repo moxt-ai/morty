@@ -10,10 +10,12 @@ import { environmentProxyDispatcher } from "../util/network/environment-proxy.ts
 import { isRecord } from "../util/value-utils.ts";
 import { discoverRuntimeAgentInventory } from "./catalog/discover-agent-catalog.ts";
 import { publishAgentCatalog } from "./catalog/publish-agent-catalog.ts";
+import { discoverConfiguredAgents } from "./catalog/refresh-agent-catalog.ts";
 import { createCatalogAgentResolver } from "./catalog/resolve-catalog-agent.ts";
 import { createRuntimeConfig, type RuntimeConfig, RuntimeLocalContext } from "./config.ts";
 import type { VerifiedComputerConnection } from "./connection/computer-connection.ts";
 import type { ComputerCredentials } from "./connection/computer-credentials.ts";
+import { readRelayOrigin } from "./connection/relay-origin.ts";
 import type { RuntimeInstallationStore } from "./connection/runtime-installation-store.ts";
 
 const PAIRING_TIMEOUT_MILLISECONDS = 20_000;
@@ -41,7 +43,7 @@ export interface MortyComputerPairingOptions {
     readonly relayOrigin: string;
 }
 
-export class PairingClientError extends Error {
+class PairingClientError extends Error {
     readonly code: string;
 
     constructor(code: string, message: string, options: ErrorOptions = {}) {
@@ -56,29 +58,23 @@ function hasExactKeys(value: Readonly<Record<string, unknown>>, expectedKeys: re
     return keys.length === expectedKeys.length && expectedKeys.every((key) => Object.hasOwn(value, key));
 }
 
-export function parseRelayOrigin(value: string): URL {
-    let url: URL;
-    try {
-        url = new URL(value);
-    } catch (error) {
-        throw new PairingClientError("invalid_relay_url", "The relay URL is invalid", { cause: error });
+function parseRelayOrigin(value: string): URL {
+    const origin = readRelayOrigin(value);
+    switch (origin.kind) {
+        case "valid":
+            return origin.url;
+        case "malformed":
+            throw new PairingClientError("invalid_relay_url", "The relay URL is invalid");
+        case "unsupported-protocol":
+            throw new PairingClientError("invalid_relay_url", "The relay URL must use http or https");
+        case "credentials":
+            throw new PairingClientError("invalid_relay_url", "The relay URL cannot contain credentials");
+        case "insecure-remote":
+            throw new PairingClientError("invalid_relay_url", "A remote relay must use https");
     }
-    if (url.protocol !== "https:" && url.protocol !== "http:") {
-        throw new PairingClientError("invalid_relay_url", "The relay URL must use http or https");
-    }
-    if (url.username.length > 0 || url.password.length > 0) {
-        throw new PairingClientError("invalid_relay_url", "The relay URL cannot contain credentials");
-    }
-    if (url.protocol === "http:" && url.hostname !== "127.0.0.1" && url.hostname !== "localhost") {
-        throw new PairingClientError("invalid_relay_url", "A remote relay must use https");
-    }
-    url.hash = "";
-    url.pathname = "/";
-    url.search = "";
-    return url;
 }
 
-export function parsePairingCode(value: string): string {
+function parsePairingCode(value: string): string {
     const code = value.trim().toUpperCase();
     if (!PAIRING_CODE_PATTERN.test(code)) {
         throw new PairingClientError(
@@ -89,7 +85,7 @@ export function parsePairingCode(value: string): string {
     return code;
 }
 
-export function validateComputerId(value: string): string {
+function validateComputerId(value: string): string {
     if (!isIdentifier(value)) {
         throw new PairingClientError("invalid_computer_id", "The Computer pairing ID is invalid");
     }
@@ -111,12 +107,6 @@ async function resolveDefaultWorkspace(path: string): Promise<string> {
 }
 
 async function readJsonResponse(response: Response): Promise<unknown> {
-    if (response.headers.get("cf-mitigated") === "challenge") {
-        throw new PairingClientError(
-            "relay_challenge",
-            "Cloudflare is protecting this temporary preview. Claim the deployment or use an authenticated deployment, then pair again",
-        );
-    }
     const encoded = await response.text();
     try {
         return JSON.parse(encoded);
@@ -217,31 +207,11 @@ function buildSavedRuntimeConfig(
         },
         new RuntimeAgentDependencies(inventory.readyAgents()),
         localContext,
-        { kind: "managed" },
         createCatalogAgentResolver(
-            (refreshSignal) =>
-                discoverRuntimeAgentInventory(
-                    {
-                        defaultWorkspace,
-                        dataDirectory: localContext.stateDirectory,
-                        environment: localContext.agentLaunchEnvironment,
-                        signal: refreshSignal,
-                    },
-                    connection.computerId,
-                ),
+            (refreshSignal) => discoverConfiguredAgents(config, refreshSignal),
             () => config,
             publishAgentCatalog,
         ),
-        (refreshSignal: AbortSignal) =>
-            discoverRuntimeAgentInventory(
-                {
-                    defaultWorkspace,
-                    dataDirectory: localContext.stateDirectory,
-                    environment: localContext.agentLaunchEnvironment,
-                    signal: refreshSignal,
-                },
-                connection.computerId,
-            ).then((inventory) => inventory.readyAgents()),
     );
     return config;
 }
@@ -297,9 +267,8 @@ export async function prepareComputerConnection(
     connection: VerifiedComputerConnection,
     signal: AbortSignal,
     environment: Readonly<NodeJS.ProcessEnv>,
-    maxAcpProcesses: number,
 ): Promise<RuntimeConfig> {
-    const localContext = new RuntimeLocalContext(installation.stateDirectory, environment, maxAcpProcesses);
+    const localContext = new RuntimeLocalContext(installation.stateDirectory, environment);
     const defaultWorkspace = await resolveDefaultWorkspace(connection.defaultWorkspace);
     const inventory = await discoverRuntimeAgentInventory(
         {

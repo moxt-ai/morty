@@ -2,12 +2,6 @@ import { NativeSessionMap, NativeSessionSet } from "@morty-build/client/native-s
 import { type NativeSessionTarget, SESSION_CLOSED_ERROR_CODE } from "@morty-build/client/protocol";
 import { AcpExecutionError } from "../../acp/acp-error.ts";
 
-/** What preparing does with a closed Session: a prepare or restore reopens it, a read must keep it closed. */
-export type ClosedSessionHandling = "reopen" | "keep-closed";
-
-/** A closed Session is reopened by preparing it; an archived Session is no longer held, so nothing reopens it. */
-export type SessionEnding = "close" | "archive";
-
 /**
  * Where a Session stands in this Runtime apart from its Agent process. A Session without an entry is open, and so is
  * one no longer held: whether the Runtime holds a Session is the Session store's fact, so an archived Session leaves
@@ -16,14 +10,8 @@ export type SessionEnding = "close" | "archive";
 type SessionLifecycle =
     /** A creation owns initialization and failure cleanup until `settled`, which never rejects. */
     | { readonly kind: "creating"; readonly settled: Promise<void> }
-    /** Clients were told `reason`, and the Agent process is being released until `settled`. */
-    | {
-          readonly kind: "closing";
-          readonly ending: SessionEnding;
-          readonly reason: string;
-          readonly settled: Promise<void>;
-      }
-    | { readonly kind: "closed"; readonly reason: string };
+    /** Archiving: clients were told `reason`, and the Agent process is being released until `settled`. */
+    | { readonly kind: "closing"; readonly reason: string; readonly settled: Promise<void> };
 
 /** An operation the rule answers at once, so its check and the work that relies on it stay synchronous. */
 export type ImmediateSessionOperation =
@@ -38,13 +26,13 @@ export type ImmediateSessionOperation =
 
 /** An operation that waits out a creation or closing before it is decided. */
 export type WaitingSessionOperation =
-    /** Prepares the Session's Agent: a held Session no native operation manages, which a reopening preparation opens. */
-    | { readonly kind: "prepare"; readonly closed: ClosedSessionHandling }
-    /** Creates the Session with its initial settings, one creation at a time; a reopening creation opens it. */
-    | { readonly kind: "create"; readonly closed: ClosedSessionHandling }
-    /** Closes or archives the Session. */
+    /** Prepares the Session's Agent: a held Session no native operation manages. */
+    | { readonly kind: "prepare" }
+    /** Creates the Session with its initial settings, one creation at a time. */
+    | { readonly kind: "create" }
+    /** Archives the Session. */
     | { readonly kind: "end" }
-    /** Imports the native session, which holds it again even when it was closed or archived. */
+    /** Imports the native session, which holds it again even when it was archived. */
     | { readonly kind: "import" };
 
 type ImmediateAdmission =
@@ -74,7 +62,7 @@ function admitNow(
     held: () => boolean,
     operation: ImmediateSessionOperation,
 ): ImmediateAdmission {
-    const closed = lifecycle?.kind === "closing" || lifecycle?.kind === "closed" ? lifecycle.reason : undefined;
+    const closed = lifecycle?.kind === "closing" ? lifecycle.reason : undefined;
     switch (operation.kind) {
         case "prepare-execution":
             if (closed !== undefined) {
@@ -109,9 +97,6 @@ function admitAfterTransitions(
                 // A preparation that found the Session before it was archived must not revive it.
                 return notFound();
             }
-            if (lifecycle?.kind === "closed" && operation.closed === "keep-closed") {
-                return closedRefusal(lifecycle.reason);
-            }
             return nativeOperation ? managed() : admitted;
         case "create":
             if (lifecycle?.kind === "creating") {
@@ -120,9 +105,7 @@ function admitAfterTransitions(
             if (lifecycle?.kind === "closing") {
                 return { kind: "wait", settled: lifecycle.settled };
             }
-            return lifecycle?.kind === "closed" && operation.closed === "keep-closed"
-                ? closedRefusal(lifecycle.reason)
-                : admitted;
+            return admitted;
         case "end":
             return lifecycle?.kind === "creating" || lifecycle?.kind === "closing"
                 ? { kind: "wait", settled: lifecycle.settled }
@@ -162,20 +145,7 @@ export class SessionLifecycles {
     /** Whether an import, fork, or history read is managing the native session, so no prompt may write it. */
     readonly managesNativeSession = (target: NativeSessionTarget): boolean => this.#nativeOperations.has(target);
 
-    /** The reason clients were told when the Session closed, if it is closed. */
-    readonly closedReason = (target: NativeSessionTarget): string | undefined => {
-        const lifecycle = this.#lifecycles.get(target);
-        return lifecycle?.kind === "closed" ? lifecycle.reason : undefined;
-    };
-
-    /** Preparing a closed Session, or importing it, opens it again. */
-    readonly reopen = (target: NativeSessionTarget): void => {
-        if (this.#lifecycles.get(target)?.kind === "closed") {
-            this.#lifecycles.delete(target);
-        }
-    };
-
-    /** A creation of an open or closed Session begins; a closed one is reopened by it. */
+    /** A creation of an open Session begins. */
     readonly beginCreation = (target: NativeSessionTarget, settled: Promise<void>): void => {
         const lifecycle = this.#lifecycles.get(target);
         if (lifecycle?.kind === "creating" || lifecycle?.kind === "closing") {
@@ -191,30 +161,20 @@ export class SessionLifecycles {
         }
     };
 
-    /** An open or closed Session begins closing. */
-    readonly beginClosing = (
-        target: NativeSessionTarget,
-        ending: SessionEnding,
-        reason: string,
-        settled: Promise<void>,
-    ): void => {
+    /** An open Session begins archiving. */
+    readonly beginClosing = (target: NativeSessionTarget, reason: string, settled: Promise<void>): void => {
         const lifecycle = this.#lifecycles.get(target);
         if (lifecycle?.kind === "creating" || lifecycle?.kind === "closing") {
             throw new Error("A Session that is being created or closed cannot begin closing");
         }
-        this.#lifecycles.set(target, { kind: "closing", ending, reason, settled });
+        this.#lifecycles.set(target, { kind: "closing", reason, settled });
     };
 
-    /** The Agent process was released: a closed Session stays closed, and an archived one is no longer held. */
+    /** The Agent process was released: the archived Session is no longer held. */
     readonly endClosing = (target: NativeSessionTarget, settled: Promise<void>): void => {
         const lifecycle = this.#lifecycles.get(target);
-        if (lifecycle?.kind !== "closing" || lifecycle.settled !== settled) {
-            return;
-        }
-        if (lifecycle.ending === "archive") {
+        if (lifecycle?.kind === "closing" && lifecycle.settled === settled) {
             this.#lifecycles.delete(target);
-        } else {
-            this.#lifecycles.set(target, { kind: "closed", reason: lifecycle.reason });
         }
     };
 

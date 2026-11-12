@@ -160,7 +160,6 @@ export async function discoverAgent(
                     agentVersion,
                     agent.identity,
                     capabilities,
-                    agentVersion,
                 );
             const capabilities = await probeWithRetry(
                 context,

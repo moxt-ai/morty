@@ -10,7 +10,12 @@ export function registerUpgradeCommand(program: Command, context: CliContext): v
         .action(async () => {
             const control = await openMortyInstallation(context.shutdownSignal, process.env);
             await stopDaemon(control.stateDirectory, context.shutdownSignal);
-            const version = await ensureDaemon(control.stateDirectory, context.entry, context.shutdownSignal);
-            process.stdout.write(`Morty daemon ${version} restarted.\n`);
+            const daemon = await ensureDaemon(
+                control.stateDirectory,
+                context.entry,
+                process.env,
+                context.shutdownSignal,
+            );
+            process.stdout.write(`Morty daemon ${daemon.version} restarted.\n`);
         });
 }

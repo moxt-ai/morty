@@ -64,10 +64,6 @@ export function buildSessionLayer(options: SessionLayerOptions) {
                 eventProjection.record(event);
                 return Promise.resolve();
             },
-            onInfo: (event) => {
-                sink.publishInfo(event);
-                return Promise.resolve();
-            },
         },
         store: sessionStore,
         processes: options.processes,

@@ -1,22 +1,12 @@
 {
     "name": "@morty-build/client",
-    "version": "0.0.176",
-    "description": "Internal Morty protocol and service clients.",
+    "description": "Morty protocol contracts and the session client shared by Morty Web, the Runtime and the Worker.",
     "type": "module",
     "types": "./src/index.ts",
     "exports": {
         ".": "./src/index.ts",
-        "./relay": "./src/relay.ts",
         "./protocol": "./src/protocol/index.ts",
         "./native-session": "./src/native-session.ts"
-    },
-    "engines": {
-        "node": ">=20.19.0"
-    },
-    "repository": {
-        "type": "git",
-        "url": "git+https://github.com/moxt-ai/morty.git",
-        "directory": "packages/client"
     },
     "scripts": {
         "typecheck": "tsc --project tsconfig.json"
@@ -30,10 +20,5 @@
     },
     "sideEffects": false,
     "license": "Apache-2.0",
-    "author": "Moxt",
-    "homepage": "https://github.com/moxt-ai/morty",
-    "bugs": {
-        "url": "https://github.com/moxt-ai/morty/issues"
-    },
     "private": true
 }

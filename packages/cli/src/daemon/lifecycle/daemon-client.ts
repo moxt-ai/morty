@@ -1,28 +1,22 @@
 import { type ChildProcess, spawn } from "node:child_process";
 import { once } from "node:events";
 import { setTimeout as delay } from "node:timers/promises";
-import packageMetadata from "../../../package.json" with { type: "json" };
 import type { InstallationDirectory } from "../../engine/storage/installation/installation-files.ts";
 import { isNodeError } from "../../engine/util/node-error.ts";
 import { daemonLockExists } from "../../storage/daemon/daemon-lock.ts";
 import { CONTROL_TIMEOUT_MILLISECONDS, sendLocalRequest } from "../control/local-client.ts";
 import { decodeLifecycleResponse, type LifecycleResponse } from "../control/protocol.ts";
 
-async function spawnDaemon(entry: string): Promise<ChildProcess> {
+async function spawnDaemon(entry: string, environment: Readonly<NodeJS.ProcessEnv>): Promise<ChildProcess> {
     const child = spawn(process.execPath, [entry, "__daemon"], {
         detached: true,
         windowsHide: true,
-        env: process.env,
+        env: environment,
         stdio: "ignore",
     });
     await once(child, "spawn");
     child.unref();
     return child;
-}
-
-async function launchDaemon(version: string, entry: string): Promise<ChildProcess> {
-    process.stdout.write(`Starting morty daemon ${version}\n`);
-    return await spawnDaemon(entry);
 }
 
 async function waitForDaemonExit(stateDirectory: InstallationDirectory, signal: AbortSignal): Promise<void> {
@@ -45,18 +39,25 @@ async function waitForDaemonExit(stateDirectory: InstallationDirectory, signal: 
     throw deadline.reason;
 }
 
-// A new daemon runs the same package as its invoking command.
+/** The daemon serving an installation, and whether this call started it. */
+export interface RunningDaemon {
+    readonly version: string;
+    readonly started: boolean;
+}
+
+// A new daemon runs the same package as its invoking command, in the environment the caller names.
 export async function ensureDaemon(
     stateDirectory: InstallationDirectory,
     entry: string,
+    environment: Readonly<NodeJS.ProcessEnv>,
     signal: AbortSignal,
-): Promise<string> {
+): Promise<RunningDaemon> {
     const running = await readDaemonVersion(stateDirectory, signal);
     if (running !== null) {
-        return running;
+        return { version: running, started: false };
     }
     const deadline = AbortSignal.any([signal, AbortSignal.timeout(CONTROL_TIMEOUT_MILLISECONDS)]);
-    return await waitForDaemon(stateDirectory, packageMetadata.version, entry, deadline);
+    return await waitForDaemon(stateDirectory, entry, environment, deadline);
 }
 
 // Status identifies the currently running daemon.
@@ -79,10 +80,10 @@ export async function readDaemonVersion(
 
 async function waitForDaemon(
     stateDirectory: InstallationDirectory,
-    version: string,
     entry: string,
+    environment: Readonly<NodeJS.ProcessEnv>,
     signal: AbortSignal,
-): Promise<string> {
+): Promise<RunningDaemon> {
     let daemonStarted = false;
     let child: ChildProcess | undefined;
     while (!signal.aborted) {
@@ -94,10 +95,7 @@ async function waitForDaemon(
                 throw new Error(response.message);
             }
             if (response.kind === "status") {
-                if (daemonStarted) {
-                    process.stdout.write(`Morty daemon ${version} started\n`);
-                }
-                return response.daemon.version;
+                return { version: response.daemon.version, started: daemonStarted };
             }
             throw new Error("The daemon could not return its status");
         } catch (cause) {
@@ -114,7 +112,7 @@ async function waitForDaemon(
                 throw new Error("The daemon exited before becoming ready");
             }
             if (!daemonStarted) {
-                child = await launchDaemon(version, entry);
+                child = await spawnDaemon(entry, environment);
                 daemonStarted = true;
             }
             await new Promise<void>((resolve, reject) => {

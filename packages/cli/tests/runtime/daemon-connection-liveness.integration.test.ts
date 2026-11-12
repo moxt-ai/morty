@@ -321,6 +321,7 @@ describe("daemon relay connection liveness", () => {
             },
             new RuntimeAgentDependencies([]),
             new RuntimeLocalContext(stateDirectory, process.env),
+            async (agent) => agent,
         );
 
         vi.useFakeTimers({ toFake: ["Date", "clearTimeout", "setTimeout"] });
@@ -463,6 +464,7 @@ describe("daemon relay connection liveness", () => {
             },
             new RuntimeAgentDependencies([]),
             new RuntimeLocalContext(stateDirectory, process.env),
+            async (agent) => agent,
         );
         const online = Promise.withResolvers<void>();
         const statuses: string[] = [];
@@ -615,6 +617,7 @@ describe("daemon relay connection liveness", () => {
             },
             new RuntimeAgentDependencies([]),
             new RuntimeLocalContext(stateDirectory, process.env),
+            async (agent) => agent,
         );
 
         vi.useFakeTimers({ toFake: ["Date", "clearTimeout", "setTimeout"] });
@@ -771,6 +774,7 @@ describe("daemon relay connection liveness", () => {
             },
             new RuntimeAgentDependencies([]),
             new RuntimeLocalContext(stateDirectory, process.env),
+            async (agent) => agent,
         );
 
         vi.useFakeTimers({ toFake: ["Date"] });
@@ -991,6 +995,7 @@ describe("daemon relay connection liveness", () => {
                 acpAdapters,
             ),
             new RuntimeLocalContext(stateDirectory, process.env),
+            async (agent) => agent,
         );
 
         vi.useFakeTimers({ toFake: ["Date"] });

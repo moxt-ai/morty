@@ -1,14 +1,13 @@
-import { AcpExecutionError } from "../../acp-error.ts";
 import type { AcpAgentDefinition } from "../../agent/agent-definition.ts";
 import { PiAcpAgent } from "../../harness/pi/upstream/dist/acp/agent.js";
 import type { PiAcpClient } from "../../harness/pi/upstream/dist/acp/client.js";
 import { validateAgentRuntime } from "../agent-initialization.ts";
 import { piProcessHost } from "./process-host.ts";
 
-export type PiClientRuntime = Pick<AcpAgentDefinition, "command" | "environment" | "runtimeExecutables">;
+export type PiClientRuntime = Pick<AcpAgentDefinition, "agentIdentity" | "command" | "environment">;
 
 export function piRuntime(agent: PiClientRuntime): PiClientRuntime {
-    return { command: agent.command, environment: agent.environment, runtimeExecutables: agent.runtimeExecutables };
+    return { agentIdentity: agent.agentIdentity, command: agent.command, environment: agent.environment };
 }
 
 /** Constructs a Pi agent for operations that never launch Pi, such as capabilities and session listing. */
@@ -24,9 +23,6 @@ export async function createPiClient(
 ): Promise<PiAcpAgent> {
     await validateAgentRuntime(runtime, signal);
     signal.throwIfAborted();
-    if (!runtime.runtimeExecutables.some((identity) => identity.realPath === runtime.command)) {
-        throw new AcpExecutionError("The Pi command is not a verified runtime executable", {}, "agent_runtime_changed");
-    }
     return new PiAcpAgent(callbacks, { environment: piEnvironment(runtime), processes: piProcessHost });
 }
 

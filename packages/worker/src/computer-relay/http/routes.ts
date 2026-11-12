@@ -1,5 +1,5 @@
+import { computerRequestTarget } from "@morty-build/client";
 import { decodeFileReadCommand, MORTY_API_PREFIX } from "@morty-build/client/protocol";
-import { computerRequestTarget } from "@morty-build/client/relay";
 import { Hono, type MiddlewareHandler } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import * as v from "valibot";
@@ -87,20 +87,6 @@ export function createComputerHttpRoutes(
                         context.req.raw.signal,
                     ),
                 }),
-        )
-        .post(
-            `${COMPUTER_INTERNAL_PREFIX}/:computerId/audit-events`,
-            timeout,
-            computerFromPath,
-            initializeInternal,
-            sizeLimit,
-            async (context) => {
-                await context.var.computerInternal.recordAudit(
-                    await readJsonBody(context.req.raw),
-                    context.req.raw.signal,
-                );
-                return new Response(null, { status: 204 });
-            },
         )
         .route(
             "/",

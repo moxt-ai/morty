@@ -61,6 +61,7 @@ export async function codexFixture(
         },
         new RuntimeAgentDependencies([agent]),
         new RuntimeLocalContext(workspace, process.env),
+        async (agent) => agent,
     );
     const directories = new WorkspaceDirectoryService(workspace);
     const database = openAcpSessionDatabase(join(temporary, "operations.sqlite"));

@@ -11,7 +11,7 @@ import { RequestError } from "../http/request-error.ts";
 import { logger } from "../infra/logger.ts";
 import { errorMiddleware, relayErrorHandler } from "../middleware/error-middleware.ts";
 import { requestTimeoutMiddleware } from "../middleware/request-timeout-middleware.ts";
-import { instructionDocumentRoutes } from "./components/instruction-documents/http/index.ts";
+import { instructionDocumentRoutes } from "./components/instruction-documents/http/instruction-document-routes.ts";
 import { cloudRoutes } from "./composition/cloud-http.ts";
 import { forwardToComputer } from "./gateway/computer-object-routing.ts";
 import { notFoundPage, webPages } from "./http/web-pages.ts";
@@ -73,7 +73,6 @@ function createComputerForwardingRoutes() {
             // Setup/CLI operations retain their HTTPS endpoints.
             .post("/morty/api/chat/computers/:computerId/setup", computerFromPath, forward)
             .post("/morty/api/computers/:computerId/identity/link", computerFromPath, forward)
-            .post("/morty/api/computers/:computerId/identity/recovery-token", computerFromPath, forward)
             .post("/morty/api/computers/:computerId/identity/revoke-all-access", computerFromPath, forward)
             .post("/morty/api/computers/:computerId/management/computer/replacement", computerFromPath, forward)
             .on(["GET", "POST"], "/morty/api/computers/:computerId/management/pairing", computerFromPath, forward)
@@ -89,7 +88,6 @@ function createComputerForwardingRoutes() {
             .delete("/morty/api/computers/:computerId/identity/v1/other-browser-access", computerFromPath, forward)
             .delete("/morty/api/computers/:computerId/identity/v1/devices/:deviceId", computerFromPath, forward)
             .delete(`/morty/api/computers/:computerId${credentialRevocationPaths.browser}`, computerFromPath, forward)
-            .delete(`/morty/api/computers/:computerId${credentialRevocationPaths.recovery}`, computerFromPath, forward)
             .get("/morty/api/computers/:computerId/management/computer", computerFromPath, forward)
             .post("/morty/api/chat/computers/:computerId/daemon-diagnostics", computerFromPath, forward)
             .post("/morty/api/chat/computers/:computerId/network-diagnostic", computerFromPath, forward)

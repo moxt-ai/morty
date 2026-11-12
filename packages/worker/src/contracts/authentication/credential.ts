@@ -1,20 +1,13 @@
 import type { SessionAccessHolder } from "@morty-build/client/protocol";
 import * as v from "valibot";
 
-export const computerToken = v.pipe(
-    v.string(),
-    v.regex(
-        /^(?:morty_computer_v1_[A-Za-z0-9_-]{43}|morty_recovery_v1\.prj_(?:wn|en|sa|we|ee|ap|an|as|oc|af|me)_01_[A-Za-z0-9_-]{24}\.[A-Za-z0-9_-]{43})$/u,
-    ),
-);
-
-/** The computer's own credential, the only kind its holder may choose: a successor it saved before requesting it. */
-export const localCredentialToken = v.pipe(v.string(), v.regex(/^morty_computer_v1_[A-Za-z0-9_-]{43}$/u));
+/** The computer's own credential; its holder chooses a successor by saving it before requesting it. */
+export const computerToken = v.pipe(v.string(), v.regex(/^morty_computer_v1_[A-Za-z0-9_-]{43}$/u));
 
 export type Credential = {
     readonly credentialId: string;
 } & (
-    | { readonly kind: "local" | "recovery" }
+    | { readonly kind: "local" }
     | {
           readonly kind: "browser";
           readonly transferId: string;
@@ -27,14 +20,13 @@ export type Credential = {
 
 /**
  * Whose access a credential carries: a browser credential its device's, which outlives the credential's replacement;
- * the local and recovery credentials their own.
+ * the local credential its own.
  */
 export function accessHolder(credential: Credential): SessionAccessHolder {
     switch (credential.kind) {
         case "browser":
             return { kind: "device", deviceId: credential.deviceId };
         case "local":
-        case "recovery":
             return { kind: "credential", credentialId: credential.credentialId };
     }
 }
@@ -93,23 +85,20 @@ export function sharedLinkTerms(sharer: Credential, now: number, duration: Devic
 
 /**
  * The credential kinds that may perform each identity or management operation; any other operation accepts every
- * active credential. Browser and recovery access may use and share the Computer and disconnect the other browsers, so
- * whoever notices a device they did not add can remove it without losing their own access. Only the computer's local
- * credential may issue a recovery credential (which ending browser access does not reach), pair a Computer, verify the
- * Computer's Agent or revoke all access.
+ * active credential. Browser access may use and share the Computer and disconnect the other browsers, so whoever
+ * notices a device they did not add can remove it without losing their own access. Only the computer's local
+ * credential may pair a Computer, verify the Computer's Agent or revoke all access.
  */
 const permittedKinds = {
-    shareAccess: ["local", "browser", "recovery"],
-    listDevices: ["local", "browser", "recovery"],
-    issueRecoveryCredential: ["local"],
+    shareAccess: ["local", "browser"],
+    listDevices: ["local", "browser"],
     pairComputer: ["local"],
     verifyAgent: ["local"],
     revokeAllAccess: ["local"],
     replaceProject: ["local"],
     endBrowserAccess: ["browser"],
-    endOtherBrowserAccess: ["browser", "recovery"],
-    endDeviceAccess: ["local", "browser", "recovery"],
-    revokeRecoveryCredential: ["recovery"],
+    endOtherBrowserAccess: ["browser"],
+    endDeviceAccess: ["local", "browser"],
     retireLocalCredential: ["local"],
 } as const satisfies Record<string, readonly Credential["kind"][]>;
 
@@ -135,5 +124,4 @@ export function mayPerform<Operation extends CredentialOperation>(
 export const credentialRevocationPaths = {
     local: "/identity/v1/local-credential",
     browser: "/identity/v1/browser-access",
-    recovery: "/identity/v1/recovery-credential",
 } as const;

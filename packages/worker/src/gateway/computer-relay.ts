@@ -1,24 +1,19 @@
 import type { ProjectLocationHint, SessionAccessHolder } from "@morty-build/client/protocol";
 import * as v from "valibot";
-import { decodeComputerPlacement } from "../../contracts/computer-id.ts";
-import { ComputerManagementError, relayIdentifier } from "../../contracts/computer-management.ts";
+import { decodeComputerPlacement } from "../contracts/computer-id.ts";
+import { ComputerManagementError, relayIdentifier } from "../contracts/computer-management.ts";
 import {
     type ComputerInternalResource,
     computerAccessResponseSchema,
     computerGenerationResponseSchema,
     computerInternalPath,
-} from "../../contracts/computer-relay-http.ts";
-import {
-    type ProjectRow,
-    ProjectRowSchema,
-    type RelayAuditRecord,
-    RelayComputerScopeRowSchema,
-} from "../../contracts/relay/relay-records.ts";
-import type { ConfiguredRelayBindings } from "../../contracts/relay-bindings.ts";
-import { RequestDeadline } from "../../http/request-deadline.ts";
-import { DatabaseError } from "../../infra/sql-database.ts";
+} from "../contracts/computer-relay-http.ts";
+import { type ProjectRow, ProjectRowSchema, RelayComputerScopeRowSchema } from "../contracts/relay/relay-records.ts";
+import type { ConfiguredRelayBindings } from "../contracts/relay-bindings.ts";
+import { RequestDeadline } from "../http/request-deadline.ts";
+import { DatabaseError } from "../infra/sql-database.ts";
 
-/** Cross-computer operations only; computer-local services never loop back through their own endpoint. */
+/** Calls from outside a computer enter it only through its Durable Object HTTP endpoint. */
 export class ComputerRelayGateway {
     readonly #bindings: ConfiguredRelayBindings;
     readonly #computerId: string;
@@ -41,7 +36,9 @@ export class ComputerRelayGateway {
     ): Promise<Value> => {
         using deadline = new RequestDeadline(signal, milliseconds);
         try {
-            const stub = this.#bindings.COMPUTER_RELAY.getByName(this.#computerId, {
+            deadline.signal.throwIfAborted();
+            const namespace = this.#bindings.COMPUTER_RELAY;
+            const stub = namespace.getByName(this.#computerId, {
                 locationHint: this.#locationHint,
             });
             return await deadline.wait(operation(stub, deadline.signal));
@@ -104,14 +101,7 @@ export class ComputerRelayGateway {
             return v.parse(ProjectRowSchema, body);
         });
     };
-    readonly recordAudit = (audit: RelayAuditRecord, signal: AbortSignal): Promise<void> =>
-        this.#call(signal, async (stub, signal) => {
-            const response = await stub.fetch(this.#request("audit-events", signal, audit));
-            if (response.status !== 204) {
-                await response.body?.cancel();
-                throw new DatabaseError("database_unavailable", "Computer audit storage is unavailable");
-            }
-        });
+
     readonly readActiveGeneration = (computerId: string, signal: AbortSignal): Promise<number | null> => {
         if (computerId !== this.#computerId) {
             throw new DatabaseError("database_unavailable", "Computer storage is unavailable");
@@ -126,6 +116,7 @@ export class ComputerRelayGateway {
             return v.parse(computerGenerationResponseSchema, body).generation;
         });
     };
+
     readonly bootstrap = (request: Request): Promise<Response> =>
         this.#call(request.signal, (stub, signal) => stub.fetch(new Request(request, { signal })), 45_000);
 }

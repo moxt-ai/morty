@@ -22,9 +22,9 @@ export class PiAgentSpecification extends LocalAgentSpecification {
         const timeout = AbortSignal.timeout(this.acpProbeTimeoutMilliseconds);
         const signal = AbortSignal.any([params.signal, timeout]);
         const runtime = {
+            agentIdentity: params.agent.agentIdentity,
             command: params.agent.command,
             environment: Object.freeze({ ...filterEnvironment(params.environment), ...params.agent.environment }),
-            runtimeExecutables: params.agent.runtimeExecutables,
         };
         const rejectInteraction = async (): Promise<never> => {
             throw new AgentProbeError("acp_incompatible", "The Pi readiness probe does not accept interactions");

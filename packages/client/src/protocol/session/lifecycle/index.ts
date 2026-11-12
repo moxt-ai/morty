@@ -14,7 +14,6 @@ import { nativeSessionTargetSchema } from "../shared/native-session-target.ts";
 
 export const SESSION_PREPARE_KIND = "session.prepare";
 export const SESSION_CREATE_KIND = "session.create";
-export const SESSION_CREATION_READ_KIND = "session.creation.read";
 export const SESSION_READY_KIND = "session.ready";
 export const SESSION_LIST_KIND = "session.list";
 export const SESSION_LISTED_KIND = "session.listed";
@@ -22,15 +21,12 @@ export const SESSION_QUERY_KIND = "session.query";
 export const SESSION_QUERIED_KIND = "session.queried";
 export const SESSION_RESTORE_KIND = "session.restore";
 export const SESSION_RESTORED_KIND = "session.restored";
-export const SESSION_CLOSE_KIND = "session.close";
-export const SESSION_CLOSED_KIND = "session.closed";
 export const SESSION_CLOSE_NOTICE_KIND = "session.close.notice";
 export const SESSION_ARCHIVE_KIND = "session.archive";
 export const SESSION_ARCHIVED_KIND = "session.archived";
-/** Failure code of an operation that needs a Session the Computer has closed and nobody has reopened. */
+/** Failure code of an operation on a Session the Computer is archiving. */
 export const SESSION_CLOSED_ERROR_CODE = "session_closed";
 export const SESSION_STATUS_CHANGED_KIND = "session.status.changed";
-export const SESSION_INFO_UPDATED_KIND = "session.info.updated";
 export const SESSION_OPERATION_FAILED_KIND = "session.operation.failed";
 export const SESSION_PROMPT_ACCEPTED_KIND = "session.prompt.accepted";
 
@@ -113,16 +109,6 @@ const sessionRestoreCommandSchema = z
 
 export type SessionRestoreCommand = z.infer<typeof sessionRestoreCommandSchema>;
 
-const sessionCloseCommandSchema = z
-    .object({
-        kind: z.literal(SESSION_CLOSE_KIND),
-        requestId: IDENTIFIER,
-        target: nativeSessionTargetSchema,
-    })
-    .readonly();
-
-export type SessionCloseCommand = z.infer<typeof sessionCloseCommandSchema>;
-
 /**
  * Removes a Session from the Sessions this Computer holds, which are Morty's directory of Sessions on the computer. The
  * Computer closes the Session if it is open, then forgets its record; the Agent's own history of the Session stays, so
@@ -151,21 +137,9 @@ const sessionPrepareCommandSchema = z
         requestId: IDENTIFIER,
         sessionState: z.literal("provisioned").optional(),
         target: nativeSessionTargetSchema,
-        /** Marks an inspection-only Session preparation. */
-        transient: z.boolean().optional(),
     })
     .superRefine((command, context) => {
-        if (command.transient === true && command.sessionState === "provisioned") {
-            context.addIssue({
-                code: "custom",
-                message: "A transient Session cannot already be provisioned",
-                path: ["sessionState"],
-            });
-        }
-        if (
-            command.configurations !== undefined &&
-            (command.transient === true || command.sessionState !== undefined)
-        ) {
+        if (command.configurations !== undefined && command.sessionState !== undefined) {
             context.addIssue({
                 code: "custom",
                 message: "Only a Session being created states its initial settings",
@@ -193,19 +167,6 @@ export const decodeSessionCreateCommand = (encoded: string): SessionCreateComman
     decode(encoded, sessionCreateCommandSchema);
 export const encodeSessionCreateCommand = (message: SessionCreateCommand): string =>
     encode(message, sessionCreateCommandSchema);
-
-const sessionCreationReadCommandSchema = z
-    .object({
-        kind: z.literal(SESSION_CREATION_READ_KIND),
-        requestId: IDENTIFIER,
-        operationId: IDENTIFIER,
-    })
-    .readonly();
-export type SessionCreationReadCommand = z.infer<typeof sessionCreationReadCommandSchema>;
-export const decodeSessionCreationReadCommand = (encoded: string): SessionCreationReadCommand =>
-    decode(encoded, sessionCreationReadCommandSchema);
-export const encodeSessionCreationReadCommand = (message: SessionCreationReadCommand): string =>
-    encode(message, sessionCreationReadCommandSchema);
 
 const runtimeTimingsSchema = z
     .array(
@@ -252,16 +213,6 @@ const sessionRestoredEventSchema = z
 
 export type SessionRestoredEvent = z.infer<typeof sessionRestoredEventSchema>;
 
-const sessionClosedEventSchema = z
-    .object({
-        kind: z.literal(SESSION_CLOSED_KIND),
-        requestId: IDENTIFIER,
-        target: nativeSessionTargetSchema,
-    })
-    .readonly();
-
-export type SessionClosedEvent = z.infer<typeof sessionClosedEventSchema>;
-
 /** Answers `session.archive` once the Computer no longer holds the Session. */
 const sessionArchivedEventSchema = z
     .object({
@@ -274,9 +225,9 @@ const sessionArchivedEventSchema = z
 export type SessionArchivedEvent = z.infer<typeof sessionArchivedEventSchema>;
 
 /**
- * Tells every observer that the Computer closed a Session. Unlike `session.closed`, which answers one
- * `session.close` request, a notice is not tied to a request, so it also reaches clients that did not ask.
- * `reason` is a sentence a client can show its user as is, such as "This Session was closed on request.".
+ * Tells every observer that the Computer is archiving a Session. Unlike `session.archived`, which answers one
+ * `session.archive` request, a notice is not tied to a request, so it also reaches clients that did not ask.
+ * `reason` is a sentence a client can show its user as is, such as "This Session was archived.".
  * Show it as plain text and don't branch on it: its wording can change between Computer versions.
  */
 const sessionCloseNoticeEventSchema = z
@@ -288,18 +239,6 @@ const sessionCloseNoticeEventSchema = z
     .readonly();
 
 export type SessionCloseNoticeEvent = z.infer<typeof sessionCloseNoticeEventSchema>;
-
-const sessionInfoUpdatedEventSchema = z
-    .object({
-        kind: z.literal(SESSION_INFO_UPDATED_KIND),
-        computerId: IDENTIFIER.optional(),
-        target: nativeSessionTargetSchema,
-        title: z.string().max(500).nullable(),
-        updatedAt: z.string().max(128),
-    })
-    .readonly();
-
-export type SessionInfoUpdatedEvent = z.infer<typeof sessionInfoUpdatedEventSchema>;
 
 const sessionOperationFailedEventSchema = z
     .object({
@@ -354,14 +293,6 @@ export const decodeSessionRestoredEvent = (encoded: string): SessionRestoredEven
     decode(encoded, sessionRestoredEventSchema);
 export const encodeSessionRestoredEvent = (message: SessionRestoredEvent): string =>
     encode(message, sessionRestoredEventSchema);
-export const decodeSessionCloseCommand = (encoded: string): SessionCloseCommand =>
-    decode(encoded, sessionCloseCommandSchema);
-export const encodeSessionCloseCommand = (message: SessionCloseCommand): string =>
-    encode(message, sessionCloseCommandSchema);
-export const decodeSessionClosedEvent = (encoded: string): SessionClosedEvent =>
-    decode(encoded, sessionClosedEventSchema);
-export const encodeSessionClosedEvent = (message: SessionClosedEvent): string =>
-    encode(message, sessionClosedEventSchema);
 export const decodeSessionArchiveCommand = (encoded: string): SessionArchiveCommand =>
     decode(encoded, sessionArchiveCommandSchema);
 export const encodeSessionArchiveCommand = (message: SessionArchiveCommand): string =>
@@ -384,10 +315,6 @@ export const encodeSessionPrepareCommand = (message: SessionPrepareCommand): str
     encode(message, sessionPrepareCommandSchema);
 export const decodeSessionReadyEvent = (encoded: string): SessionReadyEvent => decode(encoded, sessionReadyEventSchema);
 export const encodeSessionReadyEvent = (message: SessionReadyEvent): string => encode(message, sessionReadyEventSchema);
-export const decodeSessionInfoUpdatedEvent = (encoded: string): SessionInfoUpdatedEvent =>
-    decode(encoded, sessionInfoUpdatedEventSchema);
-export const encodeSessionInfoUpdatedEvent = (message: SessionInfoUpdatedEvent): string =>
-    encode(message, sessionInfoUpdatedEventSchema);
 export const decodeSessionOperationFailedEvent = (encoded: string): SessionOperationFailedEvent =>
     decode(encoded, sessionOperationFailedEventSchema);
 export const encodeSessionOperationFailedEvent = (message: SessionOperationFailedEvent): string =>

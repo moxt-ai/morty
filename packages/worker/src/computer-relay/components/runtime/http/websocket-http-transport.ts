@@ -7,7 +7,6 @@ import {
 import { type HttpError, toHttpError } from "../../../../contracts/http-error.ts";
 import { diagnosticText, serializeDiagnosticError } from "../../../../infra/log-diagnostics.ts";
 import { logger } from "../../../../infra/logger.ts";
-import { standardWebSocketHost } from "../infra/websocket-host.ts";
 
 const REQUEST_KIND = "http.request";
 const RESPONSE_KIND = "http.response";
@@ -767,17 +766,24 @@ export function acceptWebSocketHttpTransport({
             }
         })();
     };
-    standardWebSocketHost.accept(server, {
-        message: receive,
-        close: () => {
+    server.accept();
+    server.addEventListener("message", (event) => receive(event.data));
+    server.addEventListener(
+        "close",
+        () => {
             release();
             server.close(1000, "WebSocket transport closed");
         },
-        error: () => {
+        { once: true },
+    );
+    server.addEventListener(
+        "error",
+        () => {
             release();
             server.close(1011, "WebSocket transport failed");
         },
-    });
+        { once: true },
+    );
     touch();
     return new Response(null, {
         status: 101,

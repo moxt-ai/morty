@@ -186,12 +186,7 @@ export const recentCwdEntry = (computerId: string) =>
 // Computer access tokens
 // ---------------------------------------------------------------------------
 
-const computerTokenSchema = v.pipe(
-    v.string(),
-    v.regex(
-        /^(?:morty_computer_v1_[A-Za-z0-9_-]{43}|morty_recovery_v1\.prj_(?:wn|en|sa|we|ee|ap|an|as|oc|af|me)_01_[A-Za-z0-9_-]{24}\.[A-Za-z0-9_-]{43})$/u,
-    ),
-);
+const computerTokenSchema = v.pipe(v.string(), v.regex(/^morty_computer_v1_[A-Za-z0-9_-]{43}$/u));
 
 /** How many computers and their access tokens this browser remembers. */
 export const MAX_REMEMBERED_COMPUTERS = 10;
@@ -268,7 +263,7 @@ export function readableComputer(value: unknown): RememberedComputer | null {
 // Linked devices this browser has been told about
 // ---------------------------------------------------------------------------
 
-/** When the latest device this browser was told about joined the Project; later joins are new to it. */
+/** When the latest device this browser was told about joined the Computer; later joins are new to it. */
 export const linkedDevicesSeenEntry = (computerId: string): LocalStorageEntry<string> =>
     stringLocalStorageEntry({
         key: scopedKey("morty:linked-devices-seen:v1:", computerId),
