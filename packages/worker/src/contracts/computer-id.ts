@@ -21,7 +21,7 @@ export async function accountComputerId(key: string, locationHint: ProjectLocati
 }
 
 /** Relay IDs contain a locally mapped shard code followed by a 144-bit local identifier. */
-export function encodeRelayComputerId(placement: ComputerManagementPlacement, localId: string): string {
+function encodeRelayComputerId(placement: ComputerManagementPlacement, localId: string): string {
     for (const [code, candidate] of placements) {
         if (candidate.locationHint === placement.locationHint) {
             return `prj_${code}_01_${localId}`;
