@@ -52,9 +52,8 @@ Stopping Morty preserves it.
 Morty's state directory is `~/Library/Application Support/Morty/v3` on macOS,
 `%LOCALAPPDATA%\Morty\v3` on Windows, and `$XDG_STATE_HOME/morty/v3` (or
 `~/.local/state/morty/v3`) on Linux. An absolute `MORTY_STATE_DIRECTORY` overrides
-it. Stop an earlier daemon with its original CLI before running setup. For this
-pre-launch reset, use a fresh empty directory and pair again; earlier Morty
-installations, clients, credentials and browser state are unsupported.
+it. Pairing and local credentials belong to this installation; Agent-owned history
+remains in the Agent's own storage.
 
 Use `npx --yes @morty-build/cli@latest start` to ensure the daemon is running.
 Use `restart` with the same command prefix to launch the selected release, or
