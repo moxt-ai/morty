@@ -8,8 +8,8 @@ import { bodyParser } from "../../../../http/body-parser.ts";
 import { json } from "../../../../http/json.ts";
 import { RequestDeadline } from "../../../../http/request-deadline.ts";
 import { authenticatedSession, credentialRejected, localSession } from "../../management/http/authenticated-session.ts";
+import type { ManagementHttpEnvironment } from "../../management/http/management-http-environment.ts";
 import { type ChatScope, MINIMUM_SESSION_CREDENTIAL_SECONDS } from "../service/chat-service.ts";
-import type { ChatHttpEnvironment } from "./chat-http-environment.ts";
 
 const setupInput = v.strictObject({
     computerId: relayIdentifier,
@@ -59,8 +59,8 @@ const accessInput = v.union([
     }),
 ]);
 
-type AuthorizedChatEnvironment = ChatHttpEnvironment & {
-    readonly Variables: ChatHttpEnvironment["Variables"] & {
+type AuthorizedChatEnvironment = ManagementHttpEnvironment & {
+    readonly Variables: ManagementHttpEnvironment["Variables"] & {
         readonly session: Session;
         readonly accessExpiresAt: number | null;
         readonly accessHolder: SessionAccessHolder;

@@ -5,15 +5,15 @@ import { errorHandler } from "../../../../http/error-middleware.ts";
 import { requestTimeoutMiddleware } from "../../../../middleware/request-timeout-middleware.ts";
 import { logger } from "../../../composition/application-context.ts";
 import { requestHeaders } from "../../../middleware/request-headers.ts";
+import type { ManagementHttpEnvironment } from "../../management/http/management-http-environment.ts";
 import { createBotChatRoutes } from "./bot-chat-routes.ts";
-import type { ChatHttpEnvironment } from "./chat-http-environment.ts";
 
-export function createChatApplication(initialize: MiddlewareHandler<ChatHttpEnvironment>) {
-    return new Hono<ChatHttpEnvironment>()
-        .onError(errorHandler<ChatHttpEnvironment>((context) => context.var.application?.logger ?? logger))
+export function createChatApplication(initialize: MiddlewareHandler<ManagementHttpEnvironment>) {
+    return new Hono<ManagementHttpEnvironment>()
+        .onError(errorHandler<ManagementHttpEnvironment>((context) => context.var.application?.logger ?? logger))
         .use(
             "*",
-            requestTimeoutMiddleware<ChatHttpEnvironment>(30_000),
+            requestTimeoutMiddleware<ManagementHttpEnvironment>(30_000),
             computerFromPath,
             bodyLimit({ maxSize: 3 * 1_024 * 1_024 }),
             initialize,

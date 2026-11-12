@@ -1,5 +1,5 @@
 import { createMiddleware } from "hono/factory";
-import { ComputerManagementError } from "../contracts/relay/computer-management.ts";
+import { ComputerManagementError } from "../contracts/computer-management.ts";
 
 interface BrowserCorsEnvironment {
     readonly Variables: { readonly allowedOrigins: ReadonlySet<string> };

@@ -1,22 +1,5 @@
 import type { ProjectLocationHint } from "@morty-build/client/protocol";
-import type { HttpError } from "../http-error.ts";
-
-export class ComputerManagementError extends Error implements HttpError {
-    readonly code: string;
-    readonly status: number;
-
-    constructor(code: string, message: string, status: number, options: ErrorOptions = {}) {
-        super(message, options);
-        this.code = code;
-        this.name = "ComputerManagementError";
-        this.status = status;
-    }
-
-    readonly toHttpJson: HttpError["toHttpJson"] = () => ({
-        body: { error: { code: this.code, message: this.message } },
-        status: this.status,
-    });
-}
+import { ComputerManagementError } from "../computer-management.ts";
 
 export class RelayAuthenticationConfiguration {
     readonly allowedOrigins: ReadonlySet<string>;

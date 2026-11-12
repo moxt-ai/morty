@@ -11,7 +11,7 @@ import { RequestError } from "../http/request-error.ts";
 import { logger } from "../infra/logger.ts";
 import { errorMiddleware, relayErrorHandler } from "../middleware/error-middleware.ts";
 import { requestTimeoutMiddleware } from "../middleware/request-timeout-middleware.ts";
-import { instructionDocumentRoutes } from "./components/instruction-documents/http/index.ts";
+import { instructionDocumentRoutes } from "./components/instruction-documents/http/instruction-document-routes.ts";
 import { cloudRoutes } from "./composition/cloud-http.ts";
 import { forwardToComputer } from "./gateway/computer-object-routing.ts";
 import { notFoundPage, webPages } from "./http/web-pages.ts";

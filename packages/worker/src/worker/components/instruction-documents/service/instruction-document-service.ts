@@ -8,16 +8,11 @@ const instructionOriginSchema = v.pipe(
     v.check((value) => URL.canParse(value) && new URL(value).origin === value),
 );
 
-const templates = { setup: setupTemplate };
-
-export type InstructionDocument = keyof typeof templates;
-
 export function instructionOrigin(value: unknown): string | null {
     const origin = v.safeParse(instructionOriginSchema, value);
     return origin.success ? origin.output : null;
 }
 
-export function renderInstructionDocument(document: InstructionDocument, origin: string): string {
-    const template = templates[document];
-    return template.replaceAll("{{BASE_URL}}", origin);
+export function renderSetupDocument(origin: string): string {
+    return setupTemplate.replaceAll("{{BASE_URL}}", origin);
 }

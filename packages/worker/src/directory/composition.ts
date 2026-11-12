@@ -3,6 +3,8 @@ import type { AccountProvisioner } from "../contracts/account-provisioning.ts";
 import type { CloudBindings } from "../contracts/cloud-bindings.ts";
 import type { ComputerAccounts } from "../contracts/computer-accounts.ts";
 import { computerManagementSchema } from "../contracts/computer-management.ts";
+import { relayBindings } from "../contracts/relay-bindings.ts";
+import { ComputerRelayGateway } from "../gateway/computer-relay.ts";
 import { ComputerManagementService } from "./service/computer-management-service.ts";
 import { ComputerManagementStorage } from "./storage/computer-management-storage.ts";
 
@@ -26,7 +28,8 @@ export function computerDirectory(_input: CloudBindings, forComputer: ComputerTa
     );
 }
 
-export function accountProvisioner(bindings: CloudBindings, forComputer: ComputerTargets): AccountProvisioner {
+export function accountProvisioner(bindings: CloudBindings): AccountProvisioner {
+    const forComputer: ComputerTargets = (computerId) => new ComputerRelayGateway(relayBindings(bindings), computerId);
     return async (reference, location, signal) =>
         v.parse(
             computerManagementSchema,
