@@ -17,9 +17,9 @@ an incident.
 
 **Please do not open a public issue for a security problem.**
 
-Send a private report to [acmerfight@gmail.com](mailto:acmerfight@gmail.com), or,
-when this repository's **Security** tab offers **Report a vulnerability**, report it
-there. Do not post a report in the retired product repository.
+Report it privately through GitHub: open this repository's **Security** tab and
+choose **Report a vulnerability**. Only the maintainers can see the report. Do not
+post a report in the retired product repository.
 
 Helpful things to include:
 
