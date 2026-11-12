@@ -69,6 +69,7 @@ const STREAMDOWN_ICONS = Object.freeze({
 // Fenced code is one tinted surface, like inline code and tool output: the language label and
 // the code share it, without an inner frame. Radius and spacing follow tables.
 const STREAMDOWN_FENCED_CODE_BLOCK_CLASSES = [
+    "[&_[data-streamdown=code-block]]:min-w-0 [&_[data-streamdown=code-block]]:max-w-full",
     "[&_[data-streamdown=code-block]]:!overflow-hidden",
     "[&_[data-streamdown=code-block]]:my-4",
     "[&_[data-streamdown=code-block]]:rounded-[16px]",
@@ -76,8 +77,8 @@ const STREAMDOWN_FENCED_CODE_BLOCK_CLASSES = [
     "[&_[data-streamdown=code-block]]:!p-0",
     "[&_[data-streamdown=code-block]]:!border-0",
     "[&_[data-streamdown=code-block]]:!bg-muted",
-    "[&_[data-streamdown=code-block-header]]:!h-auto [&_[data-streamdown=code-block-header]]:px-4 [&_[data-streamdown=code-block-header]]:pt-3",
-    "[&_[data-streamdown=code-block-header]>span]:!ml-0",
+    "[&_[data-streamdown=code-block-header]]:!h-auto [&_[data-streamdown=code-block-header]]:min-w-0 [&_[data-streamdown=code-block-header]]:px-4 [&_[data-streamdown=code-block-header]]:pt-3",
+    "[&_[data-streamdown=code-block-header]>span]:!ml-0 [&_[data-streamdown=code-block-header]>span]:min-w-0 [&_[data-streamdown=code-block-header]>span]:truncate",
     "[&_[data-streamdown=code-block-body]]:flex [&_[data-streamdown=code-block-body]]:min-h-0 [&_[data-streamdown=code-block-body]]:flex-col [&_[data-streamdown=code-block-body]]:!overflow-hidden",
     "[&_[data-streamdown=code-block-body]]:!rounded-none",
     "[&_[data-streamdown=code-block-body]]:!border-0",

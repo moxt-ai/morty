@@ -186,6 +186,7 @@ export function IdentitySharing({ store }: { readonly store: StoreApi<IdentitySh
                             }}
                             options={durationOptions}
                             value={duration}
+                            viewportClassName="pt-2.5"
                         />
                     )}
                 </div>

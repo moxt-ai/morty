@@ -31,6 +31,7 @@ export function Select({
     mutedWhenDisabled = true,
     valueLoading = false,
     className = "",
+    viewportClassName,
 }: {
     readonly label: string;
     readonly value: string;
@@ -56,6 +57,8 @@ export function Select({
     readonly valueLoading?: boolean;
     /** Extra trigger classes, e.g. a caller's height or radius override. */
     readonly className?: string;
+    /** Extra classes for the scrollable options list. */
+    readonly viewportClassName?: string;
 }) {
     const [search, setSearch] = useState("");
     const [topFadeVisible, setTopFadeVisible] = useState(false);
@@ -243,6 +246,7 @@ export function Select({
                                     : truncateOptions
                                       ? "w-full p-1"
                                       : "px-2.5 pt-1 pb-2.5",
+                                viewportClassName,
                             )}
                             ref={searchable ? assignViewport : undefined}
                         >

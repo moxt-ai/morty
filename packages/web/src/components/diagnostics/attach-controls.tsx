@@ -62,7 +62,7 @@ export function HiddenFileInput({
                     event.target.value = "";
                 }}
             />
-            <Button variant="ghost" size="sm" disabled={disabled} onClick={() => fileInput.current?.click()}>
+            <Button variant="outline" size="sm" disabled={disabled} onClick={() => fileInput.current?.click()}>
                 <Paperclip aria-hidden="true" className="size-4" />
                 <span>Attach images</span>
             </Button>

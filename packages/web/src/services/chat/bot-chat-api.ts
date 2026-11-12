@@ -166,6 +166,8 @@ function continuedSession(value: unknown) {
     return { ...stored, result };
 }
 
+declare const __MORTY_WEB_DEV_ORIGIN__: string | undefined;
+
 function sessionEndpoint(value: string): string {
     const endpoint = new URL(value);
     if (
@@ -180,6 +182,19 @@ function sessionEndpoint(value: string): string {
         throw new CloudApiError("INVALID_SESSION_ENDPOINT", "The Session endpoint is invalid.");
     }
     return endpoint.origin;
+}
+
+function localSessionEndpoint(endpoint: string, appOrigin: string): string {
+    const appUrl = new URL(appOrigin);
+    if (
+        typeof __MORTY_WEB_DEV_ORIGIN__ !== "undefined" &&
+        endpoint === __MORTY_WEB_DEV_ORIGIN__ &&
+        appUrl.protocol === "http:" &&
+        ["localhost", "127.0.0.1", "[::1]"].includes(appUrl.hostname)
+    ) {
+        return appUrl.origin;
+    }
+    return endpoint;
 }
 
 export class BotChatApi {
@@ -478,7 +493,7 @@ export class BotChatApi {
             throw new CloudApiError("INVALID_SESSION_ACCESS", "The selected Session could not be verified.");
         }
         const client = new MortyClient({
-            endpoint,
+            endpoint: localSessionEndpoint(endpoint, this.#origin),
             computerId,
             operationTimeoutMilliseconds: 120000,
             maxStreamReconnectAttempts: 0,

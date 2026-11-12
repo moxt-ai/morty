@@ -1,6 +1,6 @@
 import { ArrowLeft, Check, ChevronDown, ChevronRight, Search, X } from "lucide-react";
 import { Dialog, Tooltip } from "radix-ui";
-import { type ReactNode, useCallback, useEffect, useId, useRef, useState } from "react";
+import { type PointerEvent, type ReactNode, useCallback, useEffect, useId, useRef, useState } from "react";
 import { dataTestId } from "@/data-testid";
 import { cn } from "@/lib/utils";
 import { MortyTooltipContent } from "../ui/morty-tooltip-content.tsx";
@@ -12,6 +12,7 @@ import {
     preventOverlayOpenAutoFocus,
 } from "../ui/overlay-surface.ts";
 import { Popover } from "../ui/popover.tsx";
+import { Spinner } from "../ui/spinner.tsx";
 import { ScrollEdgeFade } from "../utils/scroll-edge-fade.tsx";
 import { useConfigurationViewport } from "./chat-configuration-viewport.ts";
 import { mobileHeaderIconButtonClassName } from "./chat-header-control.ts";
@@ -83,7 +84,7 @@ function HarnessSelect({
                                     ? "border-foreground bg-foreground font-medium text-background hover:border-foreground hover:bg-foreground hover:text-background"
                                     : "border-border bg-background text-foreground hover:border-foreground/20 hover:bg-accent",
                                 mutedWhenDisabled &&
-                                    "disabled:cursor-not-allowed disabled:border-border disabled:bg-background disabled:text-copy-tertiary disabled:opacity-100 disabled:hover:border-border disabled:hover:bg-background",
+                                    "disabled:cursor-not-allowed disabled:border-border disabled:bg-muted disabled:text-morty-text-3 disabled:opacity-100 disabled:hover:border-border disabled:hover:bg-muted",
                             )}
                             data-testid={dataTestId.sessionConfigValue(option.value)}
                             disabled={harness.disabled || !installed}
@@ -104,11 +105,6 @@ function HarnessSelect({
                                 testId={dataTestId.harnessMark}
                             />
                             <span className="min-w-0 break-words">{label}</span>
-                            {!installed && (
-                                <span aria-hidden="true" className="text-[10px] font-normal">
-                                    Not installed
-                                </span>
-                            )}
                         </button>
                     );
                 })}
@@ -161,6 +157,29 @@ type NestedMenuHoverHandlers = {
 };
 
 type NestedMenuOpenSource = "hover" | "pointer" | "keyboard";
+
+type NestedMenuPointerGrace = {
+    readonly controlId: string;
+    readonly originX: number;
+    readonly originY: number;
+    readonly edgeX: number;
+    readonly top: number;
+    readonly bottom: number;
+};
+
+function isInsideNestedMenuTriangle(grace: NestedMenuPointerGrace, x: number, y: number): boolean {
+    const width = grace.edgeX - grace.originX;
+    if (width === 0) {
+        return false;
+    }
+    const progress = (x - grace.originX) / width;
+    if (progress < 0 || progress > 1) {
+        return false;
+    }
+    const top = grace.originY + (grace.top - grace.originY) * progress - 8;
+    const bottom = grace.originY + (grace.bottom - grace.originY) * progress + 8;
+    return y >= top && y <= bottom;
+}
 
 function SettingPicker({
     control,
@@ -289,7 +308,10 @@ function SettingPicker({
                 {options.map((option) => (
                     <button
                         aria-selected={option.value === control.value}
-                        className="flex h-9 w-full items-center justify-between gap-3 rounded-full px-3 py-2 text-left text-sm outline-none hover:bg-accent keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-inset keyboard-focus:focus-visible:ring-ring/50 aria-selected:bg-accent"
+                        className={cn(
+                            "flex h-9 w-full items-center justify-between gap-3 rounded-full px-3 py-2 text-left text-sm outline-none hover:bg-accent keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-inset keyboard-focus:focus-visible:ring-ring/50",
+                            !nested && "aria-selected:bg-accent",
+                        )}
                         data-testid={dataTestId.sessionConfigValue(option.value)}
                         key={option.value}
                         onClick={() => onSelect(option.value)}
@@ -325,6 +347,8 @@ function SettingControl({
     nestedContent,
     assignButton,
     pickerId,
+    onNestedTriggerPointerLeave,
+    shouldDeferNestedHover,
 }: {
     readonly control: ChatConfigurationControl;
     readonly mutedWhenDisabled?: boolean;
@@ -344,6 +368,8 @@ function SettingControl({
         | undefined;
     readonly assignButton: (node: HTMLButtonElement | null) => void;
     readonly pickerId: string;
+    readonly onNestedTriggerPointerLeave: (x: number, y: number) => void;
+    readonly shouldDeferNestedHover: (x: number, y: number) => boolean;
 }) {
     const [focusNestedPickerOnOpen, setFocusNestedPickerOnOpen] = useState(false);
     const nestedMenuHoveredRef = useRef(false);
@@ -413,6 +439,20 @@ function SettingControl({
               ? "On"
               : "Off";
     const opensNestedMenuOnHover = desktop && control.kind === "select" && nestedContent !== undefined;
+    const hoverNestedMenu = (event: PointerEvent<HTMLButtonElement>) => {
+        if (event.pointerType !== "mouse" || shouldDeferNestedHover(event.clientX, event.clientY)) {
+            return;
+        }
+        if (nestedOpen) {
+            cancelNestedMenuClose();
+            return;
+        }
+        if (nestedMenuHoveredRef.current) {
+            cancelNestedMenuClose();
+            return;
+        }
+        openNestedMenu("hover");
+    };
     const trigger = (
         <button
             aria-busy={valueLoading || undefined}
@@ -463,14 +503,14 @@ function SettingControl({
                     }
                 }
             }}
-            onPointerEnter={
+            onPointerEnter={opensNestedMenuOnHover ? hoverNestedMenu : undefined}
+            onPointerMove={opensNestedMenuOnHover ? hoverNestedMenu : undefined}
+            onPointerLeave={
                 opensNestedMenuOnHover
-                    ? () => {
-                          if (nestedMenuHoveredRef.current) {
-                              cancelNestedMenuClose();
-                              return;
+                    ? (event) => {
+                          if (event.pointerType === "mouse") {
+                              onNestedTriggerPointerLeave(event.clientX, event.clientY);
                           }
-                          openNestedMenu("hover");
                       }
                     : undefined
             }
@@ -482,7 +522,7 @@ function SettingControl({
         >
             <span className="shrink-0 text-morty-text-3">{control.label}</span>
             <span className="flex min-w-0 items-center justify-end gap-2 text-right">
-                {valueLoading ? (
+                {valueLoading && control.kind === "select" ? (
                     <span
                         aria-label={`Loading ${control.label}`}
                         className="h-3.5 w-20 animate-pulse rounded-full bg-morty-fill-opacity-3 motion-reduce:animate-none"
@@ -512,7 +552,6 @@ function SettingControl({
                     />
                 ) : (
                     <span
-                        aria-hidden="true"
                         className={cn(
                             "flex h-6 w-10 shrink-0 items-center rounded-full p-0.5 transition-colors",
                             control.checked ? "bg-primary" : "bg-muted",
@@ -520,10 +559,12 @@ function SettingControl({
                     >
                         <span
                             className={cn(
-                                "size-5 rounded-full bg-white shadow-sm transition-transform",
+                                "flex size-5 items-center justify-center rounded-full bg-white shadow-sm transition-transform",
                                 control.checked ? "translate-x-4" : "translate-x-0",
                             )}
-                        />
+                        >
+                            {valueLoading && <Spinner className="scale-75" label={`Loading ${control.label}`} />}
+                        </span>
                     </span>
                 )}
             </span>
@@ -571,9 +612,12 @@ export function ChatConfigurationMenu({
     const [page, setPage] = useState<ConfigurationPage>({ kind: "overview" });
     const pickerId = useId();
     const buttonsRef = useRef(new Map<string, HTMLButtonElement>());
+    const nestedMenuContentsRef = useRef(new Map<string, HTMLElement>());
+    const nestedMenuPointerGraceRef = useRef<NestedMenuPointerGrace | null>(null);
     const restoreFocusRef = useRef<string | null>(null);
     const backRef = useRef<HTMLButtonElement | null>(null);
     const openNestedControl = useCallback((controlId: string) => {
+        nestedMenuPointerGraceRef.current = null;
         nestedControlIdRef.current = controlId;
         setNestedControlId(controlId);
     }, []);
@@ -585,6 +629,7 @@ export function ChatConfigurationMenu({
             return;
         }
         nestedControlIdRef.current = null;
+        nestedMenuPointerGraceRef.current = null;
         setNestedControlId(null);
     }, []);
     useEffect(() => {
@@ -603,6 +648,7 @@ export function ChatConfigurationMenu({
         setOpen(next);
         if (!next) {
             nestedControlIdRef.current = null;
+            nestedMenuPointerGraceRef.current = null;
             setNestedControlId(null);
             setPage({ kind: "overview" });
             restoreFocusRef.current = null;
@@ -772,7 +818,7 @@ export function ChatConfigurationMenu({
                     {harness !== undefined && selectedHarness !== undefined && harness.locked !== true && (
                         <HarnessSelect harness={harness} mutedWhenDisabled={!settingsLoading} />
                     )}
-                    <div className="flex min-w-0 flex-col">
+                    <div className="flex min-w-0 flex-col [&:has(button:hover)_button[data-state=open]:not(:hover)]:!bg-transparent">
                         {settingsLoading && settings.length === 0 ? (
                             <SettingsDataSkeleton />
                         ) : settings.length === 0 ? (
@@ -796,6 +842,35 @@ export function ChatConfigurationMenu({
                                         }}
                                         onOpen={() => setPage({ kind: "picker", controlId: control.id })}
                                         desktop={desktop}
+                                        onNestedTriggerPointerLeave={(x, y) => {
+                                            if (nestedControlIdRef.current !== control.id) {
+                                                return;
+                                            }
+                                            const content = nestedMenuContentsRef.current.get(control.id);
+                                            if (content === undefined) {
+                                                return;
+                                            }
+                                            const bounds = content.getBoundingClientRect();
+                                            nestedMenuPointerGraceRef.current = {
+                                                controlId: control.id,
+                                                originX: x,
+                                                originY: y,
+                                                edgeX: content.dataset["side"] === "left" ? bounds.right : bounds.left,
+                                                top: bounds.top,
+                                                bottom: bounds.bottom,
+                                            };
+                                        }}
+                                        shouldDeferNestedHover={(x, y) => {
+                                            const grace = nestedMenuPointerGraceRef.current;
+                                            if (grace === null || grace.controlId === control.id) {
+                                                return false;
+                                            }
+                                            if (isInsideNestedMenuTriangle(grace, x, y)) {
+                                                return true;
+                                            }
+                                            nestedMenuPointerGraceRef.current = null;
+                                            return false;
+                                        }}
                                         nestedOpen={nestedControlId === control.id}
                                         onNestedOpenChange={(next) => {
                                             if (next) {
@@ -808,6 +883,13 @@ export function ChatConfigurationMenu({
                                             desktop && control.kind === "select"
                                                 ? (close, hoverHandlers, focusOnOpen, setHovered) => (
                                                       <Popover.Content
+                                                          ref={(node) => {
+                                                              if (node === null) {
+                                                                  nestedMenuContentsRef.current.delete(control.id);
+                                                              } else {
+                                                                  nestedMenuContentsRef.current.set(control.id, node);
+                                                              }
+                                                          }}
                                                           align="start"
                                                           aria-label={`${control.label} options`}
                                                           className={cn(
@@ -848,6 +930,7 @@ export function ChatConfigurationMenu({
                                                           }}
                                                           onOpenAutoFocus={preventOverlayOpenAutoFocus}
                                                           onPointerEnter={() => {
+                                                              nestedMenuPointerGraceRef.current = null;
                                                               setHovered(true);
                                                               hoverHandlers.keepOpen();
                                                           }}

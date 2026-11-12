@@ -513,7 +513,7 @@ test("Given two queued submissions are accepted before their snapshot arrives, W
             .elementsByTestId(dataTestId.userMessage)
             .find((item) => item.textContent?.includes(queuedPrompt));
         expect(message).toBeDefined();
-        const source = getByRole(message ?? document.body, "img", { name: "Your attachment" }).getAttribute("src");
+        const source = getByRole(document.body, "img", { name: "Your attachment" }).getAttribute("src");
         expect(source?.startsWith("blob:")).toBe(true);
         return source;
     });

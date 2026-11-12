@@ -15,7 +15,7 @@ export const chatSessionInteractionColumnClassName =
  * The product scrollbar owns the frame; padding stays on the actual scroll viewport.
  */
 export const chatSessionMessageScrollAreaClassName = "min-h-0 flex-1 mb-[var(--composer-overlay-block,-1rem)]";
-export const chatSessionMessageViewportClassName = "pt-6 pb-[72px] sm:pt-10";
+export const chatSessionMessageViewportClassName = "pt-6 pb-[72px] sm:pt-10 [&>div]:!block [&>div]:!w-full";
 
 export const chatSessionMessageColumnClassName = `${chatSessionColumnClassName} font-inter text-foreground`;
 

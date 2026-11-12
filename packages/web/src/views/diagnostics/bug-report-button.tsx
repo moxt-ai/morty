@@ -1,10 +1,18 @@
-import { Bug, X } from "lucide-react";
+import { Bug, ChevronDown, X } from "lucide-react";
 import { Tooltip } from "radix-ui";
 import { AttachCancelBoundary, HiddenFileInput } from "../../components/diagnostics/attach-controls.tsx";
 import { Button } from "../../components/ui/cloud-button.tsx";
-import { Dialog } from "../../components/ui/dialog.tsx";
+import {
+    Dialog,
+    dialogBodyStackClassName,
+    dialogPinnedFooterActionsClassName,
+    dialogSectionTitleClassName,
+} from "../../components/ui/dialog.tsx";
+import { MortyAlert } from "../../components/ui/morty-alert.tsx";
 import { ObjectUrlImage } from "../../components/ui/object-url-image.tsx";
 import { ScrollArea } from "../../components/ui/scroll-area.tsx";
+import { formFieldShellClassName, formTextareaClassName, Textarea } from "../../components/ui/textarea.tsx";
+import { cn } from "../../lib/utils.ts";
 import type { DaemonDiagnosticsSource } from "../../services/diagnostics/browser-diagnostics.ts";
 import type { BugReportDialogStore } from "../../view-models/bug-report-dialog-store.ts";
 import {
@@ -112,14 +120,18 @@ function ReportImage({
     readonly onRemove: () => void;
 }) {
     return (
-        <li className="relative flex h-[60px] max-w-52 items-center gap-2 rounded-xl border border-border bg-surface-subtle p-2 pr-8 text-xs text-copy-secondary">
-            <ObjectUrlImage alt={image.file.name} className="size-11 rounded-lg object-cover" file={image.file} />
-            <span className="min-w-0 truncate" title={image.file.name}>
+        <li className="group relative flex h-[60px] w-[200px] max-w-full shrink-0 items-center gap-2 rounded-[16px] bg-morty-fill-opacity-2 py-2 pr-4 pl-2 text-sm text-copy-secondary hover:pr-9 focus-within:pr-9 [@media(hover:none)]:pr-9">
+            <ObjectUrlImage
+                alt={image.file.name}
+                className="aspect-square size-11 shrink-0 rounded-[10px] object-cover"
+                file={image.file}
+            />
+            <span className="min-w-0 truncate font-medium" title={image.file.name}>
                 {image.file.name}
             </span>
             <button
                 aria-label={`Remove ${image.file.name}`}
-                className="absolute top-1.5 right-1.5 flex size-6 items-center justify-center rounded-full text-muted-foreground hover:bg-black/[0.06] hover:text-foreground keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/60 disabled:opacity-50"
+                className="absolute top-1/2 right-2.5 flex size-6 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground opacity-0 transition-opacity duration-150 hover:bg-black/[0.06] hover:text-foreground group-hover:opacity-100 group-focus-within:opacity-100 keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring/60 disabled:opacity-50 motion-reduce:transition-none [@media(hover:none)]:opacity-100"
                 disabled={disabled}
                 onClick={onRemove}
                 type="button"
@@ -140,15 +152,29 @@ function BugReportDialog({
     const hideBugReport = dialog.getState().hide;
     const { state, description, images, technicalDetails, addImages, removeImage, describe, send, close } =
         useExternalStore(report);
+    const closeDialog = () => {
+        close();
+        hideBugReport();
+    };
     return (
         <Dialog
             variant="bugReport"
             title="Report a bug"
             description="Send a description, optional images and recent technical and network diagnostics to the Morty team. Session text, other files and credentials are not collected automatically."
-            onClose={() => {
-                close();
-                hideBugReport();
-            }}
+            onClose={closeDialog}
+            footer={
+                state.kind === "sent" ? undefined : (
+                    <div className={dialogPinnedFooterActionsClassName}>
+                        <Button
+                            type="submit"
+                            form="bug-report-form"
+                            disabled={state.kind === "sending" || description.trim() === ""}
+                        >
+                            Send report
+                        </Button>
+                    </div>
+                )
+            }
         >
             <AttachCancelBoundary
                 cancel={() => {
@@ -169,6 +195,7 @@ function BugReportDialog({
                     </div>
                 ) : (
                     <form
+                        id="bug-report-form"
                         onPaste={(event) => {
                             const files = Array.from(event.clipboardData.files);
                             if (files.length > 0) {
@@ -180,20 +207,23 @@ function BugReportDialog({
                             event.preventDefault();
                             void send();
                         }}
-                        className="space-y-3"
+                        className={cn(dialogBodyStackClassName, "gap-4")}
                     >
-                        <label className="block" htmlFor="bug-description">
-                            What went wrong?
+                        <label className="grid gap-2" htmlFor="bug-description">
+                            <span className={dialogSectionTitleClassName}>What went wrong?</span>
+                            <div className={formFieldShellClassName}>
+                                <Textarea
+                                    id="bug-description"
+                                    className={`${formTextareaClassName} min-h-28`}
+                                    maxLength={2000}
+                                    placeholder="Describe what you expected and what happened"
+                                    required
+                                    disabled={state.kind === "sending"}
+                                    value={description}
+                                    onChange={(event) => describe(event.target.value)}
+                                />
+                            </div>
                         </label>
-                        <textarea
-                            id="bug-description"
-                            className="min-h-28 w-full rounded-md border border-border bg-background p-2"
-                            maxLength={2000}
-                            required
-                            disabled={state.kind === "sending"}
-                            value={description}
-                            onChange={(event) => describe(event.target.value)}
-                        />
                         {images.length > 0 && (
                             <ul aria-label="Attached images" className="flex flex-wrap gap-2">
                                 {images.map((image) => (
@@ -206,7 +236,7 @@ function BugReportDialog({
                                 ))}
                             </ul>
                         )}
-                        <div className="space-y-1.5">
+                        <div className="space-y-2">
                             <HiddenFileInput
                                 accept={bugReportImageAccept}
                                 ariaLabel="Attach images"
@@ -214,38 +244,41 @@ function BugReportDialog({
                                 multiple
                                 onFiles={addImages}
                             />
-                            <p className="text-xs text-muted-foreground">
-                                Paste an image here or choose a file. Up to 3 images, 2.5 MB each. PNG, JPEG, GIF or
-                                WebP.
-                            </p>
-                            <p className="text-xs text-muted-foreground">
-                                Hide chat text, personal details and secrets before attaching images or writing your
-                                description.
-                            </p>
+                            <ul className="list-disc space-y-1 pl-4 text-xs text-muted-foreground marker:text-morty-text-4">
+                                <li>Paste or attach up to 3 images (PNG, JPEG, GIF, or WebP; 2.5 MB each).</li>
+                                <li>
+                                    Keep chat text, personal details, and secrets out of images and your description.
+                                </li>
+                            </ul>
                         </div>
-                        <details className="text-xs text-muted-foreground">
-                            <summary className="cursor-pointer">Agent and model details included</summary>
-                            <p>
-                                Captured when this report was opened. Custom model names use anonymous labels within
-                                this report.
-                            </p>
-                            <ScrollArea
-                                className="mt-2 max-h-48"
-                                orientation="both"
-                                viewportClassName="max-h-[inherit]"
-                            >
-                                <pre className="whitespace-pre-wrap break-all">{technicalDetails}</pre>
-                            </ScrollArea>
+                        <details className="disclosure-details group text-13 leading-5 text-morty-text-3">
+                            <summary className="flex h-6 cursor-pointer list-none items-center gap-1.5 rounded-lg outline-none hover:text-morty-text-2 keyboard-focus:focus-visible:ring-[3px] keyboard-focus:focus-visible:ring-ring [&::-webkit-details-marker]:hidden">
+                                Agent and model details included
+                                <ChevronDown
+                                    aria-hidden="true"
+                                    className="size-3.5 transition-[rotate] duration-300 ease-out group-open:rotate-180 motion-reduce:transition-none"
+                                />
+                            </summary>
+                            <div className="mt-2 rounded-[16px] border border-border/60 bg-[#f2f3f5] px-3.5 py-3">
+                                <p>
+                                    Captured when this report was opened. Custom model names use anonymous labels within
+                                    this report.
+                                </p>
+                                <ScrollArea
+                                    className="mt-2 max-h-48"
+                                    orientation="both"
+                                    viewportClassName="max-h-[inherit]"
+                                >
+                                    <pre className="whitespace-pre-wrap break-all">{technicalDetails}</pre>
+                                </ScrollArea>
+                            </div>
                         </details>
                         <p className="text-xs text-muted-foreground">
                             Network and daemon diagnostics are collected automatically and may take up to 10 seconds.
                             You can still send a report when your Computer is offline.
                         </p>
-                        {state.kind === "failed" && <p role="alert">{state.message}</p>}
+                        {state.kind === "failed" && <MortyAlert tone="error">{state.message}</MortyAlert>}
                         {state.kind === "sending" && <p role="status">Collecting diagnostics and sending…</p>}
-                        <Button type="submit" disabled={state.kind === "sending" || description.trim() === ""}>
-                            Send report
-                        </Button>
                     </form>
                 )}
             </AttachCancelBoundary>

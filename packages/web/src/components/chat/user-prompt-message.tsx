@@ -26,7 +26,8 @@ function PromptImage({ attachment }: { readonly attachment: ComposerAttachment }
     return source.length === 0 ? null : (
         <PreviewImage
             alt={attachment.name}
-            className="h-auto max-h-56 max-w-full rounded-lg object-contain object-left"
+            className="size-[120px] max-w-full shrink-0 rounded-[12px] object-cover"
+            insetStroke
             loading="lazy"
             src={source}
         />
@@ -42,30 +43,40 @@ export function UserPromptMessage({ attachments, attachmentLabels = [], status, 
     return (
         <ImageGallery>
             <UserMessageShell>
-                <MessageBubble copyText={text} data-testid={dataTestId.userMessage} speaker="user" status={status}>
-                    <div className="grid min-w-0 gap-2">
-                        {images.length > 0 && (
-                            <div className={cn("grid min-w-0 gap-1.5", images.length > 1 && "grid-cols-2")}>
-                                {images.map((image, index) => (
-                                    <PromptImage attachment={image} key={`${index.toString()}:${image.name}`} />
-                                ))}
-                            </div>
-                        )}
-                        {(resources.length > 0 || attachmentLabels.length > 0) && (
-                            <div className="flex flex-wrap gap-1.5">
-                                {[...resources, ...attachmentLabels].map(({ name, uri }) => (
-                                    <span
-                                        className="rounded-md border border-black/[0.06] bg-muted/40 px-2 py-1 font-mono text-[10px]"
-                                        key={`${uri}:${name}`}
-                                    >
-                                        {name}
-                                    </span>
-                                ))}
-                            </div>
-                        )}
-                        {text.length > 0 && <AgentMarkdown markdown={text} streaming={false} />}
+                {images.length > 0 && (
+                    <div className={cn("relative ml-auto grid min-w-0 gap-1.5", images.length > 1 && "grid-cols-2")}>
+                        {images.map((image, index) => (
+                            <PromptImage attachment={image} key={`${index.toString()}:${image.name}`} />
+                        ))}
+                        {text.length === 0 &&
+                            resources.length === 0 &&
+                            attachmentLabels.length === 0 &&
+                            status !== undefined && (
+                                <span className="absolute top-1/2 right-full mr-1.5 flex -translate-y-1/2">
+                                    {status}
+                                </span>
+                            )}
                     </div>
-                </MessageBubble>
+                )}
+                {(text.length > 0 || resources.length > 0 || attachmentLabels.length > 0) && (
+                    <MessageBubble copyText={text} data-testid={dataTestId.userMessage} speaker="user" status={status}>
+                        <div className="grid min-w-0 gap-2">
+                            {(resources.length > 0 || attachmentLabels.length > 0) && (
+                                <div className="flex flex-wrap gap-1.5">
+                                    {[...resources, ...attachmentLabels].map(({ name, uri }) => (
+                                        <span
+                                            className="rounded-md border border-black/[0.06] bg-muted/40 px-2 py-1 font-mono text-[10px]"
+                                            key={`${uri}:${name}`}
+                                        >
+                                            {name}
+                                        </span>
+                                    ))}
+                                </div>
+                            )}
+                            {text.length > 0 && <AgentMarkdown markdown={text} streaming={false} />}
+                        </div>
+                    </MessageBubble>
+                )}
             </UserMessageShell>
         </ImageGallery>
     );

@@ -104,6 +104,7 @@ function ComputerChoiceContent({
             <span
                 className={cn(
                     "min-w-0 truncate font-medium",
+                    current && "col-span-2",
                     nameClassName,
                     status !== null && "font-normal text-copy-secondary",
                 )}
@@ -111,7 +112,9 @@ function ComputerChoiceContent({
             >
                 {choice.name}
             </span>
-            <span className={cn("whitespace-nowrap text-morty-text-3", statusClassName)}>{status}</span>
+            <span className={cn("whitespace-nowrap text-morty-text-3", statusClassName, current && "sr-only")}>
+                {status}
+            </span>
             <span className="flex w-4 justify-center" aria-hidden="true">
                 {current ? <Check className="size-3.5" /> : null}
             </span>
@@ -362,7 +365,7 @@ export function ComputerSwitcher({
                                     </span>
                                 ) : null}
                             </DropdownMenu.Label>
-                            <ScrollArea className="min-h-0" viewportClassName="max-h-[inherit]">
+                            <ScrollArea className="-mx-1 min-h-0 rounded-none" viewportClassName="max-h-[inherit] p-1">
                                 <DropdownMenu.RadioGroup
                                     aria-label="Computers"
                                     className="flex min-h-0 flex-col"
