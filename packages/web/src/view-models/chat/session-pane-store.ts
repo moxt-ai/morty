@@ -163,12 +163,10 @@ export interface SessionPaneStore {
     readonly recover: (signal: AbortSignal) => Promise<void>;
     readonly retryNow: () => void;
     /**
-     * Records that the Computer closed the Session and stops the connection until it is reopened. `reason` is the
-     * Computer's explanation, or null when a failed operation was the only sign of the closing.
+     * Records that the Computer archived the Session and ends the connection for good. `reason` is the Computer's
+     * explanation, or null when a failed operation was the only sign of the closing.
      */
     readonly sessionClosed: (reason: string | null) => void;
-    /** Reopens a closed Session on the user's request, then connects to it again. */
-    readonly reopen: (signal: AbortSignal) => Promise<void>;
     /**
      * Loads the page of history before the oldest message shown. The load runs on the pane's lifetime: `signal` only
      * ends the caller's wait for it.
@@ -465,8 +463,6 @@ export function createSessionPaneModel(options: {
     let closure: { readonly reason: string | null } | null = null;
     // The running connection attempt, which a closing of the Session interrupts.
     let attempt: AbortController | null = null;
-    // Lets the connect loop go on once the user has reopened the closed Session.
-    let resumeAfterReopen: (() => void) | null = null;
     // The pane's lifetime: its owner starts it once and stops it once, so at most one connection loop ever runs for
     // the pane. React attaching or detaching its view is not part of it.
     const lifetime = new AbortController();
@@ -474,7 +470,7 @@ export function createSessionPaneModel(options: {
     // This pane's following of the Session for its operations, from `start` until `stop`.
     let follower: SessionConnectionFollower | null = null;
     /**
-     * Whether a failure through `connected` says the Session is closed now. A client that a reopening or reconnection
+     * Whether a failure through `connected` says the Session is closed now. A client that a reconnection
      * replaced describes the Session as it was, so its failure must not close the Session this pane follows now.
      */
     const closedThrough = (connected: MortyClient, cause: unknown): cause is MortyError =>
@@ -779,24 +775,10 @@ export function createSessionPaneModel(options: {
                 }
             }
         };
-        // Holds the connect loop on a closed Session until the user reopens it, then lets the loop connect again.
-        const untilReopened = async (reason: string | null, signal: AbortSignal): Promise<void> => {
-            await new Promise<void>((resolve) => {
-                if (signal.aborted) {
-                    resolve();
-                    return;
-                }
-                const finish = (): void => {
-                    resumeAfterReopen = null;
-                    signal.removeEventListener("abort", finish);
-                    resolve();
-                };
-                resumeAfterReopen = finish;
-                signal.addEventListener("abort", finish, { once: true });
-                // A closed Session runs nothing: the turn, queue and interactions it was holding settle.
-                applyExecution({ kind: "closed" });
-                setAndSettle({ connection: { kind: "closed", reason, reopen: { kind: "available" } } });
-            });
+        // Ends the connect loop on a closed Session: it runs nothing, so its turn, queue and interactions settle.
+        const showClosed = (reason: string | null): void => {
+            applyExecution({ kind: "closed" });
+            setAndSettle({ connection: { kind: "closed", reason } });
         };
         /**
          * Submits a message: the composer's draft, an answer to an Agent's question, a failed message again, or the
@@ -1089,14 +1071,8 @@ export function createSessionPaneModel(options: {
                 };
                 for (;;) {
                     if (closure !== null) {
-                        const closed = closure;
-                        closure = null;
-                        await untilReopened(closed.reason, signal);
-                        if (signal.aborted) {
-                            return;
-                        }
-                        consecutiveFailures = 0;
-                        setAndSettle({ connection: { kind: "reconnecting", message: null, notice: recoveryNotice() } });
+                        showClosed(closure.reason);
+                        return;
                     }
                     if (consecutiveFailures > 0) {
                         setAndSettle({
@@ -1234,37 +1210,6 @@ export function createSessionPaneModel(options: {
                 // The connect loop takes over: it stops the running attempt or retry countdown and shows the closing.
                 attempt?.abort(new Error("The Session closed."));
                 countdownInterrupt?.abort(new Error("The Session closed."));
-            },
-            reopen: async (signal) => {
-                const current = get().connection;
-                if (current.kind !== "closed" || current.reopen.kind === "reopening" || resumeAfterReopen === null) {
-                    return;
-                }
-                const setReopen = (reopen: Extract<SessionConnection, { readonly kind: "closed" }>["reopen"]): void => {
-                    const connection = get().connection;
-                    if (connection.kind === "closed") {
-                        set({ connection: { ...connection, reopen } });
-                    }
-                };
-                setReopen({ kind: "reopening" });
-                try {
-                    await requests.managedSession(
-                        {
-                            harness: session.result.ready.harness,
-                            sessionId: session.entry.sessionId,
-                        },
-                        signal,
-                    );
-                    signal.throwIfAborted();
-                } catch (cause) {
-                    signal.throwIfAborted();
-                    setReopen({ kind: "failed", message: formatError(cause, "The Session could not be reopened.") });
-                    return;
-                }
-                // Failures the closing caused say nothing about the reopened Session.
-                tasks.getState().dismissFailure();
-                messageQueue.getState().dismissFailure();
-                resumeAfterReopen?.();
             },
             setDraft: (draft) => {
                 tasks.getState().dismissFailure();

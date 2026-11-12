@@ -5,8 +5,6 @@ import {
     SESSION_ARCHIVED_KIND,
     type SESSION_CANCEL_BEFORE_START_KIND,
     type SESSION_CANCEL_KIND,
-    type SESSION_CLOSE_KIND,
-    SESSION_CLOSED_KIND,
     type SESSION_ELICITATION_RESPOND_KIND,
     SESSION_INTERACTION_ANSWERED_KIND,
     type SESSION_PERMISSION_RESPOND_KIND,
@@ -150,20 +148,6 @@ export const handleSessionCancelBeforeStart: CommandHandler<typeof SESSION_CANCE
             }
         })
         .catch(() => undefined);
-};
-
-export const handleSessionClose: CommandHandler<typeof SESSION_CLOSE_KIND> = (
-    { sessions, signal, socket },
-    message,
-): void => {
-    void sessions
-        .closeSession(message.target, signal)
-        .then(() => {
-            send(socket, { kind: SESSION_CLOSED_KIND, requestId: message.requestId, target: message.target });
-        })
-        .catch((error: unknown) => {
-            reportOperationFailure(socket, message.requestId, message.target, error);
-        });
 };
 
 export const handleSessionArchive: CommandHandler<typeof SESSION_ARCHIVE_KIND> = (

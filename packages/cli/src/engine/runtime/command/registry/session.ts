@@ -25,7 +25,6 @@ import { operationErrorCode } from "../../../infra/operation-error.ts";
 import { AccumulatingOperationMetrics } from "../../../infra/operation-metrics.ts";
 import type { PreparedSession, ResolveAgent, SessionRecovery } from "../../../session/api/session-api.ts";
 import { SessionError } from "../../../session/api/session-error.ts";
-import type { ClosedSessionHandling } from "../../../session/manager/session-lifecycle.ts";
 import type { SessionManager } from "../../../session/manager/session-manager.ts";
 import type { NativeSessionService } from "../../../session/native/native-session-browser.ts";
 import { applyCompleteSessionConfiguration } from "../../../session/prompt/apply-session-configuration.ts";
@@ -62,7 +61,6 @@ async function prepareSession(
     command: SessionPreparationRequest,
     session: HeldSession,
     recovery: SessionRecovery,
-    closed: ClosedSessionHandling,
     sessions: SessionManager,
     metrics: AccumulatingOperationMetrics,
 ): Promise<SessionReadyEvent> {
@@ -71,11 +69,11 @@ async function prepareSession(
         const { target } = preparation;
         const prepare = async (): Promise<PreparedSession> => {
             if (recovery.kind === "history-required") {
-                return await sessions.restoreSession(preparation, metrics, closed);
+                return await sessions.restoreSession(preparation, metrics);
             }
             const configurations = command.configurations;
             if (configurations === undefined) {
-                return await sessions.prepareSession(preparation, metrics, closed);
+                return await sessions.prepareSession(preparation, metrics);
             }
             // A Session being created starts with exactly the settings it states, by the rule a Turn's settings use.
             return await sessions.createSession(
@@ -98,7 +96,6 @@ async function prepareSession(
                             ),
                     ),
                 metrics,
-                closed,
             );
         };
         const prepared = await prepare();
@@ -164,7 +161,6 @@ async function executeSessionPrepare(
             command,
             await resolveMeasuredHeldSession(command.target, resolveAgent, directories, sessions, metrics, signal),
             { kind: "interactive-only" },
-            "reopen",
             sessions,
             metrics,
         );
@@ -211,7 +207,6 @@ async function executeSessionRestore(
             command,
             await resolveMeasuredHeldSession(entry.target, resolveAgent, directories, sessions, metrics, signal),
             { kind: "history-required" },
-            "reopen",
             sessions,
             metrics,
         );
@@ -363,7 +358,6 @@ async function executeSessionCreate(context: CommandContext, command: SessionCre
                         command,
                         { ...created, directory: command.directory },
                         { kind: "interactive-only" },
-                        "reopen",
                         context.sessions,
                         metrics,
                     );
@@ -480,8 +474,6 @@ async function executeSessionConfigRead(
             // load support would fail even with a live process whose config is
             // already readable, and prepare reuses the current configuration.
             { kind: "interactive-only" },
-            // Reading settings must not reopen a Session that a client closed.
-            "keep-closed",
             sessions,
             metrics,
         );

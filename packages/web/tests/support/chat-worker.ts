@@ -105,14 +105,14 @@ export async function createChatWorkerEnvironment(
             return {
                 failure: runtime.failure,
                 continueReply: runtime.continueReply,
-                /** Closes a Session through the real daemon protocol while the browser observes its production lifecycle events. */
-                closeSession: async (sessionId: string): Promise<void> => {
-                    const response = await cloud.dispatchFetch(
-                        `${origin}/__test/computers/${runtime.computerId}/harnesses/${agents[0]?.harness ?? "codex"}/sessions/${encodeURIComponent(sessionId)}/close`,
-                        { method: "POST" },
-                    );
+                /** Archives a Session the way another browser window of this Computer would. */
+                archiveSession: async (sessionId: string): Promise<void> => {
+                    const response = await request(`chat/computers/${identity.computerId}/managed-session/archive`, {
+                        harness: agents[0]?.harness ?? "codex",
+                        sessionId,
+                    });
                     if (response.status !== 200) {
-                        throw new Error(`Could not close the test Session: ${response.status}`);
+                        throw new Error(`Could not archive the test Session: ${response.status}`);
                     }
                 },
                 /** Applies another client's explicit model edit through the public Relay contract. */

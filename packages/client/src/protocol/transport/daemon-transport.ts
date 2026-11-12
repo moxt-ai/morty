@@ -101,8 +101,6 @@ import {
 import {
     decodeSessionArchiveCommand,
     decodeSessionArchivedEvent,
-    decodeSessionCloseCommand,
-    decodeSessionClosedEvent,
     decodeSessionCloseNoticeEvent,
     decodeSessionCreateCommand,
     decodeSessionListCommand,
@@ -118,8 +116,6 @@ import {
     decodeSessionsQueriedEvent,
     encodeSessionArchiveCommand,
     encodeSessionArchivedEvent,
-    encodeSessionCloseCommand,
-    encodeSessionClosedEvent,
     encodeSessionCloseNoticeEvent,
     encodeSessionCreateCommand,
     encodeSessionListCommand,
@@ -135,9 +131,7 @@ import {
     encodeSessionsQueriedEvent,
     SESSION_ARCHIVE_KIND,
     SESSION_ARCHIVED_KIND,
-    SESSION_CLOSE_KIND,
     SESSION_CLOSE_NOTICE_KIND,
-    SESSION_CLOSED_KIND,
     SESSION_CREATE_KIND,
     SESSION_LIST_KIND,
     SESSION_LISTED_KIND,
@@ -268,11 +262,6 @@ const serviceToDaemonSignatures = {
         SESSION_RESTORE_KIND,
         encodeSessionRestoreCommand,
         decodeSessionRestoreCommand,
-    ),
-    [SESSION_CLOSE_KIND]: defineMessageSignature(
-        SESSION_CLOSE_KIND,
-        encodeSessionCloseCommand,
-        decodeSessionCloseCommand,
     ),
     [SESSION_ARCHIVE_KIND]: defineMessageSignature(
         SESSION_ARCHIVE_KIND,
@@ -445,11 +434,6 @@ export function readUndecodedRequestAddress(
 }
 
 const daemonToServiceSignatures = {
-    [SESSION_CLOSED_KIND]: defineMessageSignature(
-        SESSION_CLOSED_KIND,
-        encodeSessionClosedEvent,
-        decodeSessionClosedEvent,
-    ),
     [SESSION_ARCHIVED_KIND]: defineMessageSignature(
         SESSION_ARCHIVED_KIND,
         encodeSessionArchivedEvent,

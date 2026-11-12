@@ -882,7 +882,6 @@ function MortySessionPaneBody({
                       feedback={executionContext.feedback}
                       inline={inline}
                       onRetryNow={pane.store.getState().retryNow}
-                      onReopen={() => run(pane.store.getState().reopen)}
                   />
               );
     const slotErrorMessage = composerErrorMessage(presentation.composerError, attachmentModel.state);

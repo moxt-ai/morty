@@ -13,7 +13,6 @@ import {
     handleSessionArchive,
     handleSessionCancel,
     handleSessionCancelBeforeStart,
-    handleSessionClose,
 } from "./interactions.ts";
 import { handleSessionList, handleSessionQuery } from "./native-sessions.ts";
 import { handleSessionPrompt } from "./prompt.ts";
@@ -79,9 +78,6 @@ export function createCommandRegistry(context: CommandContext): {
                     return;
                 case "session.cancel":
                     handleSessionCancel(context, message);
-                    return;
-                case "session.close":
-                    handleSessionClose(context, message);
                     return;
                 case "session.archive":
                     handleSessionArchive(context, message);

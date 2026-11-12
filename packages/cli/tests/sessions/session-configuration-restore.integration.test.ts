@@ -7,7 +7,6 @@ import {
     decodeSessionConfigUpdatedEvent,
     decodeSessionLiveEvent,
     decodeSessionReadyEvent,
-    encodeSessionCloseCommand,
     encodeSessionConfigureCommand,
     encodeSessionPrepareCommand,
     encodeSessionPromptCommand,
@@ -50,7 +49,8 @@ test("Given effort was chosen before the model it depends on, When the conversat
                 revision = await configure(peer, sessionTarget, "model", "test-small", revision);
                 await configure(peer, sessionTarget, "model", "test-large", revision);
 
-                await close(peer, sessionTarget);
+                // A restarted daemon reopens the conversation in a new Agent process.
+                await peer.restart();
                 expect(await prepare(peer, sessionTarget)).toEqual(
                     expect.arrayContaining([
                         expect.objectContaining({ id: "model", currentValue: "test-large" }),
@@ -161,12 +161,6 @@ async function currentRevision(peer: RealDaemonPeer, sessionTarget: RealDaemonPe
             return ready.configurationRevision;
         }
     }
-}
-
-async function close(peer: RealDaemonPeer, sessionTarget: RealDaemonPeer["target"]): Promise<void> {
-    const requestId = crypto.randomUUID();
-    peer.send(encodeSessionCloseCommand({ kind: "session.close", requestId, target: sessionTarget }));
-    await nextMessage(peer, "session.closed");
 }
 
 async function nextMessage(peer: RealDaemonPeer, expectedKind: string): Promise<string> {
