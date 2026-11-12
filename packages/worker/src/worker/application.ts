@@ -6,10 +6,8 @@ import type { CloudBindings } from "../contracts/cloud-bindings.ts";
 import { relayAuthenticationFromEnvironment } from "../contracts/relay-authentication-environment.ts";
 import { relayBindings } from "../contracts/relay-bindings.ts";
 import { computerFromPath, computerFromRuntimeCredential, computerFromTransfer } from "../http/computer-target.ts";
-import { errorHandler } from "../http/error-middleware.ts";
+import { errorHandler, errorMiddleware } from "../http/error-middleware.ts";
 import { RequestError } from "../http/request-error.ts";
-import { logger } from "../infra/logger.ts";
-import { errorMiddleware, relayErrorHandler } from "../middleware/error-middleware.ts";
 import { requestTimeoutMiddleware } from "../middleware/request-timeout-middleware.ts";
 import { instructionDocumentRoutes } from "./components/instruction-documents/http/instruction-document-routes.ts";
 import { cloudRoutes } from "./composition/cloud-http.ts";
@@ -57,7 +55,7 @@ function createComputerForwardingRoutes() {
     };
     return (
         new Hono<ForwardingEnvironment>()
-            .onError(relayErrorHandler)
+            .onError(errorHandler)
             .use("*", errorMiddleware, timeout)
             .get("/morty/api/v1/computers/connect", computerFromRuntimeCredential, forward)
             .post("/morty/api/v1/pairings/:computerId/redeem", computerFromPath, forward)
@@ -111,7 +109,7 @@ const notFound = (): never => {
 };
 
 const publicApplication = new Hono<{ readonly Bindings: CloudBindings }>()
-    .onError(errorHandler<{ readonly Bindings: CloudBindings }>(() => logger))
+    .onError(errorHandler)
     .get("/morty/api/health", bodyLimit({ maxSize: MAXIMUM_REQUEST_BODY_BYTES }), (context) => context.body(null, 204))
     .route("/", webPages)
     .route("/", instructionDocumentRoutes)
