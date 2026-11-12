@@ -322,8 +322,10 @@ async function createReportInbox() {
         for await (const chunk of request) {
             chunks.push(Buffer.from(chunk));
         }
-        if (request.method === "POST" && status === 200) {
-            const body = Buffer.concat(chunks);
+        const body = Buffer.concat(chunks);
+        // Tracing spans and release-health sessions arrive on their own schedule; the inbox records reports only.
+        const itemType = JSON.parse(body.toString("utf8").split("\n")[1] || "{}").type;
+        if (request.method === "POST" && status === 200 && (itemType === "event" || itemType === "feedback")) {
             bodies.push(body);
             envelopes.push(body.toString("utf8"));
         }
