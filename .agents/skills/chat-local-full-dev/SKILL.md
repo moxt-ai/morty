@@ -1,6 +1,6 @@
 ---
 name: chat-local-full-dev
-description: Prepare, debug, and remove an isolated local Morty Worker containing the website and relay. Use when a user asks to run the local Worker, reproduce an API failure locally, watch Worker logs, inspect local D1 or Durable Object SQLite, exercise the browser app against local code, or tear the local Worker down. Do not use it to inspect or change a deployed production Worker; use the worker-debug skill for that.
+description: Prepare, debug, and remove an isolated local Morty Worker containing the website and relay. Use when a user asks to run the local Worker, reproduce an API failure locally, watch Worker logs, inspect local Durable Object SQLite, exercise the browser app against local code, or tear the local Worker down. Do not use it to inspect or change a deployed production Worker; use the worker-debug skill for that.
 ---
 
 # Local Morty development

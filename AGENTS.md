@@ -39,9 +39,9 @@ a real released Moxt/Mobius installation. Production uses Morty-owned resources
 and credentials. Local development must work without production secrets or remote
 test environments and must never inherit Moxt state or fall back to Moxt services.
 
-Preserve production business records, retained snapshots, Agent-owned history and
-immutable database migrations. Retained historical data does not require an active
-reader. Publish only the exact archive that passed the complete acceptance gates
+Preserve production business records, Agent-owned history and the immutable
+migration history of every database the product still binds. Delete tables,
+columns, migrations and data that no active product path reads or writes. Publish only the exact archive that passed the complete acceptance gates
 in `docs/TESTING.md`; activate matching cloud and CLI artifacts and record their
 source revision and recovery procedure.
 
@@ -157,7 +157,7 @@ Server behavior flows inward through `http/do -> service -> storage -> database`
 ## Database schema
 
 - Do not define foreign-key constraints. Enforce relationships and deletion behavior explicitly in application logic.
-- Keep the authoritative Drizzle schema for each SQLite target under `src/schema/<target>` (for example, `schema/d1` or `schema/project-do`). Never place Durable Object tables in `schema/d1`, and never use one target's schema as the implicit schema for another target.
+- Keep the authoritative Drizzle schema for each SQLite target in its own `schema/<target>` directory (for example, `schema/computer-relay-do`). Never place one target's tables in another target's schema, and never use one target's schema as the implicit schema for another target.
 - Keep Drizzle configuration in the repository-level `drizzle/` directory and generate each target's migrations into `migrations/<target>`.
 - Generate schema migrations with the repository's pinned Drizzle CLI. Never create or edit migration SQL manually.
 - Durable Object runtime code must execute committed `.sql` migrations generated for its target; do not embed application-table DDL or migration SQL in TypeScript. Prefer importing the SQL directly with `?raw`. Where the build pipeline cannot import SQL, use a committed code-generation script that copies the generated SQL verbatim into a gitignored module and keep `.sql` as the source of truth.
