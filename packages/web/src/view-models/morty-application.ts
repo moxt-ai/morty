@@ -95,14 +95,14 @@ export function createMortyApplication(options: {
     const bugReportDialog = createBugReportDialogStore(() => (disposed ? null : transport));
     const setupHandoff = setupHandoffModel(options.setupHandoff ?? browserSetupHandoff());
     const sessionWorkspace = createSessionWorkspaceStore();
-    const continuation = createContinueStore(transport.fetch);
+    const continuation = createContinueStore(transport);
     let workspace: ChatWorkspace | null = null;
     let workspaceRequests: BotChatApi | null = null;
     let disposed = false;
     const releaseWorkspace = (): void => {
         workspace?.dispose();
-        // The workspace receives the chat API by injection; the application
-        // owns it, so it closes the Computer's shared session transport here.
+        // Closing the injected chat API releases its Session clients, not the
+        // Computer connection owned by the application transport.
         workspaceRequests?.close();
         workspace = null;
         workspaceRequests = null;
@@ -130,6 +130,7 @@ export function createMortyApplication(options: {
         });
         const requests = new BotChatApi({
             fetchRequest: transport.fetch,
+            sessionTransport: () => transport.computerTransport(identity.computerId),
             getToken: scope.getToken,
             replacedToken: (rejected, signal) => replacedToken(identity.computerId, rejected, signal),
             credentialRejected: () => void credentialRejected(),
@@ -149,6 +150,7 @@ export function createMortyApplication(options: {
                 requests: (saved) =>
                     new BotChatApi({
                         fetchRequest: transport.fetch,
+                        sessionTransport: () => transport.computerTransport(saved.computerId),
                         getToken: async (signal) => {
                             signal.throwIfAborted();
                             return storedToken(saved.computerId) ?? saved.computerToken;

@@ -1,5 +1,6 @@
 import { isIdentifier, MAX_WORKSPACE_PATH_LENGTH } from "@morty-build/client/protocol";
 import { createStore } from "zustand/vanilla";
+import type { ApiTransport } from "@/services/api/api-transport";
 import { BotChatApi } from "@/services/chat/bot-chat-api";
 import { saveLastCwdPreference, saveRecentCwdPreference } from "@/services/chat/last-cwd-preference";
 import { type DaemonDiagnosticsSource, recordBrowserError } from "@/services/diagnostics/browser-diagnostics";
@@ -106,7 +107,8 @@ function identityDestination(path: "/" | "/chat", identity: AnonymousIdentity): 
  * computer's own access, can still open it. So a failed redemption falls back to
  * the access this browser still holds for the same Computer.
  */
-export const createContinueStore = (fetchRequest: (request: Request) => Promise<Response>) => {
+export const createContinueStore = (transport: ApiTransport) => {
+    const fetchRequest = transport.fetch;
     let attempt: AbortController | null = null;
     const store = createStore<ContinueStore>()((set, get) => {
         const showRetryableFailure = (
@@ -138,6 +140,7 @@ export const createContinueStore = (fetchRequest: (request: Request) => Promise<
             });
             const chat = new BotChatApi({
                 fetchRequest,
+                sessionTransport: () => transport.computerTransport(identity.computerId),
                 origin: window.location.origin,
                 computerId: identity.computerId,
                 // The access this browser holds: another tab may have replaced the one this link issued.

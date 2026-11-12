@@ -1,5 +1,5 @@
 import "./monitoring.ts";
-import { HttpApiTransport } from "./services/api/http-api-transport.ts";
+import { WorkerApiTransport } from "./services/api/worker-api-transport.ts";
 import { mountMorty } from "./views/bootstrap.tsx";
 import "./styles.css";
 
@@ -11,7 +11,7 @@ if (rootElement === null) {
 const morty = mountMorty({
     element: rootElement,
     origin: window.location.origin,
-    transport: new HttpApiTransport(window.location.origin),
+    transport: new WorkerApiTransport(window.location.origin),
 });
 
 // The browser may hide the page into the back/forward cache instead of

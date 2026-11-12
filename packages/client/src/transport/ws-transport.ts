@@ -22,7 +22,7 @@ type WsTransportState =
           readonly kind: "connected";
           readonly socket: WebSocket;
       }
-    | { readonly kind: "connecting"; readonly connection: Promise<WebSocket> }
+    | { readonly kind: "connecting"; readonly connection: Promise<WebSocket>; readonly controller: AbortController }
     | { readonly kind: "disconnected" };
 
 type PendingWsRequest = {
@@ -172,11 +172,11 @@ export class WsTransport implements MortyHttpTransport {
             /^[^/]+\/harnesses\/[^/]+\/sessions\/[^/]+\/files\/content$/u.test(
                 requestUrl.pathname.slice(computerPrefix.length),
             );
-        if (fileDownload || computerRequestTarget(request) === null) {
+        const target = computerRequestTarget(request);
+        if (fileDownload || target === null) {
             return await this.#http.fetch(request);
         }
         const socket = await this.#socket(request);
-        request.signal.throwIfAborted();
         request.signal.throwIfAborted();
         const requestId = crypto.randomUUID();
         const binaryRequest = request.headers.has("x-morty-byte-length");
@@ -187,6 +187,13 @@ export class WsTransport implements MortyHttpTransport {
             const abort = (): void => {
                 this.#pending.delete(requestId);
                 reject(request.signal.reason);
+                if (target.kind === "computer-api" && socket.readyState === WebSocket.OPEN) {
+                    try {
+                        socket.send(JSON.stringify({ kind: "http.cancel", requestId }));
+                    } catch {
+                        // Cancellation is already final locally; never replay the operation.
+                    }
+                }
             };
             request.signal.addEventListener("abort", abort, { once: true });
             this.#pending.set(requestId, {
@@ -277,6 +284,8 @@ export class WsTransport implements MortyHttpTransport {
         this.#state = { kind: "closed" };
         if (state.kind === "connected") {
             state.socket.close(1000, "Morty transport closed");
+        } else if (state.kind === "connecting") {
+            state.controller.abort(new MortyConnectionError("The Morty WebSocket transport closed"));
         }
         this.#failPending(new MortyConnectionError("The Morty WebSocket transport closed"));
         this.#failSubscriptions(new MortyConnectionError("The live Session event transport closed"));
@@ -299,17 +308,35 @@ export class WsTransport implements MortyHttpTransport {
             case "connected":
                 return this.#state.socket;
             case "connecting":
-                return await this.#state.connection;
+                return await this.#waitForConnection(this.#state.connection, request.signal);
             case "disconnected": {
-                const connection = this.#connect(endpoint);
-                this.#state = { kind: "connecting", connection };
-                return await connection;
+                const controller = new AbortController();
+                const connection = this.#connect(endpoint, controller);
+                this.#state = { kind: "connecting", connection, controller };
+                return await this.#waitForConnection(connection, request.signal);
             }
         }
     };
 
-    readonly #connect = async (endpoint: URL): Promise<WebSocket> => {
-        const controller = new AbortController();
+    readonly #waitForConnection = async (connection: Promise<WebSocket>, signal: AbortSignal): Promise<WebSocket> => {
+        signal.throwIfAborted();
+        return await new Promise<WebSocket>((resolve, reject) => {
+            const abort = () => reject(signal.reason);
+            signal.addEventListener("abort", abort, { once: true });
+            connection.then(
+                (socket) => {
+                    signal.removeEventListener("abort", abort);
+                    resolve(socket);
+                },
+                (cause: unknown) => {
+                    signal.removeEventListener("abort", abort);
+                    reject(cause);
+                },
+            );
+        });
+    };
+
+    readonly #connect = async (endpoint: URL, controller: AbortController): Promise<WebSocket> => {
         const timeout = globalThis.setTimeout(
             () => controller.abort(new MortyConnectionError("The Morty WebSocket connection timed out")),
             CONNECTION_TIMEOUT_MILLISECONDS,
@@ -380,7 +407,6 @@ export class WsTransport implements MortyHttpTransport {
             if (pending === undefined) {
                 return;
             }
-            this.#pending.delete(requestId);
             if (kind === WS_ERROR_KIND) {
                 const status = message["status"];
                 if (typeof status !== "number" || !Number.isSafeInteger(status) || status < 400 || status > 599) {
@@ -389,6 +415,7 @@ export class WsTransport implements MortyHttpTransport {
                 pending.reject(
                     new MortyApiError(wsString(message, "code", 128), wsString(message, "message", 1_024), status),
                 );
+                this.#pending.delete(requestId);
                 return;
             }
             if (kind !== WS_RESPONSE_KIND) {
@@ -400,11 +427,12 @@ export class WsTransport implements MortyHttpTransport {
             }
             const body = wsString(message, "body", 16_777_216);
             pending.resolve(
-                new Response(body, {
+                new Response(status === 204 || status === 205 || status === 304 ? null : body, {
                     headers: wsHeaders(message["headers"]),
                     status,
                 }),
             );
+            this.#pending.delete(requestId);
         } catch (cause) {
             this.#failPending(cause);
             this.#failSubscriptions(cause);

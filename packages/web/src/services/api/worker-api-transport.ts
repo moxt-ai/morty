@@ -1,3 +1,5 @@
+import { computerRequestTarget, MortyValidationError, WsTransport } from "@morty-build/client";
+import { isIdentifier } from "@morty-build/client/protocol";
 import { recordBrowserDiagnostic } from "../diagnostics/browser-diagnostics.ts";
 import { systemClock } from "../time/clock.ts";
 import type { ApiResponseSnapshot } from "./api-transport.ts";
@@ -14,14 +16,37 @@ function isWatchable(method: string, pathname: string): boolean {
     );
 }
 
-export class HttpApiTransport {
+export class WorkerApiTransport {
+    readonly #computers = new Map<string, WsTransport>();
     readonly #origin: string;
     readonly #baselines = new Map<string, string>();
     readonly #lifetime = new AbortController();
     constructor(origin: string) {
         this.#origin = origin;
     }
-    readonly dispose = (reason?: Error) => this.#lifetime.abort(reason);
+    readonly dispose = (reason?: Error) => {
+        this.#lifetime.abort(reason);
+        for (const transport of this.#computers.values()) {
+            transport.close();
+        }
+        this.#computers.clear();
+    };
+    readonly computerTransport = (computerId: string): WsTransport => {
+        this.#lifetime.signal.throwIfAborted();
+        if (!isIdentifier(computerId)) {
+            throw new MortyValidationError("The Computer identifier is invalid");
+        }
+        let transport = this.#computers.get(computerId);
+        if (transport === undefined) {
+            transport = new WsTransport();
+            this.#computers.set(computerId, transport);
+        }
+        return transport;
+    };
+    readonly #request = async (request: Request): Promise<Response> => {
+        const target = computerRequestTarget(request);
+        return target === null ? await fetch(request) : await this.computerTransport(target.computerId).fetch(request);
+    };
     readonly #key = (request: Request) => JSON.stringify([request.url, request.headers.get("authorization")]);
     readonly fetch = async (request: Request): Promise<Response> => {
         const requestId = crypto.randomUUID();
@@ -33,7 +58,7 @@ export class HttpApiTransport {
             }
             const signal = AbortSignal.any([request.signal, this.#lifetime.signal]);
             signal.throwIfAborted();
-            const raw = await fetch(new Request(request, { signal }));
+            const raw = await this.#request(new Request(request, { signal }));
             const response = new Response(raw.body, raw);
             if (isWatchable(request.method, new URL(request.url).pathname)) {
                 this.#baselines.set(this.#key(request), `${response.status}\0${await response.clone().text()}`);
@@ -60,6 +85,7 @@ export class HttpApiTransport {
             if (request.signal.aborted) {
                 throw request.signal.reason;
             }
+            this.#lifetime.signal.throwIfAborted();
             throw new ApiConnectionError("Unable to reach Morty.", { cause });
         }
     };
@@ -67,7 +93,7 @@ export class HttpApiTransport {
         const start = performance.now();
         const response = await fetch(new URL("/morty/api/health", this.#origin), {
             cache: "no-store",
-            signal: AbortSignal.any([parent, AbortSignal.timeout(10000)]),
+            signal: AbortSignal.any([parent, this.#lifetime.signal, AbortSignal.timeout(10000)]),
         });
         if (!response.ok) {
             throw new ApiConnectionError("Morty did not respond.");
@@ -85,11 +111,13 @@ export class HttpApiTransport {
             signal.throwIfAborted();
             let response: Response;
             try {
-                response = await fetch(request.url, {
-                    method: request.method,
-                    headers: request.headers,
-                    signal: AbortSignal.any([signal, AbortSignal.timeout(120000)]),
-                });
+                response = await this.#request(
+                    new Request(request.url, {
+                        method: request.method,
+                        headers: request.headers,
+                        signal: AbortSignal.any([signal, AbortSignal.timeout(120000)]),
+                    }),
+                );
             } catch (cause) {
                 signal.throwIfAborted();
                 if (ready !== undefined) {

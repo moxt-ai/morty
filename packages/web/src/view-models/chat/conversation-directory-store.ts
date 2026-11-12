@@ -3,7 +3,7 @@ import type { NativeSessionTarget } from "@morty-build/client/protocol";
 import { createStore } from "zustand/vanilla";
 import type { BotChatApi, ManagedChatSession } from "@/services/chat/bot-chat-api";
 import { CloudApiError, isComputerConnectionFailure } from "@/services/management/management-api";
-import { isApiConnectionError } from "../../services/api/http-api-transport.ts";
+import { isApiConnectionError } from "../../services/api/worker-api-transport.ts";
 import type { Clock } from "../../services/time/clock.ts";
 import { formatError } from "../format-error.ts";
 import { localCalendarDay } from "./conversation-groups.ts";
