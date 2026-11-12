@@ -4,30 +4,30 @@ import {
     MORTY_API_PREFIX,
     SESSION_CLOSED_ERROR_CODE,
 } from "@morty-build/client/protocol";
+import {
+    CANCEL_KIND,
+    ERROR_KIND,
+    EVENT_SUBSCRIBE_KIND,
+    EVENT_UNSUBSCRIBE_KIND,
+    FORBIDDEN_HEADERS,
+    FRAME_IDENTIFIER_PATTERN,
+    MAX_BODY_BYTES,
+    MAX_HEADER_NAME_LENGTH,
+    MAX_HEADER_VALUE_LENGTH,
+    MAX_HEADERS,
+    REQUEST_KIND,
+    REQUEST_METHODS,
+    RESPONSE_KIND,
+} from "../../../../contracts/agent-api/transport-frames.ts";
 import { type HttpError, toHttpError } from "../../../../contracts/http-error.ts";
 import { diagnosticText, serializeDiagnosticError } from "../../../../infra/log-diagnostics.ts";
 import { logger } from "../../../../infra/logger.ts";
 
-const REQUEST_KIND = "http.request";
-const RESPONSE_KIND = "http.response";
-const ERROR_KIND = "http.error";
-const EVENT_SUBSCRIBE_KIND = "session.events.subscribe";
-const EVENT_UNSUBSCRIBE_KIND = "session.events.unsubscribe";
-const MAX_BODY_BYTES = 12_582_912;
 const MAX_PENDING_BINARY_BYTES = MAX_BODY_BYTES;
 const MAX_PENDING_BINARY_REQUESTS = 16;
 const BINARY_REQUEST_TIMEOUT_MILLISECONDS = 30_000;
 const IDLE_TIMEOUT_MILLISECONDS = 60_000;
 const MAX_SUBSCRIPTION_DIAGNOSTICS = 8;
-const FORBIDDEN_HEADERS = new Set([
-    "connection",
-    "content-length",
-    "forwarded",
-    "host",
-    "origin",
-    "upgrade",
-    "x-morty-computer-id",
-]);
 
 type DispatchRequest = (request: Request) => Promise<Response>;
 type SubscriptionEnd =
@@ -200,7 +200,7 @@ function requestBody(value: Readonly<Record<string, unknown>>): string {
 }
 
 function headers(value: unknown): Headers {
-    if (!Array.isArray(value) || value.length > 128) {
+    if (!Array.isArray(value) || value.length > MAX_HEADERS) {
         throw transportError("invalid_headers");
     }
     const decoded = new Headers();
@@ -210,8 +210,8 @@ function headers(value: unknown): Headers {
             entry.length !== 2 ||
             typeof entry[0] !== "string" ||
             typeof entry[1] !== "string" ||
-            entry[0].length > 256 ||
-            entry[1].length > 16_384
+            entry[0].length > MAX_HEADER_NAME_LENGTH ||
+            entry[1].length > MAX_HEADER_VALUE_LENGTH
         ) {
             throw transportError("invalid_headers");
         }
@@ -234,7 +234,7 @@ function requestIdFromMessage(value: Readonly<Record<string, unknown>>): string 
         throw transportError("invalid_message");
     }
     const requestId = string(value, "requestId", 128);
-    if (!/^[a-zA-Z0-9-]{1,128}$/u.test(requestId)) {
+    if (!FRAME_IDENTIFIER_PATTERN.test(requestId)) {
         throw transportError("invalid_message");
     }
     return requestId;
@@ -257,7 +257,7 @@ function requestFromMessage(
         throw transportError("invalid_target");
     }
     const method = string(value, "method", 16);
-    if (!["DELETE", "GET", "PATCH", "POST", "PUT"].includes(method)) {
+    if (!REQUEST_METHODS.some((allowed) => allowed === method)) {
         throw transportError("invalid_method");
     }
     const body = binaryBody ?? requestBody(value);
@@ -443,7 +443,7 @@ export function acceptWebSocketHttpTransport({
                     server.send('{"kind":"pong"}');
                     return;
                 }
-                if (kind === "http.cancel") {
+                if (kind === CANCEL_KIND) {
                     const cancelledId = string(message, "requestId", 128);
                     requests.get(cancelledId)?.abort(new DOMException("Request cancelled", "AbortError"));
                     releaseBinaryRequest(cancelledId);
@@ -466,7 +466,7 @@ export function acceptWebSocketHttpTransport({
                 }
                 if (kind === EVENT_SUBSCRIBE_KIND) {
                     const subscriptionId = string(message, "subscriptionId", 128);
-                    if (!/^[a-zA-Z0-9-]{1,128}$/u.test(subscriptionId) || subscriptions.has(subscriptionId)) {
+                    if (!FRAME_IDENTIFIER_PATTERN.test(subscriptionId) || subscriptions.has(subscriptionId)) {
                         throw transportError("invalid_message");
                     }
                     requestId = subscriptionId;

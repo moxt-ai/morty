@@ -10,10 +10,6 @@ import {
 import { Hono } from "hono";
 import { createMiddleware } from "hono/factory";
 import * as v from "valibot";
-import { toHttpError } from "../../../../contracts/http-error.ts";
-import { PairingDirectoryError, validateIdentifier } from "../../../../contracts/relay/pairing.ts";
-import { RequestDeadline } from "../../../../http/request-deadline.ts";
-import { authorizeSessionContentUpload } from "../http/session-content-upload.ts";
 import {
     decodeSessionRequest,
     interactionResponseRequest,
@@ -21,7 +17,11 @@ import {
     sessionRenameRequest,
     turnSteerRequest,
     turnSubmissionRequest,
-} from "../http/session-requests.ts";
+} from "../../../../contracts/agent-api/session-requests.ts";
+import { toHttpError } from "../../../../contracts/http-error.ts";
+import { PairingDirectoryError, validateIdentifier } from "../../../../contracts/relay/pairing.ts";
+import { RequestDeadline } from "../../../../http/request-deadline.ts";
+import { authorizeSessionContentUpload } from "../http/session-content-upload.ts";
 import type { LocalSessionOperations } from "../service/local-session-operations.ts";
 import type { SessionAccessService } from "../service/session-access-service.ts";
 import type { TurnAdmission } from "../service/session-control.ts";

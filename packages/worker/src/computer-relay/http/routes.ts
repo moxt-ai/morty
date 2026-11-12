@@ -1,6 +1,7 @@
 import { decodeFileReadCommand, MORTY_API_PREFIX } from "@morty-build/client/protocol";
 import { Hono, type MiddlewareHandler } from "hono";
 import * as v from "valibot";
+import { decodeSessionRequest } from "../../contracts/agent-api/session-requests.ts";
 import { COMPUTER_INTERNAL_PREFIX } from "../../contracts/computer-relay-http.ts";
 import { validateIdentifier } from "../../contracts/relay/pairing.ts";
 import { computerIdFromApiPath, matchesComputerApiTarget } from "../../http/computer-api-target.ts";
@@ -17,7 +18,6 @@ import type { ManagementHttpEnvironment } from "../components/management/http/ma
 import { createRelayProtocolRoutes } from "../components/management/http/protocol-routes.ts";
 import { sessionAccessTargetMiddleware } from "../components/runtime/http/session-access-target.ts";
 import { authorizeSessionContentUpload } from "../components/runtime/http/session-content-upload.ts";
-import { decodeSessionRequest } from "../components/runtime/http/session-requests.ts";
 import { acceptWebSocketHttpTransport } from "../components/runtime/http/websocket-http-transport.ts";
 import { createBrowserWebSocketRoutes } from "../components/runtime/websocket/browser-websocket-routes.ts";
 import type { ComputerRouteContext } from "../composition/computer-route-context.ts";
