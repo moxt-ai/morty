@@ -1,0 +1,1 @@
+DROP TABLE `native_session_forks`;

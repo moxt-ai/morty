@@ -18,10 +18,6 @@ interface RequestComputerPairing {
     readonly expiresAt: number;
     readonly idempotencyKey: string;
     readonly ownerId: string;
-    readonly actorKind: string;
-    readonly actorId: string;
-    readonly auditId: string;
-    readonly rejectionAuditId: string;
 }
 
 /** The pairing request stored under the idempotency key, or the quota that refused a new one. */
@@ -38,8 +34,6 @@ interface ClaimPairing {
     readonly computerName: string;
     readonly workspaceName: string;
     readonly agents: string;
-    readonly auditId: string;
-    readonly rejectionAuditId: string;
 }
 
 /**
@@ -59,8 +53,7 @@ export interface ComputerRelayStore {
     readonly readComputer: (computerId: string, signal: AbortSignal) => Promise<ComputerPairingDirectoryRow | null>;
     readonly listComputers: (signal: AbortSignal) => Promise<readonly ComputerDirectoryRow[]>;
     /**
-     * Returns the pairing request created under the idempotency key, or creates one within the Computer quota. A
-     * refused request is audited.
+     * Returns the pairing request created under the idempotency key, or creates one within the Computer quota.
      */
     readonly requestComputerPairing: (
         value: RequestComputerPairing,
@@ -70,7 +63,7 @@ export interface ComputerRelayStore {
     readonly readPairingCode: (codeHash: string, signal: AbortSignal) => Promise<PairingClaimRow | null>;
     /**
      * Claims a pairing for a daemon. A replay with the credential it committed succeeds while the pairing is
-     * unexpired; any other failed claim is audited and returns false.
+     * unexpired; any other failed claim returns false.
      */
     readonly claimPairing: (value: ClaimPairing, signal: AbortSignal) => Promise<boolean>;
     /**

@@ -32,16 +32,6 @@ export interface ComputerManagementPlacement {
     readonly locationHint: ProjectLocationHint;
 }
 
-export function hasControlCharacters(value: string): boolean {
-    for (const character of value) {
-        const codePoint = character.codePointAt(0) ?? 0;
-        if (codePoint <= 31 || codePoint === 127) {
-            return true;
-        }
-    }
-    return false;
-}
-
 function validOrigin(value: string): boolean {
     if (value.length === 0 || value.length > 2_048 || value === "*") {
         return false;

@@ -6,7 +6,7 @@ import { credentialMatches } from "./pairing-identity-storage.ts";
 
 /**
  * A Project's operations over its own SQLite storage. Only the Project's storage owner constructs this; each
- * operation runs there as one unit, so its reads, writes and audit events cannot interleave with another operation.
+ * operation runs there as one unit, so its reads and writes cannot interleave with another operation.
  */
 export class SqliteComputerRelayStore implements ComputerRelayStore {
     readonly #computerId: string;
@@ -45,18 +45,6 @@ export class SqliteComputerRelayStore implements ComputerRelayStore {
         if (await this.#computers.createComputerPairing(value, signal)) {
             return { kind: "created" };
         }
-        await this.#computers.recordAudit(
-            {
-                auditId: value.rejectionAuditId,
-                computerId: this.#computerId,
-                actorKind: value.actorKind,
-                actorId: value.actorId,
-                action: "computer_pairing.rejected",
-                details: { code: "computer_quota_exceeded" },
-                recordedAt: value.now,
-            },
-            signal,
-        );
         return { kind: "quota_exceeded" };
     };
 
@@ -80,18 +68,6 @@ export class SqliteComputerRelayStore implements ComputerRelayStore {
         ) {
             return true;
         }
-        await this.#computers.recordAudit(
-            {
-                auditId: value.rejectionAuditId,
-                computerId: this.#computerId,
-                actorKind: "pairing_code",
-                actorId: value.computerId,
-                action: "computer_pairing.rejected",
-                details: { code: "invalid_pairing_code" },
-                recordedAt: value.now,
-            },
-            signal,
-        );
         return false;
     };
 

@@ -8,12 +8,7 @@ import {
     computerGenerationResponseSchema,
     computerInternalPath,
 } from "../../contracts/computer-relay-http.ts";
-import {
-    type ProjectRow,
-    ProjectRowSchema,
-    type RelayAuditRecord,
-    RelayComputerScopeRowSchema,
-} from "../../contracts/relay/relay-records.ts";
+import { type ProjectRow, ProjectRowSchema, RelayComputerScopeRowSchema } from "../../contracts/relay/relay-records.ts";
 import type { ConfiguredRelayBindings } from "../../contracts/relay-bindings.ts";
 import { RequestDeadline } from "../../http/request-deadline.ts";
 import { DatabaseError } from "../../infra/sql-database.ts";
@@ -104,14 +99,6 @@ export class ComputerRelayGateway {
             return v.parse(ProjectRowSchema, body);
         });
     };
-    readonly recordAudit = (audit: RelayAuditRecord, signal: AbortSignal): Promise<void> =>
-        this.#call(signal, async (stub, signal) => {
-            const response = await stub.fetch(this.#request("audit-events", signal, audit));
-            if (response.status !== 204) {
-                await response.body?.cancel();
-                throw new DatabaseError("database_unavailable", "Computer audit storage is unavailable");
-            }
-        });
     readonly readActiveGeneration = (computerId: string, signal: AbortSignal): Promise<number | null> => {
         if (computerId !== this.#computerId) {
             throw new DatabaseError("database_unavailable", "Computer storage is unavailable");

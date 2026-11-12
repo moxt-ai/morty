@@ -221,18 +221,3 @@ test("Given a well-formed Project identifier that was never created, When an una
         .fetch(new Request("https://computer.internal/stored-state"));
     expect(await stored.json()).toEqual({ keys: [], tables: [] });
 });
-
-test("Given a saved Computer credential, When the directory retires that Computer, Then the credential cannot open the Computer", async () => {
-    const owner = await fixture.createAnonymousUser();
-    const environment = fixture.environment();
-    const request = () =>
-        worker.fetch(
-            new Request(`${APP_ORIGIN}/morty/api/computers/${owner.computerId}/session`, {
-                headers: { authorization: `Bearer ${owner.token}` },
-            }),
-            environment,
-        );
-    expect((await request()).status).toBe(200);
-    await fixture.retireComputerAccount(owner.computerId);
-    expect((await request()).status).toBe(404);
-});

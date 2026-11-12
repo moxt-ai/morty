@@ -1,4 +1,3 @@
-export { auditEvent } from "./audit-event.ts";
 export { computerConnection } from "./computer-connection.ts";
 export {
     computerPairing,

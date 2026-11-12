@@ -1,8 +1,6 @@
-import { and, count, eq, gt, inArray, isNotNull, notInArray, or, type SQL, sql } from "drizzle-orm";
-import type { AnySQLiteColumn } from "drizzle-orm/sqlite-core";
+import { and, count, eq, gt, inArray, isNotNull, notInArray, or, sql } from "drizzle-orm";
 import type {
     ComputerCredentialRotation,
-    ComputerPairingAudit,
     ComputerPairingDirectoryRow,
     ComputerPairingRow,
     PairingClaimRow,
@@ -10,7 +8,6 @@ import type {
 import { type RelayDrizzleDatabase, relayDrizzle } from "../../../../infra/drizzle-database.ts";
 import type { DurableObjectDatabase } from "../../../infra/durable-object-database.ts";
 import {
-    auditEvent,
     computerPairing,
     computerRegistration,
     computerRevocation,
@@ -33,41 +30,14 @@ interface CreateComputerPairing {
     readonly expiresAt: number;
     readonly idempotencyKey: string;
     readonly ownerId: string;
-    readonly actorKind: string;
-    readonly actorId: string;
-    readonly auditId: string;
 }
 
 /** A bound value selected as a column, for rows an INSERT ... SELECT writes. */
 const bound = <T>(value: T, name: string) => sql<T>`${value}`.as(name);
 
-/** Every column of a pairing audit event, in table order, for an INSERT ... SELECT. */
-const pairingAudit = (event: {
-    readonly auditId: string;
-    readonly computerId: AnySQLiteColumn | SQL.Aliased<string>;
-    readonly actorKind: string;
-    readonly actorId: AnySQLiteColumn | SQL.Aliased<string>;
-    readonly action: ComputerPairingAudit["action"];
-    readonly details: string;
-    readonly recordedAt: AnySQLiteColumn | SQL.Aliased<number>;
-}) => ({
-    category: bound("pairing" as const, "category"),
-    auditId: bound(event.auditId, "audit_id"),
-    computerId: event.computerId,
-    actorKind: bound(event.actorKind, "actor_kind"),
-    actorId: event.actorId,
-    action: bound(event.action, "action"),
-    detailsJson: bound(event.details, "details_json"),
-    recordedAt: event.recordedAt,
-    actorRef: bound(null, "actor_ref"),
-    historicalServiceId: bound(null, "service_id"),
-    subjectId: bound(null, "subject_id"),
-    outcome: bound(null, "outcome"),
-});
-
 /**
- * The computer's pairing generations. Each transition records a fact of one generation and its audit event together;
- * pairing the computer again starts a new generation instead of changing an earlier one.
+ * The computer's pairing generations. Each transition records a fact of one generation; pairing the computer again
+ * starts a new generation instead of changing an earlier one.
  */
 export class ComputerDirectoryStorage {
     readonly #computerId: string;
@@ -169,24 +139,7 @@ export class ComputerDirectoryStorage {
                 .from(openGenerations)
                 .where(eq(openGenerations.open, 0)),
         );
-        const audit = database.insert(auditEvent).select(
-            database
-                .select(
-                    pairingAudit({
-                        auditId: value.auditId,
-                        computerId: computerPairing.computerId,
-                        actorKind: value.actorKind,
-                        actorId: bound(value.actorId, "actor_id"),
-                        action: "computer_pairing.requested",
-                        details: JSON.stringify({ idempotencyKey: value.idempotencyKey }),
-                        recordedAt: bound(value.now, "recorded_at"),
-                    }),
-                )
-                .from(computerPairing)
-                .where(eq(computerPairing.creationIdempotencyKey, value.idempotencyKey)),
-        );
-        const results = this.#database.batch([pairing, audit], signal);
-        return results[0]?.meta.changes === 1;
+        return this.#database.run(pairing, signal).meta.changes === 1;
     };
 
     /** Registers the daemon that presented the current generation's unexpired pairing code. */
@@ -199,7 +152,6 @@ export class ComputerDirectoryStorage {
             readonly computerName: string;
             readonly workspaceName: string;
             readonly agents: string;
-            readonly auditId: string;
         },
         signal: AbortSignal,
     ): Promise<boolean> => {
@@ -250,43 +202,8 @@ export class ComputerDirectoryStorage {
                     ),
                 ),
         );
-        const audit = database.insert(auditEvent).select(
-            database
-                .select(
-                    pairingAudit({
-                        auditId: value.auditId,
-                        computerId: computerPairing.computerId,
-                        actorKind: "runtime",
-                        actorId: computerPairing.computerId,
-                        action: "computer_pairing.claimed",
-                        details: "{}",
-                        recordedAt: bound(value.now, "recorded_at"),
-                    }),
-                )
-                .from(computerPairing)
-                .innerJoin(computerRegistration, eq(computerRegistration.generation, computerPairing.generation))
-                .where(
-                    and(inArray(computerPairing.generation, currentGeneration(value.computerId)), sql`changes() = 1`),
-                ),
-        );
-        const results = this.#database.batch([credential, registration, audit], signal);
+        const results = this.#database.batch([credential, registration], signal);
         return results[0]?.meta.changes === 1;
-    };
-
-    readonly recordAudit = async (value: ComputerPairingAudit, signal: AbortSignal): Promise<void> => {
-        await relayDrizzle(this.#database, signal)
-            .insert(auditEvent)
-            .values({
-                category: "pairing",
-                auditId: value.auditId,
-                computerId: this.#computerId,
-                actorKind: value.actorKind,
-                actorId: value.actorId,
-                action: value.action,
-                detailsJson: JSON.stringify(value.details),
-                recordedAt: value.recordedAt,
-            })
-            .onConflictDoNothing();
     };
 
     /** The computer's current generation as a Computer: its registration and revocation, if they happened. */
@@ -392,9 +309,6 @@ export class ComputerDirectoryStorage {
         value: {
             readonly computerId: string;
             readonly now: number;
-            readonly actorKind: string;
-            readonly actorId: string;
-            readonly auditId: string;
         },
         signal: AbortSignal,
     ): Promise<ComputerPairingDirectoryRow | null> => {
@@ -412,23 +326,7 @@ export class ComputerDirectoryStorage {
                     .where(inArray(computerPairing.generation, current)),
             )
             .onConflictDoNothing();
-        const audit = database.insert(auditEvent).select(
-            database
-                .select(
-                    pairingAudit({
-                        auditId: value.auditId,
-                        computerId: bound(value.computerId, "computer_id"),
-                        actorKind: value.actorKind,
-                        actorId: bound(value.actorId, "actor_id"),
-                        action: "computer_pairing.revoked",
-                        details: "{}",
-                        recordedAt: computerRevocation.revokedAt,
-                    }),
-                )
-                .from(computerRevocation)
-                .where(and(inArray(computerRevocation.generation, current), sql`changes() = 1`)),
-        );
-        this.#database.batch([revocation, audit], signal);
+        this.#database.run(revocation, signal);
         // Reading the committed fact makes overlapping retries return the first revocation time.
         return await this.readComputer(value.computerId, signal);
     };

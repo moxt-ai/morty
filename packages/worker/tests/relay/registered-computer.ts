@@ -22,9 +22,6 @@ export async function revokeTestComputer(bindings: RelayBindings, computerId: st
             {
                 computerId,
                 now: Date.now(),
-                actorKind: "application",
-                actorId: "test-owner",
-                auditId: `test-revocation-${crypto.randomUUID()}`,
             },
             signal,
         );

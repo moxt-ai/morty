@@ -5,9 +5,6 @@ export interface PairingScopeRow {
 export interface RevokeComputer {
     readonly computerId: string;
     readonly now: number;
-    readonly actorKind: string;
-    readonly actorId: string;
-    readonly auditId: string;
 }
 
 /** What presenting a Computer credential with its successor found, after any rotation it caused. */
@@ -47,19 +44,4 @@ export interface ComputerPairingRow extends PairingScopeRow {
     readonly poll_token_hash: string;
     readonly expires_at: number;
     readonly created_by_owner_credential_id: string | null;
-}
-
-export interface ComputerPairingAudit {
-    readonly auditId: string;
-    readonly computerId: string;
-    readonly actorKind: string;
-    readonly actorId: string;
-    readonly action:
-        | "computer_pairing.requested"
-        | "computer_pairing.claimed"
-        | "computer_pairing.expired"
-        | "computer_pairing.revoked"
-        | "computer_pairing.rejected";
-    readonly details: Readonly<Record<string, string>>;
-    readonly recordedAt: number;
 }

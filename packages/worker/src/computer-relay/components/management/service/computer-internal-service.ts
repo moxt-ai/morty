@@ -1,7 +1,7 @@
 import * as v from "valibot";
 import type { ComputerAccounts } from "../../../../contracts/computer-accounts.ts";
 import { ComputerManagementError } from "../../../../contracts/computer-management.ts";
-import { computerAccessRequestSchema, computerAuditRequestSchema } from "../../../../contracts/computer-relay-http.ts";
+import { computerAccessRequestSchema } from "../../../../contracts/computer-relay-http.ts";
 import { ProjectRowSchema } from "../../../../contracts/relay/relay-records.ts";
 import type { ComputerManagementStore } from "../storage/computer-management-store.ts";
 
@@ -39,12 +39,6 @@ export class ComputerInternalService {
 
     readonly holdsAccess = (input: unknown, signal: AbortSignal) =>
         this.#store.holdsAccess(decode(computerAccessRequestSchema, input), signal);
-
-    readonly recordAudit = async (input: unknown, signal: AbortSignal): Promise<void> => {
-        const audit = decode(computerAuditRequestSchema, input);
-        this.#authorize(audit.computerId);
-        await this.#store.recordAudit(audit, signal);
-    };
 
     readonly #authorize = (computerId: string): void => {
         if (computerId !== this.#computerId) {

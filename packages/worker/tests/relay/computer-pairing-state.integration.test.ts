@@ -96,11 +96,6 @@ it("Given pending reservations at capacity, When their deadline passes without e
     expect(await responseJson(await app.create("over-capacity"), 429)).toMatchObject({
         error: { code: "computer_quota_exceeded" },
     });
-    // Expiry is the passage of time. Neither reading it nor reclaiming capacity
-    // may require persisting a lifecycle transition, even when that write fails.
-    await app.sql(`CREATE TRIGGER reject_expiry_maintenance BEFORE INSERT ON audit_events
-        WHEN NEW.action = 'computer_pairing.expired'
-        BEGIN SELECT RAISE(ABORT, 'Expiry maintenance is unavailable'); END`);
     vi.setSystemTime(new Date(first.expiresAt));
     expect(await responseJson(await app.status(), 200)).toEqual({ status: "expired" });
     expect(await responseJson(await app.claim(first), 400)).toMatchObject({ error: { code: "invalid_pairing_code" } });
@@ -134,7 +129,6 @@ it("Given a delayed claim, When newer requests have reused expired capacity, The
                 computerName: "Delayed computer",
                 workspaceName: "Delayed workspace",
                 agents: "[]",
-                auditId: `rpa_${crypto.randomUUID()}`,
             },
             new AbortController().signal,
         ),
@@ -144,11 +138,10 @@ it("Given a delayed claim, When newer requests have reused expired capacity, The
     expect(await responseJson(await app.list(), 200)).toEqual({ computers: [] });
 });
 
-it("Given a claim whose audit cannot commit, When the caller retries after recovery, Then the request is still pending and can be claimed once", async () => {
+it("Given a claim whose registration cannot commit, When the caller retries after recovery, Then the request is still pending and can be claimed once", async () => {
     const app = await computer();
     const pairing = await app.pair("claim-rollback");
-    await app.sql(`CREATE TRIGGER reject_claim BEFORE INSERT ON audit_events
-        WHEN NEW.action = 'computer_pairing.claimed'
+    await app.sql(`CREATE TRIGGER reject_claim BEFORE INSERT ON computer_registrations
         BEGIN SELECT RAISE(ABORT, 'Controlled claim failure'); END`);
     expect((await app.claim(pairing)).status).toBe(500);
     expect(await responseJson(await app.status(), 200)).toMatchObject({ status: "pending" });
@@ -188,38 +181,11 @@ it("Given a committed redeem response is lost, When the caller retries after a r
     expect(await responseJson(await app.list(), 200)).toMatchObject({
         computers: [{ computerId: pairing.computerId, computerName: "Paired computer" }],
     });
-    expect(
-        await app.storage((storage) =>
-            storage.sql.exec("SELECT action FROM audit_events WHERE category = 'pairing' ORDER BY action").toArray(),
-        ),
-    ).toEqual([{ action: "computer_pairing.claimed" }, { action: "computer_pairing.requested" }]);
     expect((await app.revoke()).status).toBe(204);
     expect(await responseJson(await app.claim(pairing), 400)).toMatchObject({
         error: { code: "invalid_pairing_code" },
     });
     expect((await app.publish(pairing, computerCredential)).status).toBe(401);
-});
-
-it("Given a revocation whose audit cannot commit, When it is retried, Then access remains until the complete revocation commits", async () => {
-    const app = await computer();
-    const pairing = await app.pair("revoke-rollback");
-    const claimed = v.parse(
-        v.object({ computerCredential: v.string() }),
-        await responseJson(await app.claim(pairing), 200),
-    );
-    await app.sql(`CREATE TRIGGER reject_revocation BEFORE INSERT ON audit_events
-        WHEN NEW.action = 'computer_pairing.revoked'
-        BEGIN SELECT RAISE(ABORT, 'Controlled revocation failure'); END`);
-    expect((await app.revoke()).status).toBe(500);
-    expect(await responseJson(await app.status(), 200)).toMatchObject({ status: "paired" });
-    expect((await app.publish(pairing, claimed.computerCredential)).status).toBe(204);
-    await app.sql("DROP TRIGGER reject_revocation");
-    expect((await app.revoke()).status).toBe(204);
-    expect((await app.publish(pairing, claimed.computerCredential)).status).toBe(401);
-    expect(await responseJson(await app.status(), 200)).toEqual({
-        status: "revoked",
-        revokedAt: new Date().toISOString(),
-    });
 });
 
 it("Given one available Computer place, When distinct requests compete, Then exactly one reserves it and retries keep the same identity", async () => {
