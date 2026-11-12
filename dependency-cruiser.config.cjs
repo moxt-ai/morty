@@ -7,7 +7,6 @@ module.exports = {
                 path: [
                     "^packages/worker/src/(?:(?:worker|computer-relay)/)?(schema|storage|entity|infra)/",
                     "^packages/worker/src/(?:worker|computer-relay)/components/[^/]+/(schema|storage|entity|infra)/",
-                    "^packages/worker/src/directory/storage/",
                 ],
             },
             to: {
@@ -15,7 +14,6 @@ module.exports = {
                 path: [
                     "^packages/worker/src/(?:(?:worker|computer-relay)/)?(service|http|composition|gateway|do)/",
                     "^packages/worker/src/(?:worker|computer-relay)/components/[^/]+/(service|http|composition|gateway|do)/",
-                    "^packages/worker/src/directory/service/",
                 ],
             },
         },
@@ -34,7 +32,6 @@ module.exports = {
                 path: [
                     "^packages/worker/src/(?:worker|computer-relay)/storage/",
                     "^packages/worker/src/(?:worker|computer-relay)/components/[^/]+/storage/",
-                    "^packages/worker/src/directory/storage/",
                 ],
                 dependencyTypesNot: ["type-only"],
             },
@@ -54,7 +51,7 @@ module.exports = {
         {
             name: "shared-boundaries-do-not-import-service-implementations",
             severity: "error",
-            from: { path: "^packages/worker/src/(contracts|gateway)/" },
+            from: { path: "^packages/worker/src/contracts/" },
             to: { path: "^packages/worker/src/(worker|computer-relay)/" },
         },
         {

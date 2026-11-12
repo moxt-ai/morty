@@ -6,9 +6,9 @@ import { createTestOwner } from "../../../relay-test-support/src/identity-fixtur
 import { IdentityStorage } from "../../src/computer-relay/components/management/storage/identity-storage.ts";
 import { SessionAccessSigner } from "../../src/computer-relay/components/runtime/entity/session-access-credential.ts";
 import { SessionAccessService } from "../../src/computer-relay/components/runtime/service/session-access-service.ts";
+import { computerDirectory } from "../../src/computer-relay/composition/computer-directory.ts";
+import { ComputerRelayGateway } from "../../src/computer-relay/gateway/computer-relay.ts";
 import { DurableObjectDatabase } from "../../src/computer-relay/infra/durable-object-database.ts";
-import { computerDirectory } from "../../src/directory/composition.ts";
-import { ComputerRelayGateway } from "../../src/gateway/computer-relay.ts";
 import worker from "../../src/worker/application.ts";
 
 export const ownerOrigin = "https://relay.test";

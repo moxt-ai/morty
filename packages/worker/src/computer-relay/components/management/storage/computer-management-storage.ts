@@ -1,6 +1,6 @@
 import type { SessionAccessHolder } from "@morty-build/client/protocol";
-import type { ComputerManagementStore } from "../../computer-relay/components/management/storage/computer-management-store.ts";
-import type { ComputerAccounts } from "../../contracts/computer-accounts.ts";
+import type { ComputerAccounts } from "../../../../contracts/computer-accounts.ts";
+import type { ComputerManagementStore } from "./computer-management-store.ts";
 
 export class ComputerManagementStorage {
     readonly accounts: ComputerAccounts;

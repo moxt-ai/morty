@@ -1,7 +1,7 @@
 import type { ComputerAccounts } from "../../contracts/computer-accounts.ts";
-import { ComputerAccessService } from "../../directory/service/computer-access-service.ts";
-import { ComputerManagementService } from "../../directory/service/computer-management-service.ts";
-import { ComputerManagementStorage } from "../../directory/storage/computer-management-storage.ts";
+import { ComputerAccessService } from "../components/management/service/computer-access-service.ts";
+import { ComputerManagementService } from "../components/management/service/computer-management-service.ts";
+import { ComputerManagementStorage } from "../components/management/storage/computer-management-storage.ts";
 import type { ComputerManagementStore } from "../components/management/storage/computer-management-store.ts";
 import { CloudflareRelayPeers } from "../components/runtime/gateway/cloudflare-relay-peers.ts";
 import { createRuntimeContext } from "../components/runtime/runtime-context.ts";

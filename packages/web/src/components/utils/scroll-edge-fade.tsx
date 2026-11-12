@@ -16,8 +16,8 @@ const EDGE_THRESHOLD_PX = 4;
 type ScrollEdge = "top" | "bottom";
 
 type ScrollEdgeFadeBase = {
-    /** Element that actually scrolls. Use `ol` or `ul` when the list itself is the scrollport. */
-    readonly scrollElement?: "div" | "ol" | "ul";
+    /** Element that actually scrolls. Use `ul` when the list itself is the scrollport. */
+    readonly scrollElement?: "div" | "ul";
     readonly children: ReactNode;
     /** Layout classes for the non-scrolling frame that holds the fades. */
     readonly frameClassName?: string;
@@ -180,7 +180,7 @@ export function ScrollEdgeFade(props: ScrollEdgeFadeProps) {
     };
     const revealSurface = props.revealSurface === true;
     const maskImage = revealSurface ? viewportEdgeMask(edges) : undefined;
-    const list = scrollElement === "ol" ? <ol>{children}</ol> : scrollElement === "ul" ? <ul>{children}</ul> : children;
+    const list = scrollElement === "ul" ? <ul>{children}</ul> : children;
 
     return (
         <div className={cn("relative min-h-0", frameClassName)}>

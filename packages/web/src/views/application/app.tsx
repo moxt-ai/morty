@@ -68,12 +68,7 @@ function ApplicationContent({ state }: { readonly state: AppState }) {
             return <GlobalLoadingPage label="Loading Morty" />;
         case "failed":
             return (
-                <SetupCardShell
-                    cardClassName="pb-10"
-                    cardLeading={<SetupCardFailureIcon />}
-                    showPageHeader
-                    titleId="bootstrap-failed"
-                >
+                <SetupCardShell cardClassName="pb-10" cardLeading={<SetupCardFailureIcon />} titleId="bootstrap-failed">
                     <SetupCardTitle id="bootstrap-failed">Morty is unavailable</SetupCardTitle>
                     <SetupCardDescription>
                         Check your connection and try again. Your saved computers are still here.
@@ -100,7 +95,7 @@ function ApplicationContent({ state }: { readonly state: AppState }) {
             );
         case "unpaired":
             return (
-                <SetupCardShell cardLeading={<SetupCardFailureIcon />} showPageHeader titleId="unpaired-title">
+                <SetupCardShell cardLeading={<SetupCardFailureIcon />} titleId="unpaired-title">
                     <SetupCardTitle id="unpaired-title">Browser not paired</SetupCardTitle>
                     <SetupCardDescription>Copied browser URLs don’t grant access.</SetupCardDescription>
                     <SetupCardDescription>Open your agent’s link or scan its QR code.</SetupCardDescription>
@@ -113,7 +108,7 @@ function ApplicationContent({ state }: { readonly state: AppState }) {
             );
         case "invalid-link":
             return (
-                <SetupCardShell cardLeading={<SetupCardFailureIcon />} showPageHeader titleId="invalid-link-title">
+                <SetupCardShell cardLeading={<SetupCardFailureIcon />} titleId="invalid-link-title">
                     <SetupCardTitle id="invalid-link-title">This link is no longer valid</SetupCardTitle>
                     <SetupCardAlert>Ask for a new link. Morty has not switched to another computer.</SetupCardAlert>
                     {state.continueHref !== null && (
@@ -218,7 +213,6 @@ function SetupApplication({
                 </footer>
             }
             pageNotice={pageNotice}
-            showPageHeader
             titleId="setup-title"
         >
             <SetupConnectionGraphic />

@@ -1,17 +1,17 @@
 import type { ProjectLocationHint, SessionAccessHolder } from "@morty-build/client/protocol";
 import * as v from "valibot";
-import { decodeComputerPlacement } from "../contracts/computer-id.ts";
-import { ComputerManagementError, relayIdentifier } from "../contracts/computer-management.ts";
+import { decodeComputerPlacement } from "../../contracts/computer-id.ts";
+import { ComputerManagementError, relayIdentifier } from "../../contracts/computer-management.ts";
 import {
     type ComputerInternalResource,
     computerAccessResponseSchema,
     computerGenerationResponseSchema,
     computerInternalPath,
-} from "../contracts/computer-relay-http.ts";
-import { type ProjectRow, ProjectRowSchema, RelayComputerScopeRowSchema } from "../contracts/relay/relay-records.ts";
-import type { ConfiguredRelayBindings } from "../contracts/relay-bindings.ts";
-import { RequestDeadline } from "../http/request-deadline.ts";
-import { DatabaseError } from "../infra/sql-database.ts";
+} from "../../contracts/computer-relay-http.ts";
+import { type ProjectRow, ProjectRowSchema, RelayComputerScopeRowSchema } from "../../contracts/relay/relay-records.ts";
+import type { ConfiguredRelayBindings } from "../../contracts/relay-bindings.ts";
+import { RequestDeadline } from "../../http/request-deadline.ts";
+import { DatabaseError } from "../../infra/sql-database.ts";
 
 /** Calls from outside a computer enter it only through its Durable Object HTTP endpoint. */
 export class ComputerRelayGateway {

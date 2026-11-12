@@ -12,7 +12,7 @@ import {
     sessionAgentTabsListClassName,
 } from "../../components/chat/session-agent-tabs.tsx";
 import { Button } from "../../components/ui/cloud-button.tsx";
-import { Dialog } from "../../components/ui/dialog.tsx";
+import { SheetDialog } from "../../components/ui/dialog.tsx";
 import { Spinner } from "../../components/ui/spinner.tsx";
 import { ScrollEdgeFade } from "../../components/utils/scroll-edge-fade.tsx";
 import { dataTestId } from "../../data-testid.ts";
@@ -244,8 +244,7 @@ export function NativeSessionDialog({
         onClose();
     };
     return (
-        <Dialog
-            variant="openSession"
+        <SheetDialog
             title="Open Session"
             onClose={closeDialog}
             busy={model.operation === "import" || model.operation === "fork"}
@@ -280,7 +279,7 @@ export function NativeSessionDialog({
                                             }
                                             disabled={model.operation !== "idle"}
                                             onValueChange={store.getState().selectAgent}
-                                            value={model.selected || fallback?.value || ""}
+                                            value={model.selected || fallback?.harness || ""}
                                         />
                                     )}
                                     {model.directory.kind === "loading" && model.directory.scope === "refresh" && (
@@ -589,6 +588,6 @@ export function NativeSessionDialog({
                     )}
                 </>
             )}
-        </Dialog>
+        </SheetDialog>
     );
 }

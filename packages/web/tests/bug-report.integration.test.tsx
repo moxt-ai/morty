@@ -1,11 +1,11 @@
 import { createServer } from "node:http";
-import { close as closeSentry, flush, makeFetchTransport } from "@sentry/react";
+import { close as closeSentry, flush } from "@sentry/react";
 import { getAllByRole, getByLabelText, getByRole, queryByRole } from "@testing-library/dom";
 import { cleanup, render } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { dataTestId } from "../src/data-testid.ts";
-import { HttpApiTransport } from "../src/services/api/http-api-transport.ts";
+import { WorkerApiTransport } from "../src/services/api/worker-api-transport.ts";
 import { initializeBrowserMonitoring } from "../src/services/diagnostics/sentry-monitoring.ts";
 import { createMortyApplication } from "../src/view-models/morty-application.ts";
 import { App } from "../src/views/application/app.tsx";
@@ -21,8 +21,8 @@ import { createTestApp } from "./infra/test-app.tsx";
  * operation fails on its own, so measurements and requests degrade instead of
  * reaching the network.
  */
-function noopTransport(): HttpApiTransport {
-    return new HttpApiTransport("http://127.0.0.1:1");
+function noopTransport(): WorkerApiTransport {
+    return new WorkerApiTransport("http://127.0.0.1:1");
 }
 
 const observers = new Set<MutationObserver>();
@@ -322,8 +322,10 @@ async function createReportInbox() {
         for await (const chunk of request) {
             chunks.push(Buffer.from(chunk));
         }
-        if (request.method === "POST" && status === 200) {
-            const body = Buffer.concat(chunks);
+        const body = Buffer.concat(chunks);
+        // Tracing spans and release-health sessions arrive on their own schedule; the inbox records reports only.
+        const itemType = JSON.parse(body.toString("utf8").split("\n")[1] || "{}").type;
+        if (request.method === "POST" && status === 200 && (itemType === "event" || itemType === "feedback")) {
             bodies.push(body);
             envelopes.push(body.toString("utf8"));
         }
@@ -345,8 +347,6 @@ async function createReportInbox() {
         dsn: `http://public@127.0.0.1:${address.port}/1`,
         environment: "test",
         release: "morty@test-release",
-        tracesSampleRate: 0,
-        transport: (options) => makeFetchTransport(options, window.fetch.bind(window)),
     });
     return {
         envelopes,

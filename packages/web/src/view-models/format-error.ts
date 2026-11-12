@@ -1,6 +1,6 @@
 import { MortyError } from "@morty-build/client";
 import { SESSION_CLOSED_ERROR_CODE } from "@morty-build/client/protocol";
-import { isApiConnectionError } from "../services/api/http-api-transport.ts";
+import { isApiConnectionError } from "../services/api/worker-api-transport.ts";
 import { isComputerConnectionFailure } from "../services/management/management-api.ts";
 
 const computerDisconnectedFailure = {

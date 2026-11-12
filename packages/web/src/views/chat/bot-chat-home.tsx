@@ -152,7 +152,6 @@ function NewSessionTitle({
             {centered ? null : (
                 <HarnessMark
                     harness={harness || agentLabel}
-                    appearance="line"
                     className="text-copy-secondary"
                     label={agentLabel}
                     loading={loading}
@@ -460,7 +459,6 @@ function BotChatHomeLayout({ requests, workspace, desktop }: BotChatHomeProps & 
             </div>
             {pairingNotice && model.pairing.kind === "unpaired" && (
                 <Dialog
-                    variant="connectAgentPairing"
                     title="Connect agent"
                     description="Morty is ready. Paste this instruction into your local agent to connect it."
                     onClose={model.pairingDialog.getState().dismiss}

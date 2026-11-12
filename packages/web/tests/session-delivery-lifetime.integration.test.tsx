@@ -167,7 +167,7 @@ function sessionEntry(app: TestApp, title: string): HTMLElement {
     return entry;
 }
 
-test("Given completed Sessions on one Computer, When I switch between them and New Session, Then one browser connection carries the correct history and new replies", {
+test("Given completed Sessions on one Computer, When I switch between them and New Session, Then one browser connection carries Computer requests, history and new replies", {
     timeout: dedicatedEnvironmentTimeout,
 }, async () => {
     const environment = await createChatWorkerEnvironment(true);

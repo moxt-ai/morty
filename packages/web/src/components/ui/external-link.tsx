@@ -1,4 +1,3 @@
-import { ArrowUpRight } from "lucide-react";
 import type { ComponentProps, ReactNode } from "react";
 import { cn } from "../../lib/utils.ts";
 
@@ -10,11 +9,9 @@ export function ExternalLink({
     children,
     className,
     href,
-    showTrailingArrow = false,
     ...props
 }: Omit<ComponentProps<"a">, "children"> & {
     readonly children: ReactNode;
-    readonly showTrailingArrow?: boolean;
 }) {
     return (
         <a
@@ -28,7 +25,6 @@ export function ExternalLink({
             {...props}
         >
             {children}
-            {showTrailingArrow ? <ArrowUpRight aria-hidden="true" className="size-4 shrink-0" /> : null}
             <span className="sr-only">(opens in a new tab)</span>
         </a>
     );

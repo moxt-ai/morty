@@ -157,6 +157,10 @@ export async function createResponseLossProxy(upstream: string) {
         sockets.add(remote);
         let configurationResponse: { readonly requestId: string; readonly ready: () => void } | null = null;
         const pending: { readonly data: Buffer; readonly binary: boolean }[] = [];
+        const responseFaults = new Map<
+            string,
+            (response: { readonly status: number; readonly body: string }) => void
+        >();
         const forward = (data: Buffer, binary: boolean) => {
             if (remote.readyState === WebSocket.OPEN) {
                 remote.send(data, { binary });
@@ -172,6 +176,38 @@ export async function createResponseLossProxy(upstream: string) {
                   : Buffer.from(new Uint8Array(data));
             if (!binary) {
                 const frame = jsonFrame(bytes.toString());
+                if (
+                    typeof frame === "object" &&
+                    frame !== null &&
+                    "kind" in frame &&
+                    frame.kind === "http.request" &&
+                    "method" in frame &&
+                    frame.method === "POST" &&
+                    "path" in frame &&
+                    typeof frame.path === "string" &&
+                    "requestId" in frame &&
+                    typeof frame.requestId === "string"
+                ) {
+                    if (droppedRequest?.test(frame.path)) {
+                        droppedRequest = null;
+                        client.terminate();
+                        return;
+                    }
+                    if (holdSharing !== null && frame.path.endsWith("/identity/transfers")) {
+                        const held = holdSharing;
+                        holdSharing = null;
+                        responseFaults.set(frame.requestId, (response) => {
+                            held.receive(response.body, () => client.terminate());
+                        });
+                    } else if (lostResponse?.path.test(frame.path)) {
+                        const { lost } = lostResponse;
+                        lostResponse = null;
+                        responseFaults.set(frame.requestId, (response) => {
+                            lost(response);
+                            client.terminate();
+                        });
+                    }
+                }
                 if (
                     holdConfiguration !== null &&
                     typeof frame === "object" &&
@@ -231,6 +267,28 @@ export async function createResponseLossProxy(upstream: string) {
             }
         });
         remote.on("message", (data, binary) => {
+            if (!binary && responseFaults.size > 0) {
+                const frame = jsonFrame(data.toString());
+                if (
+                    typeof frame === "object" &&
+                    frame !== null &&
+                    "kind" in frame &&
+                    frame.kind === "http.response" &&
+                    "requestId" in frame &&
+                    typeof frame.requestId === "string" &&
+                    "status" in frame &&
+                    typeof frame.status === "number" &&
+                    "body" in frame &&
+                    typeof frame.body === "string"
+                ) {
+                    const fault = responseFaults.get(frame.requestId);
+                    if (fault !== undefined) {
+                        responseFaults.delete(frame.requestId);
+                        fault({ status: frame.status, body: frame.body });
+                        return;
+                    }
+                }
+            }
             if (configurationResponse !== null && !binary) {
                 const frame = jsonFrame(data.toString());
                 if (

@@ -1,5 +1,5 @@
 import type { ForkMortyNativeSessionRequest } from "@morty-build/client";
-import { MortyClient, WsTransport } from "@morty-build/client";
+import { MortyClient, type WsTransport } from "@morty-build/client";
 import { sameNativeSession } from "@morty-build/client/native-session";
 import type { NativeSessionRequest } from "@morty-build/client/protocol";
 import {
@@ -165,12 +165,14 @@ export class BotChatApi {
     readonly #replacedToken: ((rejected: string, signal: AbortSignal) => Promise<string | null>) | undefined;
     readonly #credentialRejected: (() => void) | undefined;
     readonly #sessionClients = new Set<MortyClient>();
-    readonly #sessionTransport = new WsTransport();
+    readonly #sessionTransport: () => WsTransport;
     readonly #lifetime = new AbortController();
     readonly #waitForChange: ApiTransport["waitForChange"];
     readonly readComputerPairing: ManagementApi["readComputerPairing"];
     constructor(options: {
         readonly fetchRequest: (request: Request) => Promise<Response>;
+        /** Borrow the application's Computer connection; this API owns only its Session clients. */
+        readonly sessionTransport: () => WsTransport;
         readonly origin: string;
         readonly computerId: string;
         readonly getToken: (signal: AbortSignal) => Promise<string | null>;
@@ -186,6 +188,7 @@ export class BotChatApi {
         this.#origin = v.parse(v.pipe(v.string(), v.url()), options.origin);
         this.#computerId = v.parse(identifier, options.computerId);
         this.#fetchRequest = options.fetchRequest;
+        this.#sessionTransport = options.sessionTransport;
         this.#getToken = options.getToken;
         this.#replacedToken = options.replacedToken;
         this.#credentialRejected = options.credentialRejected;
@@ -199,7 +202,6 @@ export class BotChatApi {
             client.close();
         }
         this.#sessionClients.clear();
-        this.#sessionTransport.close();
     };
     readonly daemonDiagnostics = async (signal: AbortSignal) =>
         decodeComputerDiagnosticsResult(JSON.stringify(await this.#request("daemon-diagnostics", undefined, signal)));
@@ -452,7 +454,7 @@ export class BotChatApi {
         const client = new MortyClient({
             endpoint: this.#origin,
             computerId,
-            transport: this.#sessionTransport,
+            transport: this.#sessionTransport(),
             operationTimeoutMilliseconds: 120000,
             onClose: () => {
                 this.#sessionClients.delete(client);

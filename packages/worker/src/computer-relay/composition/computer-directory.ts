@@ -1,12 +1,12 @@
 import * as v from "valibot";
-import type { AccountProvisioner } from "../contracts/account-provisioning.ts";
-import type { CloudBindings } from "../contracts/cloud-bindings.ts";
-import type { ComputerAccounts } from "../contracts/computer-accounts.ts";
-import { computerManagementSchema } from "../contracts/computer-management.ts";
-import { relayBindings } from "../contracts/relay-bindings.ts";
+import type { AccountProvisioner } from "../../contracts/account-provisioning.ts";
+import type { CloudBindings } from "../../contracts/cloud-bindings.ts";
+import type { ComputerAccounts } from "../../contracts/computer-accounts.ts";
+import { computerManagementSchema } from "../../contracts/computer-management.ts";
+import { relayBindings } from "../../contracts/relay-bindings.ts";
+import { ComputerManagementService } from "../components/management/service/computer-management-service.ts";
+import { ComputerManagementStorage } from "../components/management/storage/computer-management-storage.ts";
 import { ComputerRelayGateway } from "../gateway/computer-relay.ts";
-import { ComputerManagementService } from "./service/computer-management-service.ts";
-import { ComputerManagementStorage } from "./storage/computer-management-storage.ts";
 
 type ComputerTargets = (
     computerId: string,

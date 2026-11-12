@@ -20,8 +20,8 @@ import {
 import type { ComputerIdentityCredential } from "../../../../contracts/relay/pairing-identity.ts";
 import type { ComputerPairingRow } from "../../../../contracts/relay/pairing-records.ts";
 import type { ComputerAccess } from "../../../../contracts/relay/project-authentication.ts";
-import type { ComputerManagementService } from "../../../../directory/service/computer-management-service.ts";
 import type { ComputerRelayStore } from "../storage/computer-relay-store.ts";
+import type { ComputerManagementService } from "./computer-management-service.ts";
 import { deriveComputerDaemonToken, deriveComputerPairingSecrets } from "./computer-pairing-secrets.ts";
 import type { ComputerIdentityService } from "./pairing-identity-service.ts";
 
