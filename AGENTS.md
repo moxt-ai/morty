@@ -59,7 +59,7 @@ Make illegal states unrepresentable.
 
 ## Compatibility is mandatory by default
 
-Morty Web, SDK clients, deployed services, local Morty Runtimes, and stored data
+Morty Web, the client package, deployed services, local Morty Runtimes, and stored data
 upgrade independently. Preserve existing external contracts and behavior in both
 directions: new clients with old servers/Runtimes, and old clients with new
 servers/Runtimes. A successful all-new deployment does not establish compatibility.
