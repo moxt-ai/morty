@@ -1,6 +1,6 @@
 import { MORTY_API_PREFIX } from "@morty-build/client/protocol";
 import { Hono } from "hono";
-import { rethrowHonoError } from "../../../../middleware/error-middleware.ts";
+import { rethrowHonoError } from "../../../../http/error-middleware.ts";
 import type {
     RelayProtocolEnvironment as RelayHttpEnvironment,
     RelayRouteMiddleware,

@@ -61,7 +61,7 @@ test("Given a request whose credential field is malformed, When the Worker logs 
     });
     expect(response.status).toBe(400);
     expect(await response.json()).toEqual({ error: { code: "INVALID_REQUEST", message: "The request is invalid." } });
-    await logged("Application request failed");
+    await logged("Morty request failed");
     expect(output).toContain("creationKey");
     expect(output).not.toContain(canary);
 });

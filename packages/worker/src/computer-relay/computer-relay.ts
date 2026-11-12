@@ -5,8 +5,8 @@ import { decodeComputerPlacement } from "../contracts/computer-id.ts";
 import { ComputerManagementError } from "../contracts/computer-management.ts";
 import { relayAuthenticationFromEnvironment } from "../contracts/relay-authentication-environment.ts";
 import type { ConfiguredRelayBindings } from "../contracts/relay-bindings.ts";
+import { errorHandler } from "../http/error-middleware.ts";
 import { logger } from "../infra/logger.ts";
-import { relayErrorHandler } from "../middleware/error-middleware.ts";
 import { ComputerBackendService } from "./components/computer/service/computer-backend-service.ts";
 import { ComputerAccessService } from "./components/management/service/computer-access-service.ts";
 import { ComputerRelayStore } from "./components/management/storage/computer-relay-store.ts";
@@ -91,7 +91,7 @@ export class ComputerRelay extends DurableObject<ConfiguredRelayBindings> {
             await next();
         };
         return new Hono<ComputerHttpEnvironment>()
-            .onError(relayErrorHandler)
+            .onError(errorHandler)
             .route("/", createComputerHttpRoutes(ctx, initialize, initializeInternal))
             .notFound(() =>
                 Response.json(
@@ -150,7 +150,7 @@ export class ComputerRelay extends DurableObject<ConfiguredRelayBindings> {
             return null;
         }
         if (this.#store === null) {
-            this.#store = new ComputerRelayStore(computerId, this.#computerDatabase);
+            this.#store = new ComputerRelayStore(this.#computerDatabase);
         }
         return this.#store;
     }

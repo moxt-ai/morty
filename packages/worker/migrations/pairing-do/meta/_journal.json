@@ -162,6 +162,13 @@
             "when": 1794466478146,
             "tag": "0022_young_lightspeed",
             "breakpoints": true
+        },
+        {
+            "idx": 23,
+            "version": "6",
+            "when": 1794472893833,
+            "tag": "0023_wakeful_lifeguard",
+            "breakpoints": true
         }
     ]
 }

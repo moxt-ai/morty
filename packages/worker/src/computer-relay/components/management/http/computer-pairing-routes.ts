@@ -1,19 +1,29 @@
 import { COMPUTER_SUCCESSOR_CREDENTIAL_HEADER } from "@morty-build/client/protocol";
 import { Hono } from "hono";
+import * as v from "valibot";
 import {
     validateAgents,
     validateDisplayName,
     validateIdentifier,
     validatePairingCode,
 } from "../../../../contracts/relay/pairing.ts";
-import { bearerToken } from "../../../../infra/relay-http.ts";
-import { bodyParser } from "../../../../middleware/body-parser.ts";
-import { errorMiddleware, rethrowHonoError } from "../../../../middleware/error-middleware.ts";
+import { bearerToken } from "../../../../http/bearer-token.ts";
+import { bodyParser } from "../../../../http/body-parser.ts";
+import { errorMiddleware, rethrowHonoError } from "../../../../http/error-middleware.ts";
+import { protocolBodyLimit } from "../../../../http/protocol-body-limit.ts";
 import { pairingTimeoutMiddleware } from "../../../../middleware/pairing-timeout-middleware.ts";
 import type {
     RelayProtocolEnvironment as RelayHttpEnvironment,
     RelayRouteMiddleware,
 } from "../../../http/environment.ts";
+
+// The validators below decode each field into its domain value and report its own error code.
+const redeemRequestSchema = v.object({
+    agents: v.unknown(),
+    computerName: v.unknown(),
+    pairingCode: v.unknown(),
+    workspaceName: v.unknown(),
+});
 
 export function createComputerPairingRoutes(
     [timeout, target, initialize]: RelayRouteMiddleware,
@@ -28,15 +38,16 @@ export function createComputerPairingRoutes(
             target,
             initialize,
             pairingTimeoutMiddleware("Computer pairing redemption timed out"),
-            bodyParser<RelayHttpEnvironment>(["agents", "computerName", "pairingCode", "workspaceName"]),
+            protocolBodyLimit,
+            bodyParser<RelayHttpEnvironment, typeof redeemRequestSchema>(redeemRequestSchema),
             async (context) => {
                 const body = context.req.valid("json");
-                const agents = validateAgents(body["agents"]);
+                const agents = validateAgents(body.agents);
                 const redeemed = await context.var.relay.services.computerPairings.redeemComputerPairing(
                     validateIdentifier(context.req.param("computerId"), "computer_id"),
-                    validatePairingCode(body["pairingCode"]),
-                    validateDisplayName(body["computerName"], "computer_name"),
-                    validateDisplayName(body["workspaceName"], "workspace_name"),
+                    validatePairingCode(body.pairingCode),
+                    validateDisplayName(body.computerName, "computer_name"),
+                    validateDisplayName(body.workspaceName, "workspace_name"),
                     agents,
                     context.var.signal,
                 );

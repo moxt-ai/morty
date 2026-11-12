@@ -6,11 +6,10 @@ import { COMPUTER_INTERNAL_PREFIX } from "../../contracts/computer-relay-http.ts
 import { validateIdentifier } from "../../contracts/relay/pairing.ts";
 import { computerIdFromApiPath } from "../../http/computer-api-target.ts";
 import { computerFromPath, computerFromRuntimeCredential } from "../../http/computer-target.ts";
-import { errorHandler } from "../../http/error-middleware.ts";
+import { errorHandler, errorMiddleware } from "../../http/error-middleware.ts";
 import { json } from "../../http/json.ts";
 import { RequestDeadline } from "../../http/request-deadline.ts";
 import { createBrowserCors } from "../../middleware/browser-cors.ts";
-import { errorMiddleware } from "../../middleware/error-middleware.ts";
 import { requestTimeoutMiddleware } from "../../middleware/request-timeout-middleware.ts";
 import { createChatApplication } from "../components/chat/http/index.ts";
 import { createTransferRedemptionRoutes } from "../components/management/http/authentication-routes.ts";
@@ -22,7 +21,6 @@ import { authorizeSessionContentUpload } from "../components/runtime/http/sessio
 import { decodeSessionRequest } from "../components/runtime/http/session-requests.ts";
 import { acceptWebSocketHttpTransport } from "../components/runtime/http/websocket-http-transport.ts";
 import { createBrowserWebSocketRoutes } from "../components/runtime/websocket/browser-websocket-routes.ts";
-import { logger } from "../composition/application-context.ts";
 import type { ComputerRouteContext } from "../composition/computer-route-context.ts";
 import type { ComputerRouteHttpEnvironment } from "./environment.ts";
 
@@ -147,7 +145,7 @@ function createApplicationRoutes(ctx: ComputerRouteContext) {
         await next();
     };
     return new Hono<ManagementHttpEnvironment>()
-        .onError(errorHandler<ManagementHttpEnvironment>(() => logger))
+        .onError(errorHandler)
         .route("/morty/api/chat/computers/:computerId", createChatApplication(initialize))
         .route("/morty/api/computers/:computerId", createManagementApplication(initialize))
         .route("/morty/api", createTransferRedemptionRoutes(initialize));

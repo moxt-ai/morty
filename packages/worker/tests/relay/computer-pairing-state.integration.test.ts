@@ -120,7 +120,7 @@ it("Given a delayed claim, When newer requests have reused expired capacity, The
     // Execute the original command against the real Computer database after
     // newer transactions, as can happen when a database request is delayed.
     const claimed = await app.storage(async (storage) =>
-        new ComputerDirectoryStorage(app.computerId, new DurableObjectDatabase(storage)).claim(
+        new ComputerDirectoryStorage(new DurableObjectDatabase(storage)).claim(
             {
                 codeHash,
                 daemonHash: await hashPairingCredential("delayed-computer-credential"),
