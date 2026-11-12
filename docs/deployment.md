@@ -142,10 +142,29 @@ Publishing for this repository, `morty-cli.yml`, and the `morty-npm` environment
 First-publication authorization must be established separately; scope membership
 alone does not configure a publisher. Verify registry integrity after publication.
 
-npm public provenance is available only for public source repositories. While this
-repository is private, OIDC still binds publishing authority to the configured
-workflow and environment, and the archived release records its source revision and
-checksums. Do not describe that release record as a public provenance attestation.
+This repository and the CLI package are public, and publication uses npm Trusted
+Publishing with provenance enabled. Keep provenance enabled for new releases.
+OIDC authorizes the configured publisher; npm provenance separately links the
+published archive to its source repository, revision and publishing workflow.
+Archived release records and checksums remain useful acceptance evidence, but
+are not substitutes for a public provenance attestation. Making an old release's
+source repository public does not retroactively add provenance to that version.
+
+To inspect a release, open that exact version of `@morty-build/cli` on npm and
+follow its provenance details. Check that the repository is `moxt-ai/morty`, the
+workflow is `morty-cli.yml`, and the source revision matches the accepted release.
+In an isolated directory, install the exact version with `npm install
+--ignore-scripts @morty-build/cli@<version>`, then run `npm audit signatures` with
+a current npm CLI to verify registry signatures and available attestations.
+Check that the selected CLI version has provenance: a successful audit of registry
+signatures alone does not establish that every installed package has an attestation.
+See npm's [provenance verification guidance](https://docs.npmjs.com/viewing-package-provenance/).
+
+Provenance establishes origin, not that the code or its dependencies are safe.
+It does not replace code review, exact-archive acceptance or deployment checks.
+Public npm provenance requires public source; if repository visibility changes,
+reassess publication and recovery rather than describing an unsigned release
+record as provenance.
 
 Activate matching cloud and CLI artifacts, then verify fresh installation, pairing,
 conversation, attachments and reconnect. Preserve accepted release archives and
