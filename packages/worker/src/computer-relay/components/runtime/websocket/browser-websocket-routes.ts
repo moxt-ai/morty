@@ -53,6 +53,8 @@ export function createBrowserWebSocketRoutes(ctx: {
     };
 }) {
     const authenticate = createMiddleware<BrowserSessionEnvironment>(async (context, next) => {
+        using deadline = new RequestDeadline(context.req.raw.signal, 30_000);
+        context.req.raw = new Request(context.req.raw, { signal: deadline.signal });
         const request = context.req.raw;
         const computerId = validateIdentifier(context.req.param("computerId") ?? "", "computer_id");
         if (computerId !== ctx.computerId) {
@@ -96,11 +98,6 @@ export function createBrowserWebSocketRoutes(ctx: {
                 status: error.status,
                 ...(error.headers === undefined ? {} : { headers: error.headers }),
             });
-        })
-        .use("*", async (context, next) => {
-            using deadline = new RequestDeadline(context.req.raw.signal, 30_000);
-            context.req.raw = new Request(context.req.raw, { signal: deadline.signal });
-            await next();
         })
         .notFound(notFound)
         .put(`${sessionPath}/content/:contentKey`, authenticate, (context) =>
