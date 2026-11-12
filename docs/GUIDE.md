@@ -61,4 +61,23 @@ Use `restart` with the same command prefix to launch the selected release, or
 Each machine installation keeps one pairing. The browser remembers each paired
 machine's access separately and opens the selected identity when you switch computers.
 
+## Command reference
+
+Run each command as `npx --yes @morty-build/cli@latest <command>`. Add `--help` to a
+command to see its options; that output is the authoritative description.
+
+| Command | What it does |
+| --- | --- |
+| `setup` | Connect this Agent session and print a browser handoff link and QR image |
+| `pair` | Pair this computer, or manage saved pairings with `pair list`, `pair stop` and `pair remove` |
+| `start` | Ensure the daemon is running and activate the current pairing |
+| `stop` (alias `quit`) | Stop the daemon and every active Runtime |
+| `restart` | Restart the daemon using this Morty CLI release |
+| `release` | Release idle Agent sessions so the Agent's own app can continue them |
+| `revoke-all-access` | Revoke this computer's previously shared links and browser access without stopping its tasks |
+| `status` | Show the CLI and daemon versions |
+| `agents` | Show detected, missing, and integration-ready Agents |
+| `logs` | Print the local daemon diagnostic logs for a bug report |
+| `diagnose relay` | Compare direct and proxied Computer channels for network diagnostics |
+
 For hosting and runtime configuration, see [deployment](deployment.md).
