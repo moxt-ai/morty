@@ -10,15 +10,24 @@ import { bearerToken } from "../../../../infra/relay-http.ts";
 import { bodyParser } from "../../../../middleware/body-parser.ts";
 import { errorMiddleware, rethrowHonoError } from "../../../../middleware/error-middleware.ts";
 import { pairingTimeoutMiddleware } from "../../../../middleware/pairing-timeout-middleware.ts";
-import type { RelayProtocolEnvironment as RelayHttpEnvironment } from "../../../http/environment.ts";
+import type {
+    RelayProtocolEnvironment as RelayHttpEnvironment,
+    RelayRouteMiddleware,
+} from "../../../http/environment.ts";
 
-export function createProjectComputerPairingRoutes() {
+export function createProjectComputerPairingRoutes(
+    [timeout, target, initialize]: RelayRouteMiddleware,
+    [runtimeTimeout, runtimeTarget, initializeRuntime]: RelayRouteMiddleware,
+) {
     return new Hono<RelayHttpEnvironment>()
         .onError(rethrowHonoError)
         .use("*", errorMiddleware)
-        .use("/pairings/:computerId/redeem", pairingTimeoutMiddleware("Computer pairing redemption timed out"))
         .post(
             "/pairings/:computerId/redeem",
+            timeout,
+            target,
+            initialize,
+            pairingTimeoutMiddleware("Computer pairing redemption timed out"),
             bodyParser<RelayHttpEnvironment>(["agents", "computerName", "pairingCode", "workspaceName"]),
             async (context) => {
                 const body = context.req.valid("json");
@@ -37,7 +46,7 @@ export function createProjectComputerPairingRoutes() {
                 });
             },
         )
-        .get("/computers/connect", async (context) => {
+        .get("/computers/connect", runtimeTimeout, runtimeTarget, initializeRuntime, async (context) => {
             const request = context.req.raw;
             const connection = await context.var.relay.services.computerConnections.connectComputer(
                 bearerToken(request),

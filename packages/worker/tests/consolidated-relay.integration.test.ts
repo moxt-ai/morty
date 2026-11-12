@@ -158,7 +158,7 @@ test("Given the default SDK transport and caller-neutral Morty API paths, When a
         for (const operation of ["configuration", "active-turn", "events-v2"]) {
             const response = await request(`${session}/${operation}`, access.credential);
             expect(response.status, operation).toBe(404);
-            expect(await response.json()).toMatchObject({ error: { code: "not_found" } });
+            expect(await response.json()).toMatchObject({ error: { code: "NOT_FOUND" } });
         }
         const turns = await request(`${session}/turns`, access.credential, {});
         expect(turns.status).toBe(404);

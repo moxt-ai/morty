@@ -1,4 +1,4 @@
-import type { MiddlewareHandler } from "hono";
+import type { Context, Next } from "hono";
 import * as v from "valibot";
 import { computerIdFromPrefixedValue, decodeComputerPlacement } from "../contracts/computer-id.ts";
 import { ComputerManagementError, relayIdentifier } from "../contracts/computer-management.ts";
@@ -19,19 +19,22 @@ function computerIdentifier(input: unknown): string {
 }
 
 /** Path claims select a destination only. The owning DO still authorizes every operation. */
-export const computerFromPath: MiddlewareHandler<ComputerTargetEnvironment> = async (context, next) => {
+export async function computerFromPath<E extends ComputerTargetEnvironment>(context: Context<E>, next: Next) {
     context.set("computerId", computerIdentifier(context.req.param("computerId")));
     await next();
-};
+}
 
-export const computerFromRuntimeCredential: MiddlewareHandler<ComputerTargetEnvironment> = async (context, next) => {
+export async function computerFromRuntimeCredential<E extends ComputerTargetEnvironment>(
+    context: Context<E>,
+    next: Next,
+) {
     const authorization = context.req.header("authorization") ?? "";
     const computerId = computerIdFromPrefixedValue(authorization.startsWith("Bearer ") ? authorization.slice(7) : "");
     context.set("computerId", computerIdentifier(computerId));
     await next();
-};
+}
 
-export const computerFromTransfer: MiddlewareHandler<ComputerTargetEnvironment> = async (context, next) => {
+export async function computerFromTransfer<E extends ComputerTargetEnvironment>(context: Context<E>, next: Next) {
     const input: unknown = await readJsonBody(context.req.raw.clone());
     const parsed = v.safeParse(v.object({ code: v.unknown() }), input);
     const ticket = parsed.success ? readProjectCredential(parsed.output.code) : null;
@@ -40,4 +43,4 @@ export const computerFromTransfer: MiddlewareHandler<ComputerTargetEnvironment> 
     }
     context.set("computerId", computerIdentifier(ticket.computerId));
     await next();
-};
+}

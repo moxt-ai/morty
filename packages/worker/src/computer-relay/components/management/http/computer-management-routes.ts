@@ -1,26 +1,40 @@
-import { Hono } from "hono";
+import { Hono, type MiddlewareHandler } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import * as v from "valibot";
+import { relayIdentifier } from "../../../../contracts/computer-management.ts";
 import { ManagementError } from "../../../../contracts/management-error.ts";
 import { relayBindings } from "../../../../contracts/relay-bindings.ts";
+import { bodyParser } from "../../../../http/body-parser.ts";
 import { json } from "../../../../http/json.ts";
 import { RequestDeadline } from "../../../../http/request-deadline.ts";
 import { ComputerRelayGateway } from "../../../gateway/computer-relay.ts";
-import { authenticatedSession } from "./authenticated-session.ts";
+import { authenticatedSession, localSession } from "./authenticated-session.ts";
 import type { ManagementHttpEnvironment } from "./management-http-environment.ts";
 
+const pairingInput = v.strictObject({ idempotencyKey: relayIdentifier });
+
 export function createComputerManagementRoutes() {
+    const noStore: MiddlewareHandler<ManagementHttpEnvironment> = async (context, next) => {
+        context.header("Cache-Control", "no-store");
+        await next();
+    };
+    const sizeLimit = bodyLimit({
+        maxSize: 4096,
+        onError: () => {
+            throw new ManagementError("INVALID_REQUEST", "The request is too large.", 413);
+        },
+    });
     return new Hono<ManagementHttpEnvironment>()
-        .use(
-            "/computer",
-            bodyLimit({
-                maxSize: 4096,
-                onError: () => {
-                    throw new ManagementError("INVALID_REQUEST", "The request is too large.", 413);
-                },
-            }),
-        )
-        .get("/computer", authenticatedSession, async (context) => {
+        .get("/computer/pairing-state", authenticatedSession, async (context) => {
+            using deadline = new RequestDeadline(context.req.raw.signal, 45000);
+            return json(
+                await context.var.application.services.management.readComputer(
+                    context.get("session").computerId,
+                    deadline.signal,
+                ),
+            );
+        })
+        .get("/computer", sizeLimit, authenticatedSession, async (context) => {
             const session = context.get("session");
             using deadline = new RequestDeadline(context.req.raw.signal, 15000);
             return json({
@@ -110,5 +124,34 @@ export function createComputerManagementRoutes() {
                 );
                 throw cause;
             }
+        })
+        .post(
+            "/pairing",
+            noStore,
+            sizeLimit,
+            localSession("pairComputer"),
+            bodyParser<ManagementHttpEnvironment, typeof pairingInput>(pairingInput),
+            async (context) => {
+                const session = context.get("session");
+                using deadline = new RequestDeadline(context.req.raw.signal, 15000);
+                const input = context.req.valid("json");
+                const pairing = await context.var.application.services.management.createComputerPairing(
+                    session.computerId,
+                    input.idempotencyKey,
+                    deadline.signal,
+                );
+                context.header("Cache-Control", "no-store");
+                return json(pairing, 201);
+            },
+        )
+        .get("/pairing", noStore, authenticatedSession, async (context) => {
+            const session = context.get("session");
+            using deadline = new RequestDeadline(context.req.raw.signal, 15000);
+            return json(
+                await context.var.application.services.management.readComputerPairing(
+                    session.computerId,
+                    deadline.signal,
+                ),
+            );
         });
 }

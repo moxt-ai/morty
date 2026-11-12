@@ -1,10 +1,9 @@
 import { isDirectoryPath, type SessionAccessHolder } from "@morty-build/client/protocol";
 import { type Context, Hono } from "hono";
-import { bodyLimit } from "hono/body-limit";
 import { createMiddleware } from "hono/factory";
 import * as v from "valibot";
 import type { Session } from "../../../../contracts/authentication/session.ts";
-import { ComputerManagementError, relayIdentifier } from "../../../../contracts/computer-management.ts";
+import { relayIdentifier } from "../../../../contracts/computer-management.ts";
 import { bodyParser } from "../../../../http/body-parser.ts";
 import { json } from "../../../../http/json.ts";
 import { RequestDeadline } from "../../../../http/request-deadline.ts";
@@ -115,15 +114,6 @@ function privateJson(value: unknown) {
 
 export function createBotChatRoutes() {
     return new Hono<AuthorizedChatEnvironment>()
-        .use(
-            "*",
-            bodyLimit({
-                maxSize: 6500000,
-                onError: () => {
-                    throw new ComputerManagementError("INVALID_REQUEST", "The message is too large.", 413);
-                },
-            }),
-        )
         .post("/workspace", authenticatedSession, authorizedChat(), async (context) => {
             return privateJson(
                 await context.var.application.services.chat.computerConfiguration(context.get("chatScope")),

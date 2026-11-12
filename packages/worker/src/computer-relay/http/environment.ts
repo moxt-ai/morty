@@ -1,3 +1,6 @@
+import type { MiddlewareHandler } from "hono";
+import type { ConfiguredRelayBindings } from "../../contracts/relay-bindings.ts";
+import type { ComputerTargetEnvironment } from "../../http/computer-target.ts";
 import type { ComputerInternalService } from "../components/management/service/computer-internal-service.ts";
 import type { LocalSessionOperations } from "../components/runtime/service/local-session-operations.ts";
 import type {
@@ -17,10 +20,15 @@ type RelayHttpEnvironment = {
     };
 };
 
-export type RelayProtocolEnvironment = {
-    readonly Variables: Pick<RelayHttpEnvironment["Variables"], "relay" | "signal">;
-};
+export type RelayProtocolEnvironment = ComputerRouteHttpEnvironment;
+
+export type RelayRouteMiddleware = readonly [
+    timeout: MiddlewareHandler<RelayProtocolEnvironment>,
+    target: MiddlewareHandler<RelayProtocolEnvironment>,
+    initialize: MiddlewareHandler<RelayProtocolEnvironment>,
+];
 
 export type ComputerRouteHttpEnvironment = RelayHttpEnvironment & {
-    readonly Variables: { readonly computerInternal: ComputerInternalService };
+    readonly Bindings: ConfiguredRelayBindings;
+    readonly Variables: ComputerTargetEnvironment["Variables"] & { readonly computerInternal: ComputerInternalService };
 };
