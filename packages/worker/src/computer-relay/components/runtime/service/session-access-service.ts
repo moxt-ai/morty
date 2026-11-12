@@ -7,7 +7,7 @@ import {
     type SessionAccessHolder,
 } from "@morty-build/client/protocol";
 import { ProjectAuthenticationError } from "../../../../contracts/relay/project-authentication.ts";
-import type { ComputerManagementService } from "../../../../directory/service/computer-management-service.ts";
+import type { ComputerManagementService } from "../../management/service/computer-management-service.ts";
 import { SessionAccessCredentialExpiredError, type SessionAccessSigner } from "../entity/session-access-credential.ts";
 
 export type SessionAccessTarget =

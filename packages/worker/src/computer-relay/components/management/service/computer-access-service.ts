@@ -1,5 +1,5 @@
 import type { SessionAccessGrant, SessionAccessHolder } from "@morty-build/client/protocol";
-import { type ComputerAccess, ProjectAuthenticationError } from "../../contracts/relay/project-authentication.ts";
+import { type ComputerAccess, ProjectAuthenticationError } from "../../../../contracts/relay/project-authentication.ts";
 import type { ComputerManagementStorage } from "../storage/computer-management-storage.ts";
 
 /** Rechecks account lifecycle and session revocation at the execution boundary, including live connections. */

@@ -1,6 +1,6 @@
-import type { ComputerAccessService } from "../../../directory/service/computer-access-service.ts";
-import type { ComputerManagementService } from "../../../directory/service/computer-management-service.ts";
 import type { DurableObjectDatabase } from "../../infra/durable-object-database.ts";
+import type { ComputerAccessService } from "../management/service/computer-access-service.ts";
+import type { ComputerManagementService } from "../management/service/computer-management-service.ts";
 import type { ComputerRelayStore } from "../management/storage/computer-relay-store.ts";
 import { ComputerCredentialService } from "./service/computer-credential-service.ts";
 import { ComputerRelayActor } from "./service/computer-relay-actor.ts";

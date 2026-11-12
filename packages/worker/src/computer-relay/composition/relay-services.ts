@@ -1,12 +1,12 @@
 import type { ComputerAccounts } from "../../contracts/computer-accounts.ts";
 import { ComputerManagementError } from "../../contracts/computer-management.ts";
 import type { RelayBindings } from "../../contracts/relay-bindings.ts";
-import { ComputerManagementService } from "../../directory/service/computer-management-service.ts";
-import { ComputerManagementStorage } from "../../directory/storage/computer-management-storage.ts";
 import { ComputerConnectionService } from "../components/management/service/computer-connection-service.ts";
+import { ComputerManagementService } from "../components/management/service/computer-management-service.ts";
 import { PairingDirectoryService } from "../components/management/service/pairing-directory-service.ts";
 import { ComputerIdentityService } from "../components/management/service/pairing-identity-service.ts";
 import { PairingService } from "../components/management/service/pairing-service.ts";
+import { ComputerManagementStorage } from "../components/management/storage/computer-management-storage.ts";
 import type { ComputerManagementStore } from "../components/management/storage/computer-management-store.ts";
 import { SessionAccessSigner } from "../components/runtime/entity/session-access-credential.ts";
 import type { ComputerService } from "../components/runtime/service/computer-service.ts";
