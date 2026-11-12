@@ -186,12 +186,7 @@ export const recentCwdEntry = (computerId: string) =>
 // Computer access tokens
 // ---------------------------------------------------------------------------
 
-const computerTokenSchema = v.pipe(
-    v.string(),
-    v.regex(
-        /^(?:morty_computer_v1_[A-Za-z0-9_-]{43}|morty_recovery_v1\.prj_(?:wn|en|sa|we|ee|ap|an|as|oc|af|me)_01_[A-Za-z0-9_-]{24}\.[A-Za-z0-9_-]{43})$/u,
-    ),
-);
+const computerTokenSchema = v.pipe(v.string(), v.regex(/^morty_computer_v1_[A-Za-z0-9_-]{43}$/u));
 
 /** How many computers and their access tokens this browser remembers. */
 export const MAX_REMEMBERED_COMPUTERS = 10;

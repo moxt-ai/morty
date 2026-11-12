@@ -72,18 +72,13 @@ type ComputerLinkResult =
     | { readonly kind: "unauthenticated" | "revoked" | "mismatch" };
 
 /** Who shared the link a device joined through, as the owner recognizes it. */
-export type DeviceSharer =
-    | { readonly kind: "computer" }
-    | { readonly kind: "recovery" }
-    | { readonly kind: "device"; readonly label: string | null };
+export type DeviceSharer = { readonly kind: "computer" } | { readonly kind: "device"; readonly label: string | null };
 
 /** Null when the link's sharer is unknown, such as a credential from before credential kinds were recorded. */
 function deviceSharer(kind: Credential["kind"] | null, label: string | null): DeviceSharer | null {
     switch (kind) {
         case "local":
             return { kind: "computer" };
-        case "recovery":
-            return { kind: "recovery" };
         case "browser":
             return { kind: "device", label };
         case null:
@@ -95,7 +90,6 @@ function deviceSharer(kind: Credential["kind"] | null, label: string | null): De
 function classifyCredential(stored: StoredCredential): CredentialLookup {
     switch (stored.kind) {
         case "local":
-        case "recovery":
             return stored.held
                 ? {
                       kind: "active",
@@ -123,7 +117,7 @@ function classifyCredential(stored: StoredCredential): CredentialLookup {
 
 /**
  * Whether `holder`'s access to the computer holds now, by the same rules that authenticate its credentials: a browser
- * device's until its term unless it was ended, a local or recovery credential's until it was revoked.
+ * device's until its term unless it was ended, the local credential's until it was revoked.
  */
 export async function holdsAccess(
     identities: Pick<IdentityStorage, "holdsAccess">,
@@ -264,22 +258,6 @@ export class AuthenticationService {
             );
         }
         return { code, ...issuedLinkTerms(request.duration, issued) };
-    };
-
-    readonly createRecoveryToken = async (
-        token: string | undefined,
-        signal: AbortSignal,
-    ): Promise<
-        | { readonly kind: "issued"; readonly token: string }
-        | { readonly kind: "unauthenticated" }
-        | { readonly kind: "forbidden" }
-    > => {
-        const access = await this.authorize(token, "issueRecoveryCredential", signal);
-        if (access.kind !== "authorized") {
-            return refused(access);
-        }
-        const issued = await this.identities.createRecoveryToken(access.token, Date.now(), signal);
-        return issued === null ? { kind: "unauthenticated" } : { kind: "issued", token: issued };
     };
 
     readonly redeemTransfer = async (
@@ -453,20 +431,11 @@ export class AuthenticationService {
         };
     };
 
-    readonly retireLocalCredential = async (token: string | undefined, signal: AbortSignal): Promise<EndAccessResult> =>
-        await this.#revokeCredential(token, "retireLocalCredential", signal);
-
-    readonly revokeRecoveryCredential = async (
+    readonly retireLocalCredential = async (
         token: string | undefined,
-        signal: AbortSignal,
-    ): Promise<EndAccessResult> => await this.#revokeCredential(token, "revokeRecoveryCredential", signal);
-
-    readonly #revokeCredential = async (
-        token: string | undefined,
-        operation: "retireLocalCredential" | "revokeRecoveryCredential",
         signal: AbortSignal,
     ): Promise<EndAccessResult> => {
-        const access = await this.authorize(token, operation, signal);
+        const access = await this.authorize(token, "retireLocalCredential", signal);
         if (access.kind !== "authorized") {
             return refused(access);
         }

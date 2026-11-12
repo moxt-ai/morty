@@ -2,7 +2,7 @@ import * as v from "valibot";
 
 const computerId = v.pipe(v.string(), v.regex(/^prj_(wn|ap|an|as)_01_[A-Za-z0-9_-]{24}$/u));
 const secret = v.pipe(v.string(), v.regex(/^[A-Za-z0-9_-]{43}$/u));
-const credentialKind = v.picklist(["morty_transfer_v1", "morty_recovery_v1"]);
+const credentialKind = v.picklist(["morty_transfer_v1"]);
 const credential = v.tuple([credentialKind, computerId, secret]);
 
 export function readProjectCredential(value: unknown) {
@@ -15,15 +15,6 @@ export function readProjectCredential(value: unknown) {
     }
     const [kind, computerId] = parsed.output;
     return { kind, computerId };
-}
-
-export function createProjectCredential(kind: v.InferOutput<typeof credentialKind>, requestedComputerId: string) {
-    const bytes = crypto.getRandomValues(new Uint8Array(32));
-    const value = btoa(String.fromCharCode(...bytes))
-        .replaceAll("+", "-")
-        .replaceAll("/", "_")
-        .replace(/=+$/u, "");
-    return `${kind}.${v.parse(computerId, requestedComputerId)}.${value}`;
 }
 
 /** A sharing operation recovers its secret without storing a redeemable credential in the database. */
