@@ -342,6 +342,9 @@ for (const route of ["session", "suspended"] as const) {
         if (route === "session") {
             // The SDK pings every 20 seconds and drops a tunnel that leaves a ping unanswered for 10.
             await page.clock.runFor(30000);
+            // Let the real replacement handshake and Session reconciliation complete before advancing
+            // another connection deadline. An editable composer and a hidden notice also hold during recovery.
+            await expect(page.getByTestId(dataTestId.sendMessage)).toBeEnabled();
         }
         await page.clock.runFor(15000);
         await expect(composer).toBeEnabled();
