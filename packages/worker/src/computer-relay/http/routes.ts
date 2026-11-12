@@ -6,7 +6,6 @@ import * as v from "valibot";
 import { COMPUTER_INTERNAL_PREFIX } from "../../contracts/computer-relay-http.ts";
 import { ManagementError } from "../../contracts/management-error.ts";
 import { validateIdentifier } from "../../contracts/relay/pairing.ts";
-import { ComputerScope } from "../../contracts/relay/session.ts";
 import { readJsonBody } from "../../http/body-parser.ts";
 import { computerFromPath, computerFromTransfer } from "../../http/computer-target.ts";
 import { errorHandler } from "../../http/error-middleware.ts";
@@ -17,7 +16,6 @@ import { createChatApplication } from "../components/chat/http/index.ts";
 import { createManagementApplication } from "../components/management/http/index.ts";
 import type { ManagementHttpEnvironment } from "../components/management/http/management-http-environment.ts";
 import { createRelayProtocolRoutes } from "../components/management/http/protocol-routes.ts";
-import { createComputerRoutes } from "../components/runtime/http/computer-routes.ts";
 import { sessionAccessTargetMiddleware } from "../components/runtime/http/session-access-target.ts";
 import { authorizeSessionContentUpload } from "../components/runtime/http/session-content-upload.ts";
 import { decodeSessionRequest } from "../components/runtime/http/session-requests.ts";
@@ -32,6 +30,17 @@ export function createComputerHttpRoutes(ctx: ComputerRouteContext) {
     const filePath = `${MORTY_API_PREFIX}/v1/computers/:computerId/harnesses/:harness/sessions/:sessionId/files/content`;
     return new Hono<ComputerRouteHttpEnvironment>()
         .use(`${COMPUTER_INTERNAL_PREFIX}/*`, bodyLimit({ maxSize: 3 * 1_024 * 1_024 }))
+        .get(`${COMPUTER_INTERNAL_PREFIX}/:computerId/account`, async (context) =>
+            context.json(await context.var.computerInternal.readAccount(context.req.raw.signal)),
+        )
+        .post(`${COMPUTER_INTERNAL_PREFIX}/:computerId/account`, async (context) =>
+            context.json(
+                await context.var.computerInternal.createAccount(
+                    await readJsonBody(context.req.raw),
+                    context.req.raw.signal,
+                ),
+            ),
+        )
         .get(`${COMPUTER_INTERNAL_PREFIX}/:computerId/active-generation`, async (context) =>
             context.json({
                 generation: await context.var.computerInternal.readActiveGeneration(context.req.raw.signal),
@@ -49,18 +58,7 @@ export function createComputerHttpRoutes(ctx: ComputerRouteContext) {
             await context.var.computerInternal.recordAudit(await readJsonBody(context.req.raw), context.req.raw.signal);
             return new Response(null, { status: 204 });
         })
-        .get(`${COMPUTER_INTERNAL_PREFIX}/:computerId/registrations`, async (context) =>
-            context.json({ computers: await context.var.computerInternal.listComputers(context.req.raw.signal) }),
-        )
-        .post(`${COMPUTER_INTERNAL_PREFIX}/:computerId/revocations`, async (context) => {
-            await context.var.computerInternal.revokeComputer(
-                await readJsonBody(context.req.raw),
-                context.req.raw.signal,
-            );
-            return new Response(null, { status: 204 });
-        })
         .route("/", createRelayProtocolRoutes())
-        .route("/", createComputerRoutes(ctx))
         .post("/__computer/bootstrap", async (context) => {
             using deadline = new RequestDeadline(context.req.raw.signal, 45_000);
             const input: unknown = await context.req.json();
@@ -116,7 +114,7 @@ export function createComputerHttpRoutes(ctx: ComputerRouteContext) {
                 Number(context.req.query("maxBytes") ?? String(32 * 1024 * 1024)),
             );
             return context.var.sessionOperations.readProjectSessionFile(
-                new ComputerScope(access.computerId),
+                access.computerId,
                 decodeFileReadCommand(
                     JSON.stringify({
                         kind: "file.read",

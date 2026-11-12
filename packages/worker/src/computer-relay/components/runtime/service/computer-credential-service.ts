@@ -1,20 +1,20 @@
-import type { BackendProjectAccess } from "../../../../directory/service/backend-project-access.ts";
-import type { ComputerManagementStorageDirectory } from "../../../../directory/service/computer-management-storage-directory.ts";
+import type { ComputerAccessService } from "../../../../directory/service/computer-access-service.ts";
+import type { ComputerManagementService } from "../../../../directory/service/computer-management-service.ts";
 import type { ComputerRelayStore } from "../../management/storage/computer-relay-store.ts";
 import type { ComputerSocketIdentity } from "./computer-service.ts";
 
 export class ComputerCredentialService {
     readonly #store: Pick<ComputerRelayStore, "readActiveGeneration">;
-    readonly #projects: Pick<ComputerManagementStorageDirectory, "resolve">;
-    readonly #access: Pick<BackendProjectAccess, "grants" | "grantsSessionCredential">;
+    readonly #accounts: Pick<ComputerManagementService, "isActive">;
+    readonly #access: Pick<ComputerAccessService, "grantsSessionCredential">;
 
     constructor(
         store: Pick<ComputerRelayStore, "readActiveGeneration">,
-        projects: Pick<ComputerManagementStorageDirectory, "resolve">,
-        access: Pick<BackendProjectAccess, "grants" | "grantsSessionCredential">,
+        accounts: Pick<ComputerManagementService, "isActive">,
+        access: Pick<ComputerAccessService, "grantsSessionCredential">,
     ) {
         this.#store = store;
-        this.#projects = projects;
+        this.#accounts = accounts;
         this.#access = access;
     }
 
@@ -23,27 +23,15 @@ export class ComputerCredentialService {
         identity: { readonly computerId: string },
         signal: AbortSignal,
     ): Promise<number | null> => {
-        const project = await this.#projects.resolve(identity.computerId, signal);
+        const active = await this.#accounts.isActive(identity.computerId, signal);
         signal.throwIfAborted();
-        if (project === null) {
+        if (!active) {
             return null;
-        }
-        if (project.computerId !== identity.computerId) {
-            throw new Error("The Project placement is invalid");
         }
         const generation = await this.#store.readActiveGeneration(identity.computerId, signal);
         signal.throwIfAborted();
         return generation;
     };
-
-    readonly authorizeHostMessage = async (
-        identity: Extract<ComputerSocketIdentity, { readonly role: "host" }>,
-        signal: AbortSignal,
-    ): Promise<"granted" | "revoked"> =>
-        (await this.activeGeneration(identity, signal)) !== null &&
-        (await this.#access.grants(identity.computerId, signal))
-            ? "granted"
-            : "revoked";
 
     readonly authorizeViewer = async (
         identity: Extract<ComputerSocketIdentity, { readonly role: "viewer" }>,

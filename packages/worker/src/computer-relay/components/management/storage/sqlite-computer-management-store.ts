@@ -1,7 +1,4 @@
 import type { SessionAccessHolder } from "@morty-build/client/protocol";
-import { and, desc, eq } from "drizzle-orm";
-import * as v from "valibot";
-import { AuditRowSchema } from "../../../../contracts/relay/relay-records.ts";
 import { relayDrizzle } from "../../../../infra/drizzle-database.ts";
 import type { DurableObjectDatabase } from "../../../infra/durable-object-database.ts";
 import { auditEvent } from "../../../schema/pairing-do/index.ts";
@@ -9,8 +6,8 @@ import type { ComputerManagementStore } from "./computer-management-store.ts";
 import { SqliteComputerRelayStore } from "./sqlite-computer-relay-store.ts";
 
 /**
- * A Project's Relay and Relay operations over its own SQLite storage. Only the Account Durable Object
- * constructs this; everything else reaches these tables through its operations.
+ * Audit and identity operations over one computer's SQLite storage. Only its ComputerRelay
+ * constructs this; callers use the object's operations.
  */
 export class SqliteComputerManagementStore extends SqliteComputerRelayStore implements ComputerManagementStore {
     readonly #computerId: string;
@@ -47,28 +44,5 @@ export class SqliteComputerManagementStore extends SqliteComputerRelayStore impl
                 recordedAt: audit.recordedAt,
             })
             .onConflictDoNothing();
-    };
-
-    readonly listAuditEvents: ComputerManagementStore["listAuditEvents"] = async (limit, signal) => {
-        const rows = await relayDrizzle(this.#database, signal)
-            .select()
-            .from(auditEvent)
-            .where(and(eq(auditEvent.category, "computer_management"), eq(auditEvent.computerId, this.#computerId)))
-            .orderBy(desc(auditEvent.recordedAt), desc(auditEvent.auditId))
-            .limit(limit);
-        return rows.map((row) =>
-            v.parse(AuditRowSchema, {
-                action: row.action,
-                actor_id: row.actorId,
-                actor_kind: row.actorKind,
-                actor_ref: row.actorRef,
-                audit_id: row.auditId,
-                details_json: row.detailsJson,
-                outcome: row.outcome,
-                computer_id: row.computerId,
-                recorded_at: row.recordedAt,
-                subject_id: row.subjectId,
-            }),
-        );
     };
 }

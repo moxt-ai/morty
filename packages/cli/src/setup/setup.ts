@@ -75,12 +75,11 @@ type ReplacementState =
 
 /** The identity that a bootstrap or replacement returned. */
 interface IssuedIdentity {
-    readonly userToken: string;
-    readonly userId: string;
+    readonly computerToken: string;
     readonly computerId: string;
 }
 
-/** The key naming an identity being created, saved before the request so a retried run resumes the same identity. */
+/** The user creation secret, saved before requesting a new computer. */
 interface CreatingIdentity {
     readonly kind: "creating";
     readonly creationKey: string;
@@ -115,7 +114,7 @@ interface SavedState {
 }
 
 /** Version of the saved state's representation; any other representation is refused, never converted. */
-const SAVED_STATE_VERSION = 3;
+const SAVED_STATE_VERSION = 4;
 
 function createdIdentity(issued: IssuedIdentity): ReadyIdentity {
     return {
@@ -144,7 +143,7 @@ function replacedIdentity(previous: ReadyIdentity, successor: IssuedIdentity): R
         pairing: { kind: "none" },
         replacement: {
             kind: "revoked",
-            previous: { kind: "pending", computerId: previous.computerId, token: previous.userToken },
+            previous: { kind: "pending", computerId: previous.computerId, token: previous.computerToken },
         },
         rotation: { kind: "none" },
     };
@@ -164,7 +163,7 @@ function withRotationRequested(identity: ReadyIdentity, successor: string): Read
 
 /** The local credential after the Worker replaced it with the requested successor. */
 function rotatedIdentity(identity: ReadyIdentity, successor: string): ReadyIdentity {
-    return { ...identity, userToken: successor, rotation: { kind: "none" } };
+    return { ...identity, computerToken: successor, rotation: { kind: "none" } };
 }
 
 /** Cleared only after a finished setup reported the replacement. */
@@ -185,7 +184,7 @@ function encodeReplacement(replacement: ReplacementState) {
                         ? {
                               kind: "pending",
                               computer_id: replacement.previous.computerId,
-                              user_token: replacement.previous.token,
+                              computer_token: replacement.previous.token,
                           }
                         : { kind: "retired", computer_id: replacement.previous.computerId },
             };
@@ -211,8 +210,7 @@ function encodeSavedState(state: SavedState) {
                 base_url: state.base,
                 identity: {
                     kind: "ready",
-                    user_id: identity.userId,
-                    user_token: identity.userToken,
+                    computer_token: identity.computerToken,
                     computer_id: identity.computerId,
                     pairing: identity.pairing,
                     replacement: encodeReplacement(identity.replacement),
@@ -530,7 +528,10 @@ interface ErrorCause {
 
 function sanitizeErrorText(value: string) {
     return value
-        .replace(/morty_anon_v1_[A-Za-z0-9_-]+|morty_(?:transfer_v1|recovery_v1)\.[A-Za-z0-9._-]+/gu, "[REDACTED]")
+        .replace(
+            /morty_(?:anon|computer)_v1_[A-Za-z0-9_-]+|morty_(?:transfer_v1|recovery_v1)\.[A-Za-z0-9._-]+/gu,
+            "[REDACTED]",
+        )
         .replace(/([?&](?:token|code)=)[^&\s#]+/giu, "$1[REDACTED]");
 }
 
@@ -609,7 +610,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             return fail("INVALID_RESPONSE");
         }
     };
-    const credential = (value: unknown) => text(value, /^morty_anon_v1_[A-Za-z0-9_-]{43}$/u);
+    const credential = (value: unknown) => text(value, /^morty_computer_v1_[A-Za-z0-9_-]{43}$/u);
 
     function origin(value: unknown) {
         const url = new URL(text(value));
@@ -704,7 +705,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         };
         const savedIdentifier = (input: unknown): string => (isIdentifier(input) ? input : invalid());
         const savedCredential = (input: unknown): string =>
-            typeof input === "string" && /^morty_anon_v1_[A-Za-z0-9_-]{43}$/u.test(input) ? input : invalid();
+            typeof input === "string" && /^morty_computer_v1_[A-Za-z0-9_-]{43}$/u.test(input) ? input : invalid();
         const savedOrigin = (input: unknown): string => {
             try {
                 if (origin(input) === input) {
@@ -727,13 +728,13 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                     const previous = exactly(input, ["kind", "previous"])["previous"];
                     switch (fieldsOf(previous)["kind"]) {
                         case "pending": {
-                            const fields = exactly(previous, ["kind", "computer_id", "user_token"]);
+                            const fields = exactly(previous, ["kind", "computer_id", "computer_token"]);
                             return {
                                 kind: "revoked",
                                 previous: {
                                     kind: "pending",
                                     computerId: savedIdentifier(fields["computer_id"]),
-                                    token: savedCredential(fields["user_token"]),
+                                    token: savedCredential(fields["computer_token"]),
                                 },
                             };
                         }
@@ -780,15 +781,14 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 return { base, identity: { kind: "creating", creationKey } };
             }
             case "ready": {
-                const keys = ["kind", "user_id", "user_token", "computer_id", "pairing", "replacement"];
+                const keys = ["kind", "computer_token", "computer_id", "pairing", "replacement"];
                 const rotating = "credential_rotation" in fieldsOf(saved["identity"]);
                 const ready = exactly(saved["identity"], rotating ? [...keys, "credential_rotation"] : keys);
                 return {
                     base,
                     identity: {
                         kind: "ready",
-                        userId: savedIdentifier(ready["user_id"]),
-                        userToken: savedCredential(ready["user_token"]),
+                        computerToken: savedCredential(ready["computer_token"]),
                         computerId: savedIdentifier(ready["computer_id"]),
                         pairing: pairingIntent(ready["pairing"]),
                         replacement: replacement(ready["replacement"]),
@@ -924,7 +924,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
 
     /** Sends a request as the saved identity, to its Project unless the route names one. */
     async function request(context: Context, route: string, body?: unknown) {
-        const headers: Record<string, string> = { authorization: `Bearer ${context.identity.userToken}` };
+        const headers: Record<string, string> = { authorization: `Bearer ${context.identity.computerToken}` };
         if (route === "/management/computer/replacement") {
             headers["x-morty-setup-run-id"] = runId;
         }
@@ -977,7 +977,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         const successor =
             earlier.kind === "requested"
                 ? earlier.successor
-                : `morty_anon_v1_${Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("base64url")}`;
+                : `morty_computer_v1_${Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("base64url")}`;
         const requested = await commit(context, withRotationRequested(context.identity, successor));
         let revoked: Record<string, unknown>;
         try {
@@ -988,7 +988,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
                 throw cause;
             }
             revoked = await request(
-                { ...requested, identity: { ...requested.identity, userToken: successor } },
+                { ...requested, identity: { ...requested.identity, computerToken: successor } },
                 "/identity/revoke-all-access",
                 { successor },
             );
@@ -1089,8 +1089,8 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             return { kind: "setup", context: { ...location, identity: saved }, project: "reused" };
         }
         progress("identity", "Creating the standalone identity and Computer.");
-        // Save the creation key before creating, so a setup retried after a lost reply resumes the same identity
-        // instead of creating another.
+        // Keep the creation secret across failures. Until a reply supplies the computerId, each attempt
+        // creates a new computer; once the pair is saved, subsequent runs link that exact pair instead.
         let creating: CreatingIdentity;
         if (saved.kind === "creating") {
             creating = saved;
@@ -1103,15 +1103,14 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         }
         const created = await send(
             location.base,
-            "/identity/anonymous-users",
+            "/computers",
             {},
             {
                 creationKey: creating.creationKey,
             },
         );
         const identity = createdIdentity({
-            userToken: credential(created["token"]),
-            userId: identifier(created["userId"]),
+            computerToken: credential(created["computerToken"]),
             computerId: identifier(created["computerId"]),
         });
         await writeSavedState(location, identity);
@@ -1119,8 +1118,8 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
     }
 
     async function verifyIdentityAndComputer(context: Context): Promise<VerifiedIdentity> {
-        const session = await request(context, "/session");
-        if (identifier(session["userId"]) !== context.identity.userId) {
+        const session = await request(context, "/identity/link", { computerId: context.identity.computerId });
+        if (identifier(session["computerId"]) !== context.identity.computerId) {
             fail("IDENTITY_CONFLICT");
         }
         // The Worker reads the Computer's pairing from the Relay, the same one every browser handoff opens.
@@ -1277,8 +1276,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
         const saved = await commit(
             prepared,
             replacedIdentity(prepared.identity, {
-                userToken: credential(replacement["token"]),
-                userId: identifier(replacement["userId"]),
+                computerToken: credential(replacement["computerToken"]),
                 computerId,
             }),
         );
@@ -1828,7 +1826,7 @@ export async function runSetup(args: readonly string[], host: SetupHost): Promis
             await retireReplacedIdentity(await settleCredentialRotation(identity.context)),
         );
         let computer = verified.context;
-        emit({ status: "identity_ready", userId: computer.identity.userId, computerId: computer.identity.computerId });
+        emit({ status: "identity_ready", computerId: computer.identity.computerId });
         const prepared = await prepareComputer(computer, cwd, verified.computerPairing, options.replaceProject);
         computer = prepared.context;
         await startRuntime(computer, prepared.computer, cwd, options.harness);

@@ -6,10 +6,13 @@ import { APP_ORIGIN, createIdentityFixture } from "./support/identity-fixture.ts
 
 const replacementSchema = v.object({
     computerId: v.string(),
-    // Independently retained setup decoder from main at 81157fb4: no new token format is required.
-    token: v.pipe(v.string(), v.regex(/^morty_anon_v1_[A-Za-z0-9_-]{43}$/u)),
-    userId: v.string(),
+    computerToken: v.pipe(v.string(), v.regex(/^morty_computer_v1_[A-Za-z0-9_-]{43}$/u)),
 });
+
+const replacementAccess = v.pipe(
+    replacementSchema,
+    v.transform(({ computerId, computerToken }) => ({ computerId, token: computerToken })),
+);
 
 let fixture: Awaited<ReturnType<typeof createIdentityFixture>>;
 
@@ -23,7 +26,7 @@ afterAll(async () => {
     await fixture.close();
 });
 
-test("Given a saved Computer on a Project, When its Project is replaced, Then the same user receives a fresh Project, Computer, and credential", async () => {
+test("Given a saved Computer, When it is replaced, Then setup receives a fresh Computer and credential", async () => {
     const environment = fixture.environment();
     const original = await fixture.createAnonymousUser();
     const replace = async () =>
@@ -37,14 +40,13 @@ test("Given a saved Computer on a Project, When its Project is replaced, Then th
 
     const response = await replace();
     expect(response.status).toBe(201);
-    const replacement = v.parse(replacementSchema, await response.json());
-    expect(replacement.userId).toBe(original.userId);
+    const replacement = v.parse(replacementAccess, await response.json());
     expect(replacement.computerId).not.toBe(original.computerId);
     expect(replacement.token).not.toBe(original.token);
 
     const retryResponse = await replace();
     expect(retryResponse.status).toBe(201);
-    const retry = v.parse(replacementSchema, await retryResponse.json());
+    const retry = v.parse(replacementAccess, await retryResponse.json());
     expect(retry.computerId).toBe(replacement.computerId);
     expect(retry.token).toBe(replacement.token);
 
@@ -83,7 +85,7 @@ test("Given a revoked successor local credential, When the previous Computer ret
         );
     const response = await replace();
     expect(response.status).toBe(201);
-    const replacement = v.parse(replacementSchema, await response.json());
+    const replacement = v.parse(replacementAccess, await response.json());
     expect(
         (
             await worker.fetch(
@@ -122,13 +124,13 @@ test("Given a completed replacement, When the saved Computer retries after a Wor
         );
     const response = await replace();
     expect(response.status).toBe(201);
-    const issued = v.parse(replacementSchema, await response.json());
+    const issued = v.parse(replacementAccess, await response.json());
     // Restart with durable storage intact before retrying the replacement.
     await fixture.reload();
 
     const retry = await replace();
     expect(retry.status).toBe(201);
-    const completed = v.parse(replacementSchema, await retry.json());
+    const completed = v.parse(replacementAccess, await retry.json());
     expect(completed.token).toBe(issued.token);
     expect(completed.computerId).toBe(issued.computerId);
     expect(
@@ -169,7 +171,7 @@ test("Given access shared from a saved Computer, When its Project is replaced, T
     const original = await fixture.createAnonymousUser();
     const redeemed = await redeem(await share(original.computerId, original.token));
     expect(redeemed.status).toBe(200);
-    const browser = v.parse(v.object({ token: v.string() }), await redeemed.json()).token;
+    const browser = v.parse(v.object({ computerToken: v.string() }), await redeemed.json()).computerToken;
     const recoveryResponse = await worker.fetch(
         projectRequest(original.computerId, "/identity/recovery-token", original.token, "POST"),
         fixture.environment(),
@@ -185,7 +187,7 @@ test("Given access shared from a saved Computer, When its Project is replaced, T
         );
     const response = await replace();
     expect(response.status).toBe(201);
-    const replacement = v.parse(replacementSchema, await response.json());
+    const replacement = v.parse(replacementAccess, await response.json());
 
     for (const token of [browser, recovery]) {
         expect(
@@ -202,7 +204,7 @@ test("Given access shared from a saved Computer, When its Project is replaced, T
 test("Given a browser that opened a shared link, When it asks to replace the Project, Then only the computer's own identity may", async () => {
     const original = await fixture.createAnonymousUser();
     const redeemed = await redeem(await share(original.computerId, original.token));
-    const browser = v.parse(v.object({ token: v.string() }), await redeemed.json()).token;
+    const browser = v.parse(v.object({ computerToken: v.string() }), await redeemed.json()).computerToken;
 
     const response = await worker.fetch(
         projectRequest(original.computerId, "/management/computer/replacement", browser, "POST"),

@@ -1,9 +1,7 @@
-import type { ComputerScope } from "../../../contracts/relay/session.ts";
-import type { BackendProjectAccess } from "../../../directory/service/backend-project-access.ts";
-import type { ComputerManagementStorageDirectory } from "../../../directory/service/computer-management-storage-directory.ts";
+import type { ComputerAccessService } from "../../../directory/service/computer-access-service.ts";
+import type { ComputerManagementService } from "../../../directory/service/computer-management-service.ts";
 import type { DurableObjectDatabase } from "../../infra/durable-object-database.ts";
 import type { ComputerRelayStore } from "../management/storage/computer-relay-store.ts";
-import { createComputerRoutes } from "./http/computer-routes.ts";
 import { ComputerCredentialService } from "./service/computer-credential-service.ts";
 import { ComputerRelayActor } from "./service/computer-relay-actor.ts";
 import { type ComputerPeers, ComputerService } from "./service/computer-service.ts";
@@ -20,11 +18,11 @@ export function createRuntimeContext(cx: {
         readonly projectStore: Pick<ComputerRelayStore, "readActiveGeneration">;
     };
     readonly services: {
-        readonly projects: Pick<ComputerManagementStorageDirectory, "resolve">;
-        readonly projectAccess: Pick<BackendProjectAccess, "grants" | "grantsSessionCredential">;
+        readonly computerAccounts: Pick<ComputerManagementService, "isActive">;
+        readonly projectAccess: Pick<ComputerAccessService, "grantsSessionCredential">;
     };
     readonly gateways: {
-        readonly peers: ComputerPeers;
+        readonly peers: Omit<ComputerPeers, "operations">;
     };
     readonly utilities: {
         readonly waitUntil: (operation: Promise<void>) => void;
@@ -37,15 +35,12 @@ export function createRuntimeContext(cx: {
         sockets: source.sockets,
         daemonConnections: source.daemonConnections,
         daemons: source.daemons,
-        hosts: source.hosts,
-        nativeRequests: source.nativeRequests,
         viewers: source.viewers,
-        historyRecipients: () => [...source.historyRecipients(), ...requests.routes().map(({ socket }) => socket)],
-        operations: () => [...source.operations(), ...requests.routes()],
+        operations: requests.routes,
     };
     const credentials = new ComputerCredentialService(
         cx.storages.projectStore,
-        cx.services.projects,
+        cx.services.computerAccounts,
         cx.services.projectAccess,
     );
     const connections = new DaemonConnectionService(new ComputerConnectionStorage(cx.doDatabase));
@@ -53,8 +48,7 @@ export function createRuntimeContext(cx: {
         services: {
             credentials,
             connections,
-            relay: (scope: ComputerScope) =>
-                new ComputerRelayActor({ config: { computerId: scope.computerId }, gateways: { peers } }),
+            relay: (computerId: string) => new ComputerRelayActor({ config: { computerId }, gateways: { peers } }),
         },
         gateways: { peers },
         utilities: cx.utilities,
@@ -70,9 +64,6 @@ export function createRuntimeContext(cx: {
             connections,
             runtime,
             nativeForks: new NativeSessionForks(cx.utilities.waitUntil),
-        },
-        applications: {
-            runtime: createComputerRoutes({ services: { runtime } }),
         },
     };
 }

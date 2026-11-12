@@ -2,8 +2,6 @@
     "account_id": "b903018a1c3d9d9a4bd68a11eb03e764",
     "environments": {
         "production": {
-            "d1_id": "1a6331f2-8f42-47a8-8f26-f13d80cfb6bc",
-            "d1_name": "morty-production-directory",
             "morty": "morty-production",
             "morty_origin": "https://morty.build",
             "buckets": {

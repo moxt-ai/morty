@@ -39,7 +39,7 @@ export function createRemoteAccessOperations(options: {
     /** The page's access as its owner confirms it, or null when it no longer opens the computer. */
     readonly currentAccess: (
         signal: AbortSignal,
-    ) => Promise<{ readonly computerId: string; readonly token: string } | null>;
+    ) => Promise<{ readonly computerId: string; readonly computerToken: string } | null>;
     /** Tells the owner of the page's access that the Worker refused it; settles once the owner checked it. */
     readonly credentialRejected: () => Promise<void>;
 }): RemoteAccessOperations {
@@ -48,7 +48,7 @@ export function createRemoteAccessOperations(options: {
         const localIdentity = await options.currentAccess(signal);
         signal.throwIfAborted();
         return localIdentity?.computerId === options.identity.computerId
-            ? localIdentity.token
+            ? localIdentity.computerToken
             : await options.identity.getToken(signal);
     };
     return {

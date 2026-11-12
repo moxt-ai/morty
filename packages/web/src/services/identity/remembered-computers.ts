@@ -15,27 +15,26 @@ export type { ComputerDestination, RememberedComputer };
 export const computerKey = (scope: IdentityScope): string => encodeIdentityScope(scope);
 
 /**
- * The computers this browser can open, most recently used first. This list owns which computers are kept; a user's
- * token is kept while a remembered computer needs it.
+ * The computers this browser can open, most recently used first. Each remembered Computer keeps its own access token.
  */
 export function rememberedComputers(): readonly RememberedComputer[] {
     return openable(readStoredAccess()).toSorted((a, b) => b.lastUsedAt - a.lastUsedAt);
 }
 
-/** The token this browser holds for a user, if any of its computers may still be opened. */
-export function storedToken(userId: string): string | null {
-    return readStoredAccess().credentials.get(userId) ?? null;
+/** The token this browser holds for a Computer. */
+export function storedToken(computerId: string): string | null {
+    return readStoredAccess().credentials.get(computerId) ?? null;
 }
 
-/** The access this browser holds for a Project's user, or null when it holds none. */
+/** The access this browser holds for a remembered Computer, or null when it holds none. */
 export function storedTokenForProject(computerId: string): string | null {
     const computer = rememberedComputers().find((entry) => entry.scope.computerId === computerId);
-    return computer === undefined ? null : storedToken(computer.scope.userId);
+    return computer === undefined ? null : storedToken(computer.scope.computerId);
 }
 
 /** Keeps a newly issued access: its token, and its computer behind those already visited. */
 function saveAccessWhileLocked(scope: IdentityScope, token: string): void {
-    updateComputers(withComputer(rememberedComputers(), scope), { added: { userId: scope.userId, token } });
+    updateComputers(withComputer(rememberedComputers(), scope), { added: { computerId: scope.computerId, token } });
 }
 
 class BrowserAccessStorageError extends Error {
@@ -65,10 +64,10 @@ export async function withStoredAccessLock<T>(
         : await locks.request("morty-stored-access", { signal }, perform);
 }
 
-/** The access that replaced `rejected` for a user, once the tab replacing it has saved it, or null when none did. */
-export async function replacedToken(userId: string, rejected: string, signal: AbortSignal): Promise<string | null> {
+/** The access that replaced `rejected` for this Computer, once another tab saved it, or null when none did. */
+export async function replacedToken(computerId: string, rejected: string, signal: AbortSignal): Promise<string | null> {
     return await withStoredAccessLock(signal, async () => {
-        const current = storedToken(userId);
+        const current = storedToken(computerId);
         return current !== null && current !== rejected ? current : null;
     });
 }
@@ -78,7 +77,7 @@ export async function replacedToken(userId: string, rejected: string, signal: Ab
  * replacement is current and false says to check it instead.
  */
 function forgetComputerAccess(scope: IdentityScope, token: string): boolean {
-    if (storedToken(scope.userId) !== token) {
+    if (storedToken(scope.computerId) !== token) {
         return false;
     }
     forgetComputer(scope);
@@ -161,10 +160,10 @@ interface StoredAccess {
 function readStoredAccess(): StoredAccess {
     const snapshot = centralLocalStorage.read(browserAccessEntry);
     const credentials = new Map<string, string>();
-    for (const [userId, token] of Object.entries(snapshot?.credentials ?? {})) {
-        const readable = readableCredential(userId, token);
+    for (const [computerId, token] of Object.entries(snapshot?.credentials ?? {})) {
+        const readable = readableCredential(computerId, token);
         if (readable !== null) {
-            credentials.set(userId, readable);
+            credentials.set(computerId, readable);
         }
     }
     const computers: RememberedComputer[] = [];
@@ -179,7 +178,7 @@ function readStoredAccess(): StoredAccess {
 
 /** The computers this version can open: those whose token it can read. */
 function openable(stored: StoredAccess): readonly RememberedComputer[] {
-    return stored.computers.filter((computer) => stored.credentials.has(computer.scope.userId));
+    return stored.computers.filter((computer) => stored.credentials.has(computer.scope.computerId));
 }
 
 /** The list with this computer in it. A new computer goes last, which makes room by dropping the least recent one. */
@@ -201,14 +200,16 @@ function withComputer(saved: readonly RememberedComputer[], scope: IdentityScope
  */
 function updateComputers(
     computers: readonly RememberedComputer[],
-    change: { readonly added?: { readonly userId: string; readonly token: string } } = {},
+    change: { readonly added?: { readonly computerId: string; readonly token: string } } = {},
 ): void {
     const { added } = change;
     const stored = readStoredAccess();
-    const needed = new Set(computers.map((computer) => computer.scope.userId));
-    const kept = [...stored.credentials].filter(([userId]) => userId !== added?.userId && needed.has(userId));
+    const needed = new Set(computers.map((computer) => computer.scope.computerId));
+    const kept = [...stored.credentials].filter(
+        ([computerId]) => computerId !== added?.computerId && needed.has(computerId),
+    );
     if (added !== undefined) {
-        kept.push([added.userId, added.token]);
+        kept.push([added.computerId, added.token]);
     }
     const saved = centralLocalStorage.write(browserAccessEntry, {
         credentials: Object.fromEntries(kept),

@@ -75,7 +75,7 @@ test.each(["current", "another service origin", "retired configuration"] as cons
         const configurationPath = join(state, "config.json");
         const savedIdentity = v.object({
             base_url: v.string(),
-            identity: v.object({ user_id: v.string(), user_token: v.string(), computer_id: v.string() }),
+            identity: v.object({ computer_token: v.string(), computer_id: v.string() }),
         });
 
         const first = v.parse(v.object({ computerId: v.string() }), await run());
@@ -120,7 +120,7 @@ test.each(["current", "another service origin", "retired configuration"] as cons
 
         expect(ready.computerId).toBe(first.computerId);
         expect(redeemed.status).toBe(200);
-        expect(await redeemed.json()).toMatchObject({ userId: identity.user_id, computerId: first.computerId });
+        expect(await redeemed.json()).toMatchObject({ computerId: first.computerId });
         expect(v.parse(savedIdentity, JSON.parse(await readFile(configurationPath, "utf8")))).toMatchObject({
             base_url: fixture.origin,
             identity,
@@ -187,19 +187,19 @@ test("Given the answer to setup's Computer pairing is lost, When setup runs agai
 
     expect(await run()).toBe(0);
     const saved = v.parse(
-        v.object({ identity: v.object({ user_token: v.string(), computer_id: v.string() }) }),
+        v.object({ identity: v.object({ computer_token: v.string(), computer_id: v.string() }) }),
         JSON.parse(await readFile(join(state, "config.json"), "utf8")),
     );
     const computer = await fetch(
         `${fixture.origin}/morty/api/computers/${saved.identity.computer_id}/management/computer/pairing-state`,
         {
-            headers: { authorization: `Bearer ${saved.identity.user_token}` },
+            headers: { authorization: `Bearer ${saved.identity.computer_token}` },
         },
     );
     const actual: unknown = await computer.json();
     const original = await fetch(
         `${fixture.origin}/morty/api/computers/${saved.identity.computer_id}/management/pairing`,
-        { headers: { authorization: `Bearer ${saved.identity.user_token}` } },
+        { headers: { authorization: `Bearer ${saved.identity.computer_token}` } },
     );
     expect(original.status).toBe(200);
     const originalStatus = v.parse(v.object({ status: v.string() }), await original.json()).status;
@@ -261,7 +261,7 @@ test("Given a computer whose Runtime Morty revoked, When setup runs again, Then 
         };
     };
     const savedIdentity = v.object({
-        identity: v.object({ user_token: v.string(), computer_id: v.string() }),
+        identity: v.object({ computer_token: v.string(), computer_id: v.string() }),
     });
     const computerState = async () => {
         const { identity } = v.parse(savedIdentity, JSON.parse(await readFile(join(state, "config.json"), "utf8")));
@@ -269,7 +269,7 @@ test("Given a computer whose Runtime Morty revoked, When setup runs again, Then 
             new Request(
                 `${fixture.origin}/morty/api/computers/${identity.computer_id}/management/computer/pairing-state`,
                 {
-                    headers: { authorization: `Bearer ${identity.user_token}` },
+                    headers: { authorization: `Bearer ${identity.computer_token}` },
                 },
             ),
             fixture.environment(fixture.origin),
@@ -286,7 +286,7 @@ test("Given a computer whose Runtime Morty revoked, When setup runs again, Then 
     const revokedWorkspace = await fixture.relayRequest(
         new Request(`${fixture.origin}/morty/api/chat/computers/${before.identity.computer_id}/workspace`, {
             method: "POST",
-            headers: { authorization: `Bearer ${before.identity.user_token}` },
+            headers: { authorization: `Bearer ${before.identity.computer_token}` },
         }),
     );
     expect(revokedWorkspace.status).toBe(401);

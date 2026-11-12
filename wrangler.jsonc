@@ -22,14 +22,6 @@
         "not_found_handling": "none",
         "run_worker_first": ["/morty/api/*", "/setup.md"]
     },
-    "d1_databases": [
-        {
-            "binding": "RELAY_DIRECTORY_DATABASE",
-            "database_name": "morty-local-e2e-directory",
-            "database_id": "00000000-0000-0000-0000-000000000102",
-            "migrations_dir": "packages/worker/migrations/d1"
-        }
-    ],
     "vars": {
         "APP_ORIGIN": "http://localhost:5173",
         "MORTY_ALLOWED_ORIGINS": "[\"*\"]",

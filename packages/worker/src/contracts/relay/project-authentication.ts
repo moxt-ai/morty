@@ -1,23 +1,6 @@
 import type { HttpError } from "../http-error.ts";
-import type { ComputerScope } from "./session.ts";
-
-export interface AuditActor {
-    readonly actorId: string;
-    readonly kind: "application";
-}
-
-export class ProjectAccessContext {
-    readonly actor: AuditActor;
-    readonly scope: ComputerScope;
-
-    get computerId(): string {
-        return this.scope.computerId;
-    }
-
-    constructor(scope: ComputerScope, actor: AuditActor) {
-        this.scope = scope;
-        this.actor = actor;
-    }
+export interface ComputerAccess {
+    readonly computerId: string;
 }
 
 export class ProjectAuthenticationError extends Error implements HttpError {

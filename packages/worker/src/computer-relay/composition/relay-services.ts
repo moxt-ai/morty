@@ -1,7 +1,7 @@
+import type { ComputerAccounts } from "../../contracts/computer-accounts.ts";
 import { ComputerManagementError } from "../../contracts/computer-management.ts";
 import type { RelayBindings } from "../../contracts/relay-bindings.ts";
 import { ComputerManagementService } from "../../directory/service/computer-management-service.ts";
-import { ComputerManagementStorageDirectory } from "../../directory/service/computer-management-storage-directory.ts";
 import { ComputerManagementStorage } from "../../directory/storage/computer-management-storage.ts";
 import { ComputerConnectionService } from "../components/management/service/computer-connection-service.ts";
 import { PairingDirectoryService } from "../components/management/service/pairing-directory-service.ts";
@@ -18,6 +18,7 @@ export function createComputerRelayServices(
     computerId: string,
     store: ComputerManagementStore,
     runtime: ComputerService,
+    accounts: ComputerAccounts,
 ) {
     const forComputer = (id: string) => {
         if (id !== computerId) {
@@ -25,9 +26,8 @@ export function createComputerRelayServices(
         }
         return store;
     };
-    const storage = new ComputerManagementStorage(bindings.RELAY_DIRECTORY_DATABASE, { forProject: forComputer });
+    const storage = new ComputerManagementStorage(accounts, { forProject: forComputer });
     const control = new ComputerManagementService(storage);
-    const projects = new ComputerManagementStorageDirectory(storage);
     const sessionAccess = new SessionAccessService(
         control,
         new SessionAccessSigner(bindings.MORTY_SESSION_SIGNING_SECRET),
@@ -36,10 +36,8 @@ export function createComputerRelayServices(
         computerId,
         store,
         services: {
-            identities: new ComputerIdentityService(computerId, store, projects),
-            projectAuthentication: control,
+            identities: new ComputerIdentityService(computerId, store, control),
             computerAccounts: control,
-            projects,
         },
     });
     const context = { services: { pairings, runtime } };

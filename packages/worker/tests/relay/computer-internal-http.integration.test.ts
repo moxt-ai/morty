@@ -34,9 +34,9 @@ it("Given an owned computer, When its internal HTTP boundary reads authority and
 
     const audit = {
         action: "computer.internal-http.verified",
-        actorId: owner.userId,
+        actorId: owner.computerId,
         actorKind: "application",
-        actorRef: owner.userId,
+        actorRef: owner.computerId,
         auditId: "internal-http-audit",
         computerId: owner.computerId,
         detailsJson: "{}",
@@ -56,14 +56,6 @@ it("Given an owned computer, When its internal HTTP boundary reads authority and
         request(owner.computerId, "active-generation"),
         request(owner.computerId, "access-check", { kind: "credential", credentialId: "unknown-credential" }),
         request(owner.computerId, "audit-events", audit),
-        request(owner.computerId, "registrations"),
-        request(owner.computerId, "revocations", {
-            computerId: owner.computerId,
-            now: Date.now(),
-            actorKind: "application",
-            actorId: owner.userId,
-            auditId: "public-revocation-denied",
-        }),
     ]) {
         const exposed = await ownerRequest(new Request(new URL(new URL(internal.url).pathname, ownerOrigin), internal));
         expect(exposed.status).toBe(404);
@@ -87,9 +79,9 @@ it("Given two owned computers, When an internal request names the wrong object o
     expect(audit.status).toBe(400);
     const foreignAudit = {
         action: "computer.internal-http.denied",
-        actorId: owner.userId,
+        actorId: owner.computerId,
         actorKind: "application",
-        actorRef: owner.userId,
+        actorRef: owner.computerId,
         auditId: "foreign-internal-http-audit",
         computerId: other.computerId,
         detailsJson: "{}",

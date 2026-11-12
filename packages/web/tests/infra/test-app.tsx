@@ -114,7 +114,6 @@ export async function createTestApp(
         if (page.identity === true) {
             const scope = v.parse(identityScopeSchema, {
                 computerId: current.identity.computerId,
-                userId: current.userId,
             });
             destination.searchParams.set("identity", encodeIdentityScope(scope));
             await saveAccess(
@@ -135,7 +134,6 @@ export async function createTestApp(
         // the anonymous session restores it on load.
         const scope = v.parse(identityScopeSchema, {
             computerId: current.identity.computerId,
-            userId: current.userId,
         });
         destination.searchParams.set("identity", encodeIdentityScope(scope));
         await saveAccess(

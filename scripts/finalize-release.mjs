@@ -77,9 +77,16 @@ const existingTag = refs.find((ref) => ref.ref === `refs/tags/${tag}`);
 if (existingTag && (existingTag.object.type !== "commit" || existingTag.object.sha !== release.revision)) {
     throw new Error("The release tag already identifies different source");
 }
-// The exact tag is known; list pagination avoids interpreting API failures as absence.
-const pages = JSON.parse(gh("api", "--paginate", "--slurp", `repos/${repository}/releases?per_page=100`));
-const existing = pages.flat().find((item) => item.tag_name === tag);
+// Filter each page in gh so release history cannot overflow the child-process buffer.
+// Listing still finds drafts and propagates API failures instead of treating them as absence.
+const matchingRelease = gh(
+    "api",
+    "--paginate",
+    "--jq",
+    `.[] | select(.tag_name == ${JSON.stringify(tag)})`,
+    `repos/${repository}/releases?per_page=100`,
+).trim();
+const existing = matchingRelease ? JSON.parse(matchingRelease) : undefined;
 if (existing && !existingTag) {
     if (existing.target_commitish !== release.revision) {
         throw new Error("Draft release source mismatch");

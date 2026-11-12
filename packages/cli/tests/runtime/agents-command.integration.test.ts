@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { mkdtemp, readdir, readFile, rm, stat, writeFile } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -59,20 +59,6 @@ async function computerWithoutAgents(): Promise<{ readonly environment: NodeJS.P
 }
 
 describe("Morty agents command", () => {
-    it("Given an obsolete default-workspace environment override, When the user discovers Agents, Then the CLI uses the stable workspace outside its data container and leaves the override path untouched", async () => {
-        const { environment, root } = await computerWithoutAgents();
-        const obsoleteWorkspace = join(root, "obsolete-workspace");
-        const result = await runCli(
-            ["agents", "--json"],
-            { ...environment, MORTY_DEFAULT_WORKSPACE: obsoleteWorkspace },
-            AbortSignal.timeout(60_000),
-        );
-        expect(result.code, result.stderr).toBe(0);
-        expect(JSON.parse(result.stdout)).toMatchObject({ available: [] });
-        await expect(readdir(join(root, "state", "workspace"))).resolves.toEqual([]);
-        await expect(stat(obsoleteWorkspace)).rejects.toMatchObject({ code: "ENOENT" });
-    });
-
     it("Given a computer where Pi is not installed, When setup asks for the Agent inventory as a JSON file, Then the file reports Pi's unavailable status and nothing is printed", async () => {
         const { environment, root } = await computerWithoutAgents();
         const outputPath = join(root, "agents.json");

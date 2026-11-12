@@ -56,7 +56,7 @@ test("Given a browser opening a Session, When its device is revoked before the C
         const code = new URL(v.parse(v.object({ url: v.string() }), await shared.json()).url).hash.slice(6);
         const redeemed = await request("identity/transfers/redeem", owner.token, { code, device: "Revoked browser" });
         expect(redeemed.status).toBe(200);
-        const browser = v.parse(v.object({ token: v.string() }), await redeemed.json()).token;
+        const browser = v.parse(v.object({ computerToken: v.string() }), await redeemed.json()).computerToken;
         const { devices } = v.parse(
             v.object({ devices: v.array(v.object({ id: v.string(), label: v.nullable(v.string()) })) }),
             await (await request(`${project}/identity/devices`, owner.token)).json(),
@@ -113,7 +113,7 @@ test("Given a device with an open Session, When its owner disconnects it while t
         });
         const code = new URL(v.parse(v.object({ url: v.string() }), await shared.json()).url).hash.slice(6);
         const redeemed = await request("identity/transfers/redeem", owner.token, { code, device: "Ended browser" });
-        const browser = v.parse(v.object({ token: v.string() }), await redeemed.json()).token;
+        const browser = v.parse(v.object({ computerToken: v.string() }), await redeemed.json()).computerToken;
         const { devices } = v.parse(
             v.object({ devices: v.array(v.object({ id: v.string() })) }),
             await (await request(`${project}/identity/devices`, owner.token)).json(),
@@ -191,7 +191,7 @@ async function sharedComputer(cloud: Awaited<ReturnType<typeof createIdentityFix
         });
         const code = new URL(v.parse(v.object({ url: v.string() }), await shared.json()).url).hash.slice(6);
         const redeemed = await request("identity/transfers/redeem", owner.token, { code, device: label });
-        const token = v.parse(v.object({ token: v.string() }), await redeemed.json()).token;
+        const token = v.parse(v.object({ computerToken: v.string() }), await redeemed.json()).computerToken;
         const { devices } = v.parse(
             v.object({ devices: v.array(v.object({ id: v.string(), label: v.nullable(v.string()) })) }),
             await (await request(`${project}/identity/devices`, owner.token)).json(),

@@ -172,9 +172,9 @@ test("Given one browser opened two setup links in two tabs, When the user ends c
     const firstTab = runtime.page;
     await firstTab.goto(first.url);
     await expect(firstTab.getByRole("textbox", { name: "Message" })).toBeEnabled();
-    // Running setup again hands off with a new link for the same user and Computer.
+    // Running setup again hands off with a new link for the same Computer.
     const second = await runtime.followInstructions("/setup.md", "setup-reconnect-session");
-    expect(second.identity.userId).toBe(first.identity.userId);
+    expect(second.identity.computerId).toBe(first.identity.computerId);
     const secondTab = await firstTab.context().newPage();
     await secondTab.goto(second.url);
     await expect(secondTab.getByRole("textbox", { name: "Message" })).toBeEnabled();

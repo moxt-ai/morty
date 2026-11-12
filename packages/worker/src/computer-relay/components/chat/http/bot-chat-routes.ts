@@ -72,7 +72,7 @@ type AuthorizedChatEnvironment = ChatHttpEnvironment & {
 async function authorizeChat(context: Context<AuthorizedChatEnvironment>, signal: AbortSignal) {
     const computerId = v.parse(relayIdentifier, context.req.param("computerId"));
     const requester = {
-        userId: context.get("session").userId,
+        computerId: context.get("session").computerId,
         accessExpiresAt: context.get("accessExpiresAt"),
         holder: context.get("accessHolder"),
     };

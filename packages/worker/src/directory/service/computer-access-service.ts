@@ -1,31 +1,27 @@
 import type { SessionAccessGrant, SessionAccessHolder } from "@morty-build/client/protocol";
-import { ProjectAccessContext, ProjectAuthenticationError } from "../../contracts/relay/project-authentication.ts";
-import { ComputerScope } from "../../contracts/relay/session.ts";
+import { type ComputerAccess, ProjectAuthenticationError } from "../../contracts/relay/project-authentication.ts";
 import type { ComputerManagementStorage } from "../storage/computer-management-storage.ts";
 
 /** Rechecks account lifecycle and session revocation at the execution boundary, including live connections. */
-export class BackendProjectAccess {
+export class ComputerAccessService {
     readonly storage: ComputerManagementStorage;
     constructor(storage: ComputerManagementStorage) {
         this.storage = storage;
     }
 
-    readonly authorize = async (computerId: string, signal: AbortSignal): Promise<ProjectAccessContext> => {
+    readonly authorize = async (computerId: string, signal: AbortSignal): Promise<ComputerAccess> => {
         const project = await this.storage.readActiveComputerScope(computerId, signal);
         if (project === null) {
             throw new ProjectAuthenticationError("project_access_denied", "The computer is unavailable");
         }
-        return new ProjectAccessContext(new ComputerScope(project.computer_id), {
-            kind: "application",
-            actorId: project.user_id,
-        });
+        return { computerId: project.computer_id };
     };
 
     readonly authorizeSession = async (
         computerId: string,
         grant: SessionAccessGrant,
         signal: AbortSignal,
-    ): Promise<ProjectAccessContext> => {
+    ): Promise<ComputerAccess> => {
         const [access, generation] = await Promise.all([
             this.authorize(computerId, signal),
             this.currentSessionGeneration(computerId, grant.holder, signal),
@@ -49,16 +45,13 @@ export class BackendProjectAccess {
         return holds ? generation : null;
     };
 
-    readonly grants = async (computerId: string, signal: AbortSignal): Promise<boolean> =>
-        await this.#granted(() => this.authorize(computerId, signal));
-
     readonly grantsSessionCredential = async (
         computerId: string,
         grant: SessionAccessGrant,
         signal: AbortSignal,
     ): Promise<boolean> => await this.#granted(() => this.authorizeSession(computerId, grant, signal));
 
-    readonly #granted = async (authorize: () => Promise<ProjectAccessContext>): Promise<boolean> => {
+    readonly #granted = async (authorize: () => Promise<ComputerAccess>): Promise<boolean> => {
         try {
             await authorize();
             return true;

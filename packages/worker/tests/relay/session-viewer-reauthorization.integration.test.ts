@@ -3,6 +3,8 @@ import { env } from "cloudflare:workers";
 import {
     COMPUTER_HEARTBEAT_ACK_MESSAGE,
     COMPUTER_HEARTBEAT_MESSAGE,
+    COMPUTER_SUCCESSOR_CREDENTIAL_HEADER,
+    computerCredentialSuccessor,
     MORTY_API_PREFIX,
 } from "@morty-build/client/protocol";
 import { afterAll, afterEach, beforeEach, expect, it, onTestFinished, vi } from "vitest";
@@ -10,9 +12,7 @@ import { createTestMortyRelayApp } from "../../../relay-test-support/src/app.ts"
 import { IdentityStorage } from "../../src/computer-relay/components/management/storage/identity-storage.ts";
 import { DurableObjectDatabase } from "../../src/computer-relay/infra/durable-object-database.ts";
 import { RelayAuthenticationConfiguration } from "../../src/contracts/relay/computer-management.ts";
-import { readComputerOwner } from "../../src/worker/composition/account-provisioning.ts";
-import { createOwner, issueSession, ownerRequest } from "./owner-fixture.ts";
-import { registerComputerFixture } from "./registered-computer.ts";
+import { createOwner, issueSession, ownerRequest, pairComputer } from "./owner-fixture.ts";
 
 const origin = `https://relay.test${MORTY_API_PREFIX}`;
 
@@ -65,10 +65,15 @@ async function openSessionView(_slug: string) {
     const owner = await createOwner();
     const { computerId } = owner;
     const sessionId = "viewer-check-session";
-    await registerComputerFixture(computerId);
-    const daemonResponse = await env.COMPUTER_RELAY.getByName(computerId).fetch(
-        `https://computer-relay.internal/computers/${computerId}/daemon`,
-        { headers: { Upgrade: "websocket" } },
+    const credential = await pairComputer(computerId);
+    const daemonResponse = await ownerRequest(
+        new Request(`${origin}/v1/computers/connect`, {
+            headers: {
+                Upgrade: "websocket",
+                authorization: `Bearer ${credential}`,
+                [COMPUTER_SUCCESSOR_CREDENTIAL_HEADER]: computerCredentialSuccessor(credential),
+            },
+        }),
     );
     expect(daemonResponse.status).toBe(101);
     const daemon = daemonResponse.webSocket;
@@ -151,7 +156,7 @@ it("Given a live Session view, When the owner revokes browser access, Then the l
         new Request(`${origin}/computers/${computerId}/identity/revoke-all-access`, {
             method: "POST",
             headers: { authorization: `Bearer ${owner.token}`, "content-type": "application/json" },
-            body: JSON.stringify({ successor: `morty_anon_v1_${"B".repeat(43)}` }),
+            body: JSON.stringify({ successor: `morty_computer_v1_${"B".repeat(43)}` }),
         }),
     );
     expect(revoked.status).toBe(200);
@@ -173,18 +178,14 @@ it("Given a live Session view the revocation push missed, When the Project's Ses
     // The revocation commits, but its push never reaches the view (or reached it before the view opened).
     await runInDurableObject(env.COMPUTER_RELAY.getByName(computerId), async (_instance, state) => {
         const signal = AbortSignal.timeout(10_000);
-        const identities = new IdentityStorage(
-            new DurableObjectDatabase(state.storage),
-            computerId,
-            await readComputerOwner(env, computerId, signal),
-        );
+        const identities = new IdentityStorage(new DurableObjectDatabase(state.storage), computerId);
         const credential = await identities.findCredential(owner.token, Date.now(), signal);
         if (credential === null) {
             throw new Error("Expected the owner credential");
         }
         expect(
             await identities.revokeCredential(
-                { kind: "local", credentialId: credential.credentialId, userId: credential.userId },
+                { kind: "local", credentialId: credential.credentialId },
                 Date.now(),
                 signal,
             ),

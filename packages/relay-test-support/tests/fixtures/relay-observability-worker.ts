@@ -46,11 +46,6 @@ function failure(kind: string): unknown {
 
 // The exported Cloudflare callback is the relay fault-injection boundary.
 export class ComputerRelay extends RelayComputerRelay {
-    override async webSocketClose(socket: WebSocket, code: number, reason: string, wasClean: boolean): Promise<void> {
-        await super.webSocketClose(socket, code, reason, wasClean);
-        console.debug({ event: "test_websocket_close_completed", closeCode: code });
-    }
-
     override async fetch(request: Request): Promise<Response> {
         if (
             request.headers.get("x-test-computer-failure") === "1" &&

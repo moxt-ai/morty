@@ -4,12 +4,12 @@ import { MORTY_API_PREFIX } from "@morty-build/client/protocol";
 import * as v from "valibot";
 import { afterAll, afterEach, beforeEach, expect, it, vi } from "vitest";
 import { createTestMortyRelayApp } from "../../../relay-test-support/src/app.ts";
-import { revokeTestComputer } from "../../../relay-test-support/src/backend-fixture.ts";
 import { ComputerDirectoryStorage } from "../../src/computer-relay/components/management/storage/computer-directory-storage.ts";
 import { DurableObjectDatabase } from "../../src/computer-relay/infra/durable-object-database.ts";
 import { RelayAuthenticationConfiguration } from "../../src/contracts/relay/computer-management.ts";
 import { hashPairingCredential } from "../../src/contracts/relay/pairing.ts";
 import { computerBackend, createOwner, ownerRequest } from "./owner-fixture.ts";
+import { revokeTestComputer } from "./registered-computer.ts";
 
 const origin = `https://relay.test${MORTY_API_PREFIX}`;
 const pairingSchema = v.object({
@@ -115,14 +115,14 @@ it("Given simultaneous retries of one creation, When they commit, Then they shar
     expect((await app.create("no-place")).status).toBe(429);
 });
 
-it("Given a delayed claim, When newer requests have reused expired capacity, Then the claim cannot overbook the Project", async () => {
+it("Given a delayed claim, When newer requests have reused expired capacity, Then the claim cannot overbook the Computer", async () => {
     const app = await computer();
     const pairing = await app.pair("delayed-claim");
     const claimTime = Date.now();
     const codeHash = await hashPairingCredential(pairing.pairingCode);
     vi.setSystemTime(new Date(pairing.expiresAt));
     await app.pair("replacement");
-    // Execute the original command against the real Project database after
+    // Execute the original command against the real Computer database after
     // newer transactions, as can happen when a database request is delayed.
     const claimed = await app.storage(async (storage) =>
         new ComputerDirectoryStorage(app.computerId, new DurableObjectDatabase(storage)).claim(
@@ -162,7 +162,7 @@ it("Given a claim whose audit cannot commit, When the caller retries after recov
     expect(await responseJson(await app.claim(pairing), 200)).toMatchObject(claimed);
 });
 
-it("Given a committed redemption response is lost, When the caller retries after a relay restart, Then the original credential is recovered without changing the registration", async () => {
+it("Given a committed redeem response is lost, When the caller retries after a relay restart, Then the original credential is recovered without changing the registration", async () => {
     const app = await computer();
     const pairing = await app.pair("lost-redeem");
     // Discard the first result before the caller can save its credential.

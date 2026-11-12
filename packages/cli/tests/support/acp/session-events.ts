@@ -1,15 +1,10 @@
 import { setImmediate as yieldToRuntime } from "node:timers/promises";
-import {
-    decodeAcpSessionUpdate,
-    type SessionCapabilities,
-    type SessionConfigOption,
-} from "@morty-build/client/protocol";
+import type { SessionCapabilities, SessionConfigOption } from "@morty-build/client/protocol";
 import { AcpExecutionError } from "../../../src/engine/acp/acp-error.ts";
 import {
     type NativeSessionEvent,
-    type NativeSessionInfoChange,
     type NativeSessionInteractions,
-    withMortyFields,
+    nativeSessionEvent,
 } from "../../../src/engine/acp/adapter/native-session-event.ts";
 import type { AcpAgentDefinition } from "../../../src/engine/acp/agent/agent-definition.ts";
 import type { BackgroundActivity, PromptDelegationStage } from "../../../src/engine/acp/agent/agent-lifecycle.ts";
@@ -23,7 +18,6 @@ import {
     normalizeSessionConfiguration,
     normalizeSessionConfigurationUpdate,
 } from "../../../src/engine/acp/protocol/session-configuration.ts";
-import { truncate } from "../../../src/engine/util/value-utils.ts";
 import type { AgentConnection } from "../agents/agent-connection.ts";
 import { connectControlledAgent } from "../agents/controlled-agent-definition.ts";
 import {
@@ -108,56 +102,16 @@ export class AdapterSessionConnection {
             signal.throwIfAborted();
             const update = externalized.agent;
             for (const eventUpdate of externalized.events) {
-                const payload = decodeAcpSessionUpdate(JSON.stringify(withMortyFields(update, eventUpdate)));
-                let event: NativeSessionEvent;
-                switch (update.sessionUpdate) {
-                    case "available_commands_update":
-                        event = {
-                            kind: "commands",
-                            payload,
-                            commands: update.availableCommands
-                                .slice(0, 500)
-                                .map((command) => ({
-                                    description: truncate(command.description, 500),
-                                    inputHint: truncate(command.input?.hint ?? "", 255),
-                                    name: truncate(command.name, 128),
-                                }))
-                                .filter((command) => command.name.length > 0),
-                        };
-                        break;
-                    case "config_option_update":
-                        this.#applyConfigurationUpdate(update.configOptions);
-                        event = {
-                            kind: "configuration",
-                            payload,
-                            configOptions: this.snapshot().configOptions,
-                        };
-                        break;
-                    case "current_mode_update":
-                        this.#applyModeUpdate(update.currentModeId);
-                        event = { kind: "mode", payload, modeId: update.currentModeId };
-                        break;
-                    case "session_info_update": {
-                        const changes: NativeSessionInfoChange[] = [];
-                        if (Object.hasOwn(update, "title")) {
-                            changes.push({ kind: "title", value: truncate(update.title ?? "", 500) });
-                        }
-                        if (Object.hasOwn(update, "updatedAt")) {
-                            changes.push({ kind: "updated-at", value: truncate(update.updatedAt ?? "", 128) });
-                        }
-                        event = { kind: "info", payload, changes };
-                        break;
-                    }
-                    case "user_message_chunk":
-                    case "agent_message_chunk":
-                    case "agent_thought_chunk":
-                    case "tool_call":
-                    case "tool_call_update":
-                    case "plan":
-                        event = { kind: "content", payload };
-                        break;
-                    default:
-                        event = { kind: "other", payload };
+                let event = nativeSessionEvent(update, eventUpdate);
+                if (update.sessionUpdate === "config_option_update") {
+                    this.#applyConfigurationUpdate(update.configOptions);
+                    event = {
+                        kind: "configuration",
+                        payload: event.payload,
+                        configOptions: this.snapshot().configOptions,
+                    };
+                } else if (update.sessionUpdate === "current_mode_update") {
+                    this.#applyModeUpdate(update.currentModeId);
                 }
                 await options.onEvent(event);
             }

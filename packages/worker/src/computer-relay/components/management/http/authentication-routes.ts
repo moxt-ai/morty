@@ -7,6 +7,7 @@ import {
     localCredentialToken,
 } from "../../../../contracts/authentication/credential.ts";
 import { clientLocationHeader, decodeClientLocation } from "../../../../contracts/client-location.ts";
+import { relayIdentifier } from "../../../../contracts/computer-management.ts";
 import { ManagementError } from "../../../../contracts/management-error.ts";
 import { bodyParser } from "../../../../http/body-parser.ts";
 import { json } from "../../../../http/json.ts";
@@ -44,8 +45,40 @@ const revokeAllAccessInput = v.pipe(
     }),
     v.readonly(),
 );
+const computerLinkInput = v.pipe(v.strictObject({ computerId: relayIdentifier }), v.readonly());
 export function createAuthenticationRoutes() {
     return new Hono<ManagementHttpEnvironment>()
+        .post(
+            "/identity/link",
+            bodyParser<ManagementHttpEnvironment, typeof computerLinkInput>(computerLinkInput),
+            async (context) => {
+                using deadline = new RequestDeadline(context.req.raw.signal, 15_000);
+                const result = await context.var.application.services.authentication.linkComputer(
+                    context.req.valid("json").computerId,
+                    context.get("bearerToken"),
+                    deadline.signal,
+                );
+                switch (result.kind) {
+                    case "linked":
+                        return json({ computerId: result.computerId }, 200, {
+                            "Cache-Control": "no-store",
+                        });
+                    case "unauthenticated":
+                    case "revoked":
+                        throw credentialRejected(result.kind);
+                    case "mismatch":
+                        throw new ManagementError(
+                            "IDENTITY_CONFLICT",
+                            "The identity does not match this computer.",
+                            403,
+                        );
+                    default: {
+                        const exhaustive: never = result;
+                        return exhaustive;
+                    }
+                }
+            },
+        )
         .all("/session", async (context) => {
             const request = context.req.raw;
             if (request.method !== "GET") {

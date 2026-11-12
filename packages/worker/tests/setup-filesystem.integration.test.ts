@@ -85,23 +85,22 @@ type SavedReplacement =
     | {
           readonly kind: "revoked";
           readonly previous:
-              | { readonly kind: "pending"; readonly computer_id: string; readonly user_token: string }
+              | { readonly kind: "pending"; readonly computer_id: string; readonly computer_token: string }
               | { readonly kind: "retired"; readonly computer_id: string };
       };
 
 /** The saved setup state of a ready identity, in the representation setup writes. */
 function savedSetupState(
     origin: string,
-    identity: { readonly userId: string; readonly token: string; readonly computerId: string },
+    identity: { readonly token: string; readonly computerId: string },
     replacement: SavedReplacement = { kind: "unchanged" },
 ) {
     return JSON.stringify({
-        version: 3,
+        version: 4,
         base_url: origin,
         identity: {
             kind: "ready",
-            user_id: identity.userId,
-            user_token: identity.token,
+            computer_token: identity.token,
             computer_id: identity.computerId,
             pairing: { kind: "none" },
             replacement,
@@ -116,7 +115,7 @@ async function savedIdentity(state: string) {
             identity: v.object({
                 kind: v.literal("ready"),
                 computer_id: v.string(),
-                user_token: v.string(),
+                computer_token: v.string(),
                 replacement: v.unknown(),
             }),
         }),
@@ -143,7 +142,13 @@ test.each(["fresh", "unknown", "revoked"] as const)(
                     replacementState === "unknown"
                         ? previous
                         : v.parse(
-                              v.object({ userId: v.string(), computerId: v.string(), token: v.string() }),
+                              v.pipe(
+                                  v.object({ computerId: v.string(), computerToken: v.string() }),
+                                  v.transform(({ computerId, computerToken }) => ({
+                                      computerId,
+                                      token: computerToken,
+                                  })),
+                              ),
                               await (
                                   await worker.fetch(
                                       new Request(
@@ -362,7 +367,7 @@ process.exitCode = await runSetup(process.argv.slice(2), {
         const config: unknown = JSON.parse(await readFile(configPath, "utf8"));
         expect(config).toMatchObject({
             base_url: fixture.origin,
-            identity: { kind: "ready", user_token: expect.stringMatching(/^morty_anon_v1_/u) },
+            identity: { kind: "ready", computer_token: expect.stringMatching(/^morty_computer_v1_/u) },
         });
         if (process.platform === "win32") {
             const execute = promisify(execFile);
@@ -994,10 +999,10 @@ test("Given a shared Computer whose local pairing was removed, When setup has no
             );
         const redeemed = await redeem();
         expect(redeemed.status).toBe(200);
-        const browser = v.parse(v.object({ token: v.string() }), await redeemed.json());
+        const browser = v.parse(v.object({ computerToken: v.string() }), await redeemed.json());
         const session = async () =>
             await fetch(`${paths.origin}/morty/api/computers/${config.computer_id}/session`, {
-                headers: { authorization: `Bearer ${browser.token}` },
+                headers: { authorization: `Bearer ${browser.computerToken}` },
                 signal: AbortSignal.timeout(10000),
             });
         await runtime.forgetConnections();
@@ -1024,7 +1029,7 @@ test("Given a shared Computer whose local pairing was removed, When setup has no
         );
         expect(approved.events.at(-1)).toMatchObject({ status: "ready", project: "replaced" });
         const retired = await fetch(`${paths.origin}/morty/api/computers/${config.computer_id}/session`, {
-            headers: { authorization: `Bearer ${config.user_token}` },
+            headers: { authorization: `Bearer ${config.computer_token}` },
             signal: AbortSignal.timeout(10000),
         });
         expect(retired.status).toBe(401);
@@ -1033,8 +1038,8 @@ test("Given a shared Computer whose local pairing was removed, When setup has no
         const current = await savedIdentity(paths.state);
         expect(current.computer_id).not.toBe(config.computer_id);
         const diagnostics = approved.events.filter((event) => event["status"] !== "ready");
-        expect(JSON.stringify(diagnostics)).not.toContain(config.user_token);
-        expect(JSON.stringify(diagnostics)).not.toContain(browser.token);
+        expect(JSON.stringify(diagnostics)).not.toContain(config.computer_token);
+        expect(JSON.stringify(diagnostics)).not.toContain(browser.computerToken);
         expect(JSON.stringify(diagnostics)).not.toContain(url);
 
         await runtime.forgetConnections();
@@ -1136,7 +1141,11 @@ test.each(["replacement_access_revoked", "project_replaced"])(
                 expect(saved.computer_id).not.toBe(config.computer_id);
                 expect(saved.replacement).toEqual({
                     kind: "revoked",
-                    previous: { kind: "pending", computer_id: config.computer_id, user_token: config.user_token },
+                    previous: {
+                        kind: "pending",
+                        computer_id: config.computer_id,
+                        computer_token: config.computer_token,
+                    },
                 });
             }
 
@@ -1213,7 +1222,7 @@ test("Given two shared links and redeemed access, When the local owner revokes a
         for (const link of links) {
             const response = await redeem(link);
             expect(response.status).toBe(200);
-            tokens.push(v.parse(v.object({ token: v.string() }), await response.json()).token);
+            tokens.push(v.parse(v.object({ computerToken: v.string() }), await response.json()).computerToken);
         }
         const remote = v.parse(v.string(), tokens[0]);
         const recovery = await request(owner.computerId, "/identity/recovery-token", owner.token, "POST");
@@ -1225,7 +1234,7 @@ test("Given two shared links and redeemed access, When the local owner revokes a
                 {
                     method: "POST",
                     headers: { authorization: `Bearer ${token}`, "content-type": "application/json" },
-                    body: JSON.stringify({ successor: `morty_anon_v1_${"A".repeat(43)}` }),
+                    body: JSON.stringify({ successor: `morty_computer_v1_${"A".repeat(43)}` }),
                     signal,
                 },
             );
@@ -1255,7 +1264,7 @@ test("Given two shared links and redeemed access, When the local owner revokes a
             }),
         ).toBe(0);
         expect(events.at(-1)).toMatchObject({ status: "access_revoked", computerId: owner.computerId });
-        const successor = (await savedIdentity(configurationDirectory)).user_token;
+        const successor = (await savedIdentity(configurationDirectory)).computer_token;
         expect(JSON.stringify(events)).not.toContain(owner.token);
         expect(JSON.stringify(events)).not.toContain(successor);
         for (const link of links) {
@@ -1283,7 +1292,7 @@ test("Given two shared links and redeemed access, When the local owner revokes a
                 emit: () => undefined,
             }),
         ).toBe(0);
-        const replacedAgain = (await savedIdentity(configurationDirectory)).user_token;
+        const replacedAgain = (await savedIdentity(configurationDirectory)).computer_token;
         expect((await request(owner.computerId, "/session", successor)).status).toBe(401);
         expect((await redeem(await share(owner.computerId, replacedAgain))).status).toBe(200);
     } finally {
@@ -1310,7 +1319,10 @@ test("Given setup replaced the Project but stopped before ending the previous id
         const replaced = await request(previous.computerId, "/management/computer/replacement", previous.token, "POST");
         expect(replaced.status).toBe(201);
         const current = v.parse(
-            v.object({ userId: v.string(), computerId: v.string(), token: v.string() }),
+            v.pipe(
+                v.object({ computerId: v.string(), computerToken: v.string() }),
+                v.transform(({ computerId, computerToken }) => ({ computerId, token: computerToken })),
+            ),
             await replaced.json(),
         );
         // What setup saved before it stopped: the successor's identity, with the previous one still to end.
@@ -1318,7 +1330,7 @@ test("Given setup replaced the Project but stopped before ending the previous id
             join(configurationDirectory, "config.json"),
             savedSetupState(fixture.origin, current, {
                 kind: "revoked",
-                previous: { kind: "pending", computer_id: previous.computerId, user_token: previous.token },
+                previous: { kind: "pending", computer_id: previous.computerId, computer_token: previous.token },
             }),
             { mode: 0o600 },
         );
@@ -1342,7 +1354,7 @@ test("Given setup replaced the Project but stopped before ending the previous id
                 })
             ).status,
         ).toBe(401);
-        const successor = (await savedIdentity(configurationDirectory)).user_token;
+        const successor = (await savedIdentity(configurationDirectory)).computer_token;
         expect((await request(current.computerId, "/session", current.token)).status).toBe(401);
         expect((await request(current.computerId, "/session", successor)).status).toBe(200);
         expect(JSON.parse(await readFile(join(configurationDirectory, "config.json"), "utf8"))).toEqual(
@@ -1371,7 +1383,7 @@ test("Given the reply to revoking all access was lost after the Worker replaced 
     const signal = AbortSignal.timeout(30000);
     try {
         const owner = await fixture.createAnonymousUser();
-        const successor = `morty_anon_v1_${Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("base64url")}`;
+        const successor = `morty_computer_v1_${Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("base64url")}`;
         // What setup saved before the request whose reply was lost.
         const saved = JSON.parse(savedSetupState(fixture.origin, owner));
         saved.identity.credential_rotation = { successor_token: successor };

@@ -1,5 +1,5 @@
 import { NativeSessionMap } from "@morty-build/client/native-session";
-import { encodeSessionWireEnvelope, type SessionWireEnvelope } from "@morty-build/client/protocol";
+import type { SessionWireEnvelope } from "@morty-build/client/protocol";
 import type { RelayPeers } from "./computer-relay-actor.ts";
 
 export class SessionLiveEventRelay {
@@ -15,30 +15,6 @@ export class SessionLiveEventRelay {
             const events = eventsBySession.get(event.target) ?? [];
             events.push(event);
             eventsBySession.set(event.target, events);
-        }
-        let computerMessage: string | undefined;
-        const sessionMessages = new NativeSessionMap<string>();
-        for (const host of this.#peers.hosts()) {
-            const sessionFilter = host.sessionFilter;
-            let message: string;
-            if (sessionFilter === undefined) {
-                computerMessage ??= encodeSessionWireEnvelope(envelope);
-                message = computerMessage;
-            } else {
-                const events = eventsBySession.get(sessionFilter);
-                if (events === undefined) {
-                    continue;
-                }
-                const encoded =
-                    sessionMessages.get(sessionFilter) ?? encodeSessionWireEnvelope({ ...envelope, events });
-                sessionMessages.set(sessionFilter, encoded);
-                message = encoded;
-            }
-            try {
-                host.send(message);
-            } catch {
-                host.close(1013, "Computer channel backpressure");
-            }
         }
         for (const viewer of this.#peers.viewers()) {
             if (viewer.expiresAt <= Date.now()) {

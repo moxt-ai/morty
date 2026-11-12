@@ -30,7 +30,7 @@ export async function createChatWorkerEnvironment(
         await cloud.changeAppOrigin(origin);
     }
     const createApplication = async () => {
-        const identityResponse = await cloud.dispatchFetch(`${origin}/morty/api/identity/anonymous-users`, {
+        const identityResponse = await cloud.dispatchFetch(`${origin}/morty/api/computers`, {
             method: "POST",
             headers: { "content-type": "application/json" },
             body: JSON.stringify({
@@ -40,14 +40,14 @@ export async function createChatWorkerEnvironment(
         if (identityResponse.status !== 201) {
             throw new Error(`Could not create an anonymous Morty identity: ${identityResponse.status}`);
         }
-        const identity = v.parse(
+        const issued = v.parse(
             v.object({
-                token: v.string(),
-                userId: v.string(),
+                computerToken: v.string(),
                 computerId: v.string(),
             }),
             await identityResponse.json(),
         );
+        const identity = { computerId: issued.computerId, token: issued.computerToken };
         const request = async (path: string, body?: object, method = body === undefined ? "GET" : "POST") =>
             await cloud.dispatchFetch(`${origin}/morty/api/${path}`, {
                 method,
@@ -69,11 +69,28 @@ export async function createChatWorkerEnvironment(
             if (setup.status !== 202) {
                 throw new Error(`Could not prepare the test Computer: ${setup.status} ${await setup.text()}`);
             }
+            // The second client reaches the same Worker directly; only the browser uses the failing network.
             const sessionClient = async (
                 target: { readonly harness: string; readonly sessionId: string },
                 signal: AbortSignal,
             ) => {
-                const access = await runtime.api.access(signal, target);
+                const response = await cloud.dispatchFetch(
+                    `${cloud.directOrigin}/morty/api/chat/computers/${runtime.computerId}/session-access`,
+                    {
+                        method: "POST",
+                        signal,
+                        headers: {
+                            authorization: `Bearer ${identity.token}`,
+                            "content-type": "application/json",
+                        },
+                        body: JSON.stringify(target),
+                    },
+                );
+                if (!response.ok) {
+                    throw new Error(`Could not authorize the second client: ${response.status}`);
+                }
+                const access = v.parse(v.object({ credential: v.string() }), await response.json());
+                signal.throwIfAborted();
                 return new MortyClient({
                     endpoint: cloud.directOrigin,
                     computerId: runtime.computerId,
@@ -88,7 +105,7 @@ export async function createChatWorkerEnvironment(
             return {
                 failure: runtime.failure,
                 continueReply: runtime.continueReply,
-                /** Closes a Session through the Relay, the way another Morty client of this Computer would. */
+                /** Closes a Session through the real daemon protocol while the browser observes its production lifecycle events. */
                 closeSession: async (sessionId: string): Promise<void> => {
                     const response = await cloud.dispatchFetch(
                         `${origin}/__test/computers/${runtime.computerId}/harnesses/${agents[0]?.harness ?? "codex"}/sessions/${encodeURIComponent(sessionId)}/close`,
@@ -206,7 +223,6 @@ export async function createChatWorkerEnvironment(
             },
             origin,
             transport,
-            userId: identity.userId,
             close: () => transport.dispose(),
         };
     };

@@ -1,6 +1,7 @@
 import type { SessionAccessHolder } from "@morty-build/client/protocol";
 import * as v from "valibot";
 import type { CloudBindings } from "../../contracts/cloud-bindings.ts";
+import type { ComputerAccounts } from "../../contracts/computer-accounts.ts";
 import { computerBootstrap } from "../../contracts/computer-bootstrap.ts";
 import { relayIdentifier } from "../../contracts/computer-management.ts";
 import { ManagementError } from "../../contracts/management-error.ts";
@@ -10,7 +11,6 @@ import { holdsAccess } from "../components/management/service/authentication-ser
 import type { IdentityOperations } from "../components/management/service/identity-operations.ts";
 import { IdentityStorage } from "../components/management/storage/identity-storage.ts";
 import type { DurableObjectDatabase } from "../infra/durable-object-database.ts";
-import { readComputerOwner } from "./account-provisioning.ts";
 import { type ApplicationContext, createApplicationDependencies } from "./application-context.ts";
 
 /**
@@ -23,6 +23,7 @@ export class ComputerServices {
     readonly #endAccess: IdentityOperations["commitAccessEnd"];
     readonly #runtime: (computerId: string) => ComputerBackendService;
     readonly #database: () => DurableObjectDatabase;
+    readonly #readAccount: ComputerAccounts["readActiveComputerScope"];
     /** Commits access changes with their connection checks inside the owning object. */
     constructor(
         storage: DurableObjectStorage,
@@ -30,29 +31,29 @@ export class ComputerServices {
         endAccess: IdentityOperations["commitAccessEnd"],
         runtime: (computerId: string) => ComputerBackendService,
         database: () => DurableObjectDatabase,
+        readAccount: ComputerAccounts["readActiveComputerScope"],
     ) {
         this.#storage = storage;
         this.#owns = owns;
         this.#endAccess = endAccess;
         this.#runtime = runtime;
         this.#database = database;
+        this.#readAccount = readAccount;
     }
 
     /** Whether `holder`'s access to this computer holds now; the Relay honors a Session credential only while it does. */
     readonly holdsAccess = async (
         computerId: string,
         holder: SessionAccessHolder,
-        env: CloudBindings,
         signal: AbortSignal,
     ): Promise<boolean> => {
         if (!this.#owns(computerId)) {
             throw new Error("Durable Object computer identity does not match the request.");
         }
-        return await holdsAccess(
-            new IdentityStorage(this.#database(), computerId, await readComputerOwner(env, computerId, signal)),
-            holder,
-            signal,
-        );
+        if ((await this.#readAccount(computerId, signal)) === null) {
+            return false;
+        }
+        return await holdsAccess(new IdentityStorage(this.#database(), computerId), holder, signal);
     };
 
     readonly #sessionOperations = new ManagedSessionOperations();
@@ -77,14 +78,12 @@ export class ComputerServices {
     readonly bootstrap = async (input: unknown, env: CloudBindings, signal: AbortSignal) => {
         signal.throwIfAborted();
         const parsed = v.parse(computerBootstrap, input);
+        if ((await this.#readAccount(parsed.computer.computerId, signal)) === null) {
+            throw new ManagementError("PROJECT_NOT_FOUND", "The Morty computer does not exist.", 404);
+        }
         await this.#bindComputer(parsed.computer.computerId);
         const dependencies = await this.#application(parsed.computer.computerId, env, signal);
-        return await dependencies.services.management.initializeAnonymousUser(
-            parsed.userId,
-            parsed.computer,
-            signal,
-            parsed.origin,
-        );
+        return await dependencies.services.management.initializeComputer(parsed.computer, signal, parsed.origin);
     };
 
     readonly #credentialKey = async (signal: AbortSignal): Promise<Uint8Array> => {
@@ -132,12 +131,14 @@ export class ComputerServices {
         env: CloudBindings,
         signal: AbortSignal,
     ): Promise<ApplicationContext> => {
-        const ownerUserId = await readComputerOwner(env, computerId, signal);
+        if ((await this.#readAccount(computerId, signal)) === null) {
+            throw new ManagementError("PROJECT_NOT_FOUND", "The Morty computer does not exist.", 404);
+        }
         return createApplicationDependencies({
             bindings: env,
             computer: this.#runtime(computerId),
-            identity: { computerId, ownerUserId },
-            identities: new IdentityStorage(this.#database(), computerId, ownerUserId),
+            identity: { computerId },
+            identities: new IdentityStorage(this.#database(), computerId),
             sessionOperations: this.#sessionOperations,
             identityOperations: { commitAccessEnd: this.#endAccess, credentialKey: this.#credentialKey },
         });

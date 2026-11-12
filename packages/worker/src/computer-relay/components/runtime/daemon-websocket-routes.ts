@@ -86,7 +86,7 @@ export class DaemonWebSocketRoutes {
         }
     }
 
-    /** Closes the host connections and live Session views whose credential no longer authorizes them. */
+    /** Closes live Session views whose credential no longer authorizes them. */
     async reauthorizeConnections(): Promise<void> {
         await this.withOperationSignal((signal) => this.#dependencies.services.runtime.reauthorizeConnections(signal));
     }

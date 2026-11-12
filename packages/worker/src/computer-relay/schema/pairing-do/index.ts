@@ -7,4 +7,3 @@ export {
     daemonCredential,
     retiredDaemonCredential,
 } from "./computer-pairing.ts";
-export { sessionAccessRevocation } from "./session-access-revocation.ts";

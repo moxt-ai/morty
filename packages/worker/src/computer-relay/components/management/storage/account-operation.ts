@@ -1,6 +1,6 @@
-import { DatabaseError } from "../../infra/sql-database.ts";
+import { DatabaseError } from "../../../../infra/sql-database.ts";
 
-export async function waitForD1<Value>(operation: () => Promise<Value>, signal: AbortSignal): Promise<Value> {
+export async function waitForAccount<Value>(operation: () => Promise<Value>, signal: AbortSignal): Promise<Value> {
     signal.throwIfAborted();
     const timeout = new AbortController();
     const timer = setTimeout(() => timeout.abort(), 15_000);

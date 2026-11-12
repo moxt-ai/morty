@@ -17,6 +17,7 @@ import { requestTimeoutMiddleware } from "../middleware/request-timeout-middlewa
 import { ComputerBackendService } from "./components/computer/service/computer-backend-service.ts";
 import { ComputerInternalService } from "./components/management/service/computer-internal-service.ts";
 import type { ComputerManagementStore } from "./components/management/storage/computer-management-store.ts";
+import { DurableComputerAccount } from "./components/management/storage/durable-computer-account.ts";
 import { SqliteComputerManagementStore } from "./components/management/storage/sqlite-computer-management-store.ts";
 import { DaemonWebSocketRoutes } from "./components/runtime/daemon-websocket-routes.ts";
 import { SessionAccessSigner } from "./components/runtime/entity/session-access-credential.ts";
@@ -44,6 +45,7 @@ type ComputerHttpEnvironment = ComputerRouteHttpEnvironment &
  */
 export class ComputerRelay extends DurableObject<ConfiguredRelayBindings> {
     #store: Store | null = null;
+    readonly #account = new DurableComputerAccount(this.ctx.storage);
 
     readonly #browserServices = new ComputerServices(
         this.ctx.storage,
@@ -51,6 +53,7 @@ export class ComputerRelay extends DurableObject<ConfiguredRelayBindings> {
         (change) => this.#endAccess(change),
         (computerId) => this.#backendServices(computerId),
         () => this.#computerDatabase,
+        (computerId, signal) => this.#account.readActiveComputerScope(computerId, signal),
     );
 
     readonly #uploads = new WebSocketUploadBudget();
@@ -94,7 +97,7 @@ export class ComputerRelay extends DurableObject<ConfiguredRelayBindings> {
             if (store === null) {
                 throw new ComputerManagementError("computer_id_mismatch", "The computer is unavailable", 421);
             }
-            context.set("computerInternal", new ComputerInternalService(computerId, store));
+            context.set("computerInternal", new ComputerInternalService(computerId, store, this.#account));
             await next();
         };
         return new Hono<ComputerHttpEnvironment>()
@@ -139,8 +142,9 @@ export class ComputerRelay extends DurableObject<ConfiguredRelayBindings> {
     }
 
     #createConnections() {
-        const context = createRelayDurableObjectContext(this.ctx, this.env, {
+        const context = createRelayDurableObjectContext(this.ctx, {
             database: this.#computerDatabase,
+            accounts: this.#account,
             storeFor: (computerId) => this.#operate(computerId),
         });
         return {
@@ -175,7 +179,7 @@ export class ComputerRelay extends DurableObject<ConfiguredRelayBindings> {
         }
         if (this.#store === null) {
             this.#store = new SqliteComputerManagementStore(computerId, this.#computerDatabase, (holder, signal) =>
-                this.#browserServices.holdsAccess(computerId, holder, this.env, signal),
+                this.#browserServices.holdsAccess(computerId, holder, signal),
             );
         }
         return this.#store;
@@ -195,7 +199,7 @@ export class ComputerRelay extends DurableObject<ConfiguredRelayBindings> {
 
     /**
      * Commits an identity change that may end access to the computer, and with it the connection check that closes the
-     * live views and host connections the change no longer authorizes. Requests read the identities, so the committed
+     * live views the change no longer authorizes. Requests read the identities, so the committed
      * change is already in force; the check only ends the open connections, and the alarm retries it until it runs.
      */
     readonly #endAccess = async (change: () => Promise<boolean>): Promise<boolean> =>
@@ -222,6 +226,7 @@ export class ComputerRelay extends DurableObject<ConfiguredRelayBindings> {
             computerId,
             store,
             this.#connectionsForComputer.context.services.runtime,
+            this.#account,
         );
         return this.#servicesCache;
     }
@@ -239,17 +244,14 @@ export class ComputerRelay extends DurableObject<ConfiguredRelayBindings> {
 
     /**
      * Sets the alarm for the earliest open connection check: a viewer's expiry, or the next re-authorization of the
-     * hosts and viewers. A pending check that is earlier is kept, so new connections never postpone it.
+     * viewers. A pending check that is earlier is kept, so new connections never postpone it.
      */
     readonly #scheduleConnectionChecks = async (): Promise<void> => {
         const viewers = this.#connectionsForComputer.context.gateways.peers
             .viewers()
             .filter(({ socket }) => socket.isOpen());
         const checks = viewers.map(({ expiresAt }) => expiresAt);
-        if (
-            viewers.length > 0 ||
-            this.#connectionsForComputer.context.gateways.peers.hosts().some((host) => host.isOpen())
-        ) {
+        if (viewers.length > 0) {
             checks.push(Date.now() + REAUTHORIZATION_INTERVAL_MILLISECONDS);
         }
         if (checks.length === 0) {

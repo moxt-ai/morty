@@ -33,7 +33,7 @@ export function createComputerPairingRoutes() {
                 const signal = deadline.signal;
                 const input = context.req.valid("json");
                 const pairing = await context.var.application.services.management.createComputerPairing(
-                    session.userId,
+                    session.computerId,
                     input.idempotencyKey,
                     signal,
                 );
@@ -45,6 +45,8 @@ export function createComputerPairingRoutes() {
             const session = context.get("session");
             using deadline = new RequestDeadline(context.req.raw.signal, 15000);
             const signal = deadline.signal;
-            return json(await context.var.application.services.management.readComputerPairing(session.userId, signal));
+            return json(
+                await context.var.application.services.management.readComputerPairing(session.computerId, signal),
+            );
         });
 }

@@ -43,7 +43,7 @@ export const localSession = (operation: LocalOperation) =>
             case "authorized":
                 context.set("session", {
                     authentication: { kind: "anonymous" },
-                    userId: result.credential.userId,
+                    computerId: context.var.application.identity.computerId,
                 });
                 context.set("accessExpiresAt", null);
                 context.set("accessHolder", accessHolder(result.credential));
