@@ -77,29 +77,13 @@ describe("Morty daemon lifecycle", () => {
 
             expect(started.code).toBe(0);
             expect(started.stderr).toBe("");
-            expect(started.stdout).toContain(`Starting morty daemon ${cliPackage.version}\n`);
-            expect(started.stdout).toContain(`Morty daemon ${cliPackage.version} started\n`);
-            expect(started.stdout).toContain("Morty daemon is running.\n");
+            expect(started.stdout).toBe(`Morty daemon ${cliPackage.version} started.\n`);
 
             const ensured = await runCli(["start"], environment, AbortSignal.timeout(60_000));
             expect(ensured).toEqual({ code: 0, stderr: "", stdout: "Morty daemon is running.\n" });
         } finally {
             await runCli(["quit"], environment, AbortSignal.timeout(10_000)).catch(() => undefined);
         }
-    });
-
-    it("Given no daemon is running, When saved pairings are listed, Then the CLI completes without starting a daemon", async () => {
-        const directory = await mkdtemp(join(tmpdir(), "morty-local-list-"));
-        temporaryDirectories.push(directory);
-        const environment = { ...process.env, MORTY_STATE_DIRECTORY: directory };
-        const deadline = AbortSignal.timeout(30_000);
-        const result = await runCli(["pair", "list"], environment, deadline);
-        expect(result.code).toBe(0);
-        expect(result.stdout).not.toContain("Starting morty");
-        const control = await openMortyInstallation(deadline, environment);
-        await expect(readFile(join(control.stateDirectory, "daemon.lock"))).rejects.toMatchObject({
-            code: "ENOENT",
-        });
     });
 
     it("Given another control client remains connected, When the CLI quits, Then the daemon exits", async () => {
@@ -130,106 +114,7 @@ describe("Morty daemon lifecycle", () => {
     });
 });
 
-describe("Morty pairing lifecycle", () => {
-    it.each(["stop", "remove"])(
-        "Given an unpaired installation, When the user runs pair %s, Then the CLI explains how to pair without requiring an identifier",
-        async (operation) => {
-            const stateRoot = await mkdtemp(join(tmpdir(), "morty-unpaired-lifecycle-"));
-            temporaryDirectories.push(stateRoot);
-            const environment = { ...process.env, MORTY_STATE_DIRECTORY: stateRoot };
-            const result = await runCli(["pair", operation], environment, AbortSignal.timeout(30_000));
-            expect(result.code).toBe(1);
-            expect(result.stderr).toContain("No computer is paired. Run Morty setup first.");
-        },
-    );
-    it("Given a paired computer, When the user stops, restarts and removes its current pairing without an identifier, Then the CLI shows each state without exposing an internal generation", async () => {
-        const stateRoot = await mkdtemp(join(tmpdir(), "morty-manager-pairing-lifecycle-"));
-        temporaryDirectories.push(stateRoot);
-        const executableDirectory = join(stateRoot, "empty-path");
-        const workspace = join(stateRoot, "workspace");
-        await Promise.all([mkdir(executableDirectory), mkdir(workspace)]);
-        const environment = {
-            ...process.env,
-            MORTY_STATE_DIRECTORY: join(stateRoot, "morty"),
-            PATH: executableDirectory,
-        };
-        const deadline = AbortSignal.timeout(60_000);
-        const relay = await startRelay();
-        const installation = await openMortyInstallation(deadline, environment);
-        const control = await openMortyInstallation(deadline, environment);
-        const connection = await installation.saveConnection(
-            {
-                computerId: "computer_test",
-                defaultWorkspace: workspace,
-                relayOrigin: relay.origin,
-                computerCredential: "a".repeat(43),
-            },
-            deadline,
-        );
-
-        try {
-            const started = await runCli(["start"], environment, deadline);
-            expect(started.code, started.stderr).toBe(0);
-            const initiallyListed = await runCli(["pair", "list"], environment, deadline);
-            expect(initiallyListed.code).toBe(0);
-            expect(initiallyListed.stdout).toContain("computer_id");
-            expect(initiallyListed.stdout).toContain(connection.computerId);
-            expect(initiallyListed.stdout).not.toContain(connection.pairingGeneration);
-
-            const daemonPid = await readFile(join(control.stateDirectory, "daemon.lock"), "utf8");
-            const outputPath = join(stateRoot, "pairings.json");
-            await writeFile(outputPath, "", { mode: 0o600 });
-            const listedAsJson = await runCli(["pair", "list", `--output-json=${outputPath}`], environment, deadline);
-            expect(listedAsJson).toEqual({ code: 0, stderr: "", stdout: "" });
-            expect(JSON.parse(await readFile(outputPath, "utf8"))).toEqual([
-                {
-                    computer_id: "computer_test",
-                    status: "active",
-                    workspace,
-                },
-            ]);
-
-            const missingOutput = await runCli(
-                ["pair", "list", `--output-json=${join(stateRoot, "missing.json")}`],
-                environment,
-                deadline,
-            );
-            expect(missingOutput.code).toBe(1);
-            expect(missingOutput.stderr).toContain("The JSON output file does not exist");
-
-            const stopped = await runCli(["pair", "stop"], environment, deadline);
-            expect(stopped.code).toBe(0);
-            expect(stopped.stdout).toBe("Pairing stopped.\n");
-
-            expect(await readFile(join(control.stateDirectory, "daemon.lock"), "utf8")).toBe(daemonPid);
-            const listedStopped = await runCli(["pair", "list"], environment, deadline);
-            expect(listedStopped.stdout).toContain(connection.computerId);
-            expect(listedStopped.stdout).toContain("stopped");
-
-            const quit = await runCli(["quit"], environment, deadline);
-            expect(quit.code).toBe(0);
-            const listedAfterRestart = await runCli(["pair", "list"], environment, deadline);
-            expect(listedAfterRestart.stdout).toContain(connection.computerId);
-            expect(listedAfterRestart.stdout).toContain("stopped");
-
-            const resumed = await runCli(["start"], environment, deadline);
-            expect(resumed.code, resumed.stderr).toBe(0);
-            const listedActive = await runCli(["pair", "list"], environment, deadline);
-            expect(listedActive.stdout).toContain("active");
-            const removed = await runCli(["pair", "remove"], environment, deadline);
-            expect(removed.code).toBe(0);
-            expect(removed.stdout).toBe("Pairing removed.\n");
-
-            const listedRemoved = await runCli(["pair", "list"], environment, deadline);
-            expect(listedRemoved.stdout).not.toContain(connection.computerId);
-        } finally {
-            await runCli(["quit"], environment, AbortSignal.timeout(10_000)).catch(() => undefined);
-            await relay.close();
-        }
-    }, 75_000);
-});
-
-async function startRelay(ready = true): Promise<{ readonly origin: URL; readonly close: () => Promise<void> }> {
+async function _startRelay(ready = true): Promise<{ readonly origin: URL; readonly close: () => Promise<void> }> {
     const catalogs = new Map<string, string>();
     const server = createServer((request, response) => {
         const path = request.url ?? "/";

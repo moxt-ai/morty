@@ -65,7 +65,7 @@ function environment(home: string, stateDirectory: string): NodeJS.ProcessEnv {
 }
 
 describe("Morty state root", () => {
-    it.each(["pair list", "start"])(
+    it.each(["release", "start"])(
         "Given the installation directory is a symlink, When the user runs %s, Then the CLI or Worker refuses without creating connection state in the link target",
         async (command) => {
             const home = await mkdtemp(join(tmpdir(), "morty-version-container-"));
@@ -77,7 +77,7 @@ describe("Morty state root", () => {
             await symlink(target, join(root, "computer"), process.platform === "win32" ? "junction" : "dir");
             const env = environment(home, root);
             try {
-                const result = await runCli(command === "start" ? ["start"] : ["pair", "list"], env);
+                const result = await runCli([command], env);
 
                 expect(result.code).not.toBe(0);
                 expect(await readdir(target)).toEqual([]);
@@ -90,16 +90,16 @@ describe("Morty state root", () => {
     );
 
     it.skipIf(process.platform === "win32")(
-        "Given a user-owned installation directory allows other users to write, When the user lists pairings, Then the CLI makes the container private before initializing state",
+        "Given a user-owned installation directory allows other users to write, When the user releases idle Agent sessions, Then the CLI makes the container private before initializing state",
         async () => {
             const home = await mkdtemp(join(tmpdir(), "morty-version-container-"));
             temporaryDirectories.push(home);
             const root = join(home, "state");
-            await runCli(["pair", "list"], environment(home, root));
+            await runCli(["release"], environment(home, root));
             const versionDirectory = join(root, "computer");
             await chmod(versionDirectory, 0o777);
 
-            const listed = await runCli(["pair", "list"], environment(home, root));
+            const listed = await runCli(["release"], environment(home, root));
 
             expect(listed.code, listed.stderr).toBe(0);
             expect((await stat(versionDirectory)).mode & 0o777).toBe(0o700);
@@ -110,7 +110,7 @@ describe("Morty state root", () => {
         const { root, installation, home } = await openedStateRoot();
         const before = await readdir(installation);
 
-        const listed = await runCli(["pair", "list"], environment(home, installation));
+        const listed = await runCli(["release"], environment(home, installation));
 
         expect(listed.code).toBe(78);
         expect(listed.stderr).toContain(`MORTY_STATE_DIRECTORY=${root}`);
@@ -121,7 +121,7 @@ describe("Morty state root", () => {
         const { root, installation, home } = await openedStateRoot();
         await mkdir(join(installation, "computer"), { recursive: true, mode: 0o700 });
 
-        const listed = await runCli(["pair", "list"], environment(home, installation));
+        const listed = await runCli(["release"], environment(home, installation));
 
         expect(listed.code).toBe(78);
         expect(listed.stderr).toContain(`MORTY_STATE_DIRECTORY=${root}`);
@@ -135,7 +135,7 @@ describe("Morty state root", () => {
             mode: 0o600,
         });
 
-        const listed = await runCli(["pair", "list"], environment(home, installation));
+        const listed = await runCli(["release"], environment(home, installation));
 
         expect(listed.code).not.toBe(0);
         expect(await readFile(join(installation, "current-data.txt"), "utf8")).toBe(

@@ -14,9 +14,10 @@ interface SetupOptions {
 export function registerSetupHandlers(program: Command, context: CliContext): void {
     const run = async (args: readonly string[]) => {
         const { runSetup } = await import("../../../setup/setup.ts");
+        const { localSetupRuntime } = await import("../../../setup/local-runtime.ts");
         process.exitCode = await runSetup(args, {
             state: process.env["MORTY_STATE_DIRECTORY"] ?? "",
-            cliEntry: context.entry,
+            runtime: localSetupRuntime(context.entry),
             signal: context.shutdownSignal,
             emit: (event) => process.stdout.write(`${JSON.stringify(event)}\n`),
         });

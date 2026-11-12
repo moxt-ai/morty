@@ -838,21 +838,6 @@ async function logs(options) {
 async function stopRecorded(stack) {
     const runtimeStateDirectory = path.join(stack.stateDir, "morty");
     for (const runtime of Array.isArray(stack.runtimes) ? stack.runtimes : []) {
-        if (typeof runtime.computerId === "string") {
-            log(`stopping the current pairing for ${runtime.computerId}`);
-            try {
-                if (runtime.runtimeStateDirectory !== runtimeStateDirectory) {
-                    throw new Error("The recorded Runtime does not belong to this local stack");
-                }
-                await run(
-                    process.execPath,
-                    [path.join(REPO_ROOT, "packages/cli/src/cli/entrypoint.ts"), "pair", "stop"],
-                    { env: { MORTY_STATE_DIRECTORY: runtimeStateDirectory } },
-                );
-            } catch (cause) {
-                log(`could not stop paired connection: ${cause instanceof Error ? cause.message : String(cause)}`);
-            }
-        }
         await stopProcess(runtime.runtimePid);
     }
     if (fs.existsSync(runtimeStateDirectory)) {
