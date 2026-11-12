@@ -1,11 +1,16 @@
 import { CONTENT_CHUNK_MAX_BYTES, encodeContentChunkFrame, MORTY_API_PREFIX } from "@morty-build/client/protocol";
 import { MortyApiError, MortyConnectionError, MortyProtocolError, MortyValidationError } from "../errors.ts";
 import { computerRequestTarget } from "./computer-request-target.ts";
-import { HttpTransport, type MortyHttpTransport, type MortyTransportSessionEvent } from "./http-transport.ts";
 
 const CONNECTION_TIMEOUT_MILLISECONDS = 15_000;
 const HEARTBEAT_INTERVAL_MILLISECONDS = 20_000;
 const HEARTBEAT_TIMEOUT_MILLISECONDS = 10_000;
+
+export interface MortyTransportSessionEvent {
+    readonly data: string;
+    readonly eventId: string;
+    readonly seqId: number;
+}
 
 export interface MortyWebSocketConnector {
     readonly connect: (endpoint: URL, signal: AbortSignal) => Promise<WebSocket>;
@@ -142,11 +147,10 @@ class RelayMortyWebSocketConnector implements MortyWebSocketConnector {
     };
 }
 
-export class WsTransport implements MortyHttpTransport {
+export class WsTransport {
     readonly #connector: MortyWebSocketConnector;
     readonly #pending = new Map<string, PendingWsRequest>();
     readonly #subscriptions = new Map<string, LiveEventSubscription>();
-    readonly #http = new HttpTransport();
     #endpoint: string | null = null;
     #state: WsTransportState = { kind: "disconnected" };
     #heartbeat:
@@ -174,7 +178,7 @@ export class WsTransport implements MortyHttpTransport {
             );
         const target = computerRequestTarget(request);
         if (fileDownload || target === null) {
-            return await this.#http.fetch(request);
+            return await globalThis.fetch(request);
         }
         const socket = await this.#socket(request);
         request.signal.throwIfAborted();

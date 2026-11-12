@@ -39,9 +39,7 @@ import type {
     MortyTurnCancellation,
     SubmitMortyTurnRequest,
 } from "./resources.ts";
-
-import type { MortyTransportSessionEvent } from "./transport/http-transport.ts";
-import type { WsTransport } from "./transport/ws-transport.ts";
+import type { MortyTransportSessionEvent, WsTransport } from "./transport/ws-transport.ts";
 
 const DEFAULT_OPERATION_TIMEOUT_MILLISECONDS = 20_000;
 const STREAM_CONNECTION_TIMEOUT_MILLISECONDS = 15_000;

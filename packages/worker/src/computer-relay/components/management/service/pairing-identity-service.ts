@@ -3,7 +3,7 @@ import { PairingDirectoryError, validateIdentifier } from "../../../../contracts
 import type { ComputerIdentityCredential } from "../../../../contracts/relay/pairing-identity.ts";
 import { DatabaseError } from "../../../../infra/sql-database.ts";
 import type { ComputerRelayStore } from "../storage/computer-relay-store.ts";
-import type { ComputerManagementService } from "./computer-management-service.ts";
+import type { ComputerAccessService } from "./computer-access-service.ts";
 
 /** A credential that matches nothing, including one stored for a Project that is no longer served. */
 function unmatchedCredential(credential: ComputerIdentityCredential): PairingDirectoryError {
@@ -17,8 +17,8 @@ function unmatchedCredential(credential: ComputerIdentityCredential): PairingDir
 export class ComputerIdentityService {
     readonly #computerId: string;
     readonly #store: ComputerRelayStore;
-    readonly #accounts: Pick<ComputerManagementService, "isActive">;
-    constructor(computerId: string, store: ComputerRelayStore, accounts: Pick<ComputerManagementService, "isActive">) {
+    readonly #accounts: Pick<ComputerAccessService, "isActive">;
+    constructor(computerId: string, store: ComputerRelayStore, accounts: Pick<ComputerAccessService, "isActive">) {
         this.#computerId = computerId;
         this.#store = store;
         this.#accounts = accounts;

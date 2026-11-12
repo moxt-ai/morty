@@ -1,41 +1,35 @@
 import * as v from "valibot";
-import type { ComputerAccounts } from "../../../../contracts/computer-accounts.ts";
-import { ProjectRowSchema } from "../../../../contracts/relay/relay-records.ts";
 import { waitForAccount } from "./account-operation.ts";
 
 const ACCOUNT_KEY = "computer-account";
+/** A computer's account: which computer it is. */
+const accountSchema = v.object({ computer_id: v.string() });
 
 /** A computer's own account record. No global directory or secondary ownership copy. */
-export class DurableComputerAccount implements ComputerAccounts {
+export class DurableComputerAccount {
     readonly #storage: DurableObjectStorage;
 
     constructor(storage: DurableObjectStorage) {
         this.#storage = storage;
     }
 
-    readonly #readAccount = async (signal: AbortSignal) => {
-        return await waitForAccount(async () => {
+    /** Whether this object holds the account of `computerId`. */
+    readonly isActive = async (computerId: string, signal: AbortSignal): Promise<boolean> =>
+        await waitForAccount(async () => {
             const stored: unknown = await this.#storage.get(ACCOUNT_KEY);
-            return stored === undefined ? null : v.parse(ProjectRowSchema, stored);
+            return stored !== undefined && v.parse(accountSchema, stored).computer_id === computerId;
         }, signal);
-    };
 
-    readonly readActiveComputerScope: ComputerAccounts["readActiveComputerScope"] = async (computerId, signal) => {
-        const account = await this.#readAccount(signal);
-        return account?.computer_id === computerId ? { computer_id: computerId } : null;
-    };
-
-    readonly createComputerAccount: ComputerAccounts["createComputerAccount"] = async (project, signal) => {
-        return await waitForAccount(
+    /** Creates the account of `computerId`, or keeps the one an earlier request created. */
+    readonly create = async (computerId: string, signal: AbortSignal): Promise<void> => {
+        await waitForAccount(
             () =>
                 this.#storage.transaction(async (storage) => {
-                    const existing: unknown = await storage.get(ACCOUNT_KEY);
-                    if (existing !== undefined) {
-                        return v.parse(ProjectRowSchema, existing);
+                    if ((await storage.get(ACCOUNT_KEY)) !== undefined) {
+                        return;
                     }
                     signal.throwIfAborted();
-                    await storage.put(ACCOUNT_KEY, project);
-                    return project;
+                    await storage.put(ACCOUNT_KEY, { computer_id: computerId });
                 }),
             signal,
         );

@@ -34,10 +34,7 @@ export function transferCodeComputer(code: string): string | null {
 /** Stored key name of the anonymous credential map, shared with browser tests. */
 export const ANONYMOUS_CREDENTIAL_KEY_NAME = browserAccessEntry.key;
 
-const anonymousSessionSchema = v.pipe(
-    v.object({ authentication: v.object({ kind: v.literal("anonymous") }), computerId: computerIdSchema }),
-    v.readonly(),
-);
+const anonymousSessionSchema = v.pipe(v.object({ computerId: computerIdSchema }), v.readonly());
 const accessTermSchema = v.object({ accessExpiresAt: v.nullable(v.pipe(v.string(), v.isoTimestamp())) });
 /** How long the device a link adds keeps access; the options this page offers; the Worker decides which it accepts. */
 export const deviceAccessDurations = ["1h", "1d", "7d", "30d"] as const;

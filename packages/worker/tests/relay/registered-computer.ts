@@ -1,34 +1,35 @@
 import { runInDurableObject } from "cloudflare:test";
-import { holdsAccess } from "../../src/computer-relay/components/management/service/authentication-service.ts";
+import { ComputerAccessService } from "../../src/computer-relay/components/management/service/computer-access-service.ts";
+import { ComputerRelayStore } from "../../src/computer-relay/components/management/storage/computer-relay-store.ts";
 import { DurableComputerAccount } from "../../src/computer-relay/components/management/storage/durable-computer-account.ts";
 import { IdentityStorage } from "../../src/computer-relay/components/management/storage/identity-storage.ts";
-import { SqliteComputerManagementStore } from "../../src/computer-relay/components/management/storage/sqlite-computer-management-store.ts";
 import { createRelayDurableObjectContext } from "../../src/computer-relay/composition/relay-durable-object-context.ts";
 import { DurableObjectDatabase } from "../../src/computer-relay/infra/durable-object-database.ts";
 import type { RelayBindings } from "../../src/contracts/relay-bindings.ts";
 
-/** The computer's store as its ComputerRelay composes it, answering whose access holds from the computer's identities. */
-export function computerManagementStore(computerId: string, storage: DurableObjectStorage) {
-    return new SqliteComputerManagementStore(computerId, new DurableObjectDatabase(storage), async (holder, signal) =>
-        holdsAccess(new IdentityStorage(new DurableObjectDatabase(storage), computerId), holder, signal),
-    );
+/** The computer's store and access as its ComputerRelay composes them over the object's storage. */
+export function computerAccess(computerId: string, storage: DurableObjectStorage) {
+    const database = new DurableObjectDatabase(storage);
+    const store = new ComputerRelayStore(computerId, database);
+    return {
+        store,
+        access: new ComputerAccessService(
+            computerId,
+            store,
+            new DurableComputerAccount(storage),
+            new IdentityStorage(database, computerId),
+        ),
+    };
 }
 
 /** Seeds a committed revocation through the production store and applies it to the object's real connections. */
 export async function revokeTestComputer(bindings: RelayBindings, computerId: string, signal: AbortSignal) {
     await runInDurableObject(bindings.COMPUTER_RELAY.getByName(computerId), async (_instance, state) => {
-        const store = computerManagementStore(computerId, state.storage);
-        await store.revokeComputer(
-            {
-                computerId,
-                now: Date.now(),
-            },
-            signal,
-        );
+        const { store, access } = computerAccess(computerId, state.storage);
+        await store.revokeComputer(Date.now(), signal);
         const runtime = createRelayDurableObjectContext(state, {
-            accounts: new DurableComputerAccount(state.storage),
             database: new DurableObjectDatabase(state.storage),
-            storeFor: () => store,
+            access: () => access,
         });
         await runtime.services.runtime.revokeComputer(computerId, signal);
     });

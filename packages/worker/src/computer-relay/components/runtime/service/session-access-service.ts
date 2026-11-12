@@ -7,7 +7,7 @@ import {
     type SessionAccessHolder,
 } from "@morty-build/client/protocol";
 import { ProjectAuthenticationError } from "../../../../contracts/relay/project-authentication.ts";
-import type { ComputerManagementService } from "../../management/service/computer-management-service.ts";
+import type { ComputerAccessService } from "../../management/service/computer-access-service.ts";
 import { SessionAccessCredentialExpiredError, type SessionAccessSigner } from "../entity/session-access-credential.ts";
 
 export type SessionAccessTarget =
@@ -26,10 +26,10 @@ export interface SessionAccess {
 }
 
 export class SessionAccessService {
-    readonly #control: ComputerManagementService;
+    readonly #control: ComputerAccessService;
     readonly #signer: SessionAccessSigner;
 
-    constructor(control: ComputerManagementService, signer: SessionAccessSigner) {
+    constructor(control: ComputerAccessService, signer: SessionAccessSigner) {
         this.#control = control;
         this.#signer = signer;
     }
@@ -146,7 +146,7 @@ export class SessionAccessService {
             expiresAtEpochMilliseconds: claims.expiresAtEpochMilliseconds,
             computerId: claims.computerId,
             authorize: async (authorizationSignal) => {
-                await this.#control.authorizeSessionCredentialRecord(computerId, claims.grant, authorizationSignal);
+                await this.#control.authorizeSession(computerId, claims.grant, authorizationSignal);
             },
         };
     };

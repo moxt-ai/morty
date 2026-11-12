@@ -1,13 +1,10 @@
-import type { ComputerAccounts } from "../../contracts/computer-accounts.ts";
-import { ComputerManagementError } from "../../contracts/computer-management.ts";
 import type { RelayBindings } from "../../contracts/relay-bindings.ts";
+import type { ComputerAccessService } from "../components/management/service/computer-access-service.ts";
 import { ComputerConnectionService } from "../components/management/service/computer-connection-service.ts";
-import { ComputerManagementService } from "../components/management/service/computer-management-service.ts";
 import { PairingDirectoryService } from "../components/management/service/pairing-directory-service.ts";
 import { ComputerIdentityService } from "../components/management/service/pairing-identity-service.ts";
 import { PairingService } from "../components/management/service/pairing-service.ts";
-import { ComputerManagementStorage } from "../components/management/storage/computer-management-storage.ts";
-import type { ComputerManagementStore } from "../components/management/storage/computer-management-store.ts";
+import type { ComputerRelayStore } from "../components/management/storage/computer-relay-store.ts";
 import { SessionAccessSigner } from "../components/runtime/entity/session-access-credential.ts";
 import type { ComputerService } from "../components/runtime/service/computer-service.ts";
 import { SessionAccessService } from "../components/runtime/service/session-access-service.ts";
@@ -16,28 +13,20 @@ import { SessionAccessService } from "../components/runtime/service/session-acce
 export function createComputerRelayServices(
     bindings: RelayBindings,
     computerId: string,
-    store: ComputerManagementStore,
+    store: ComputerRelayStore,
     runtime: ComputerService,
-    accounts: ComputerAccounts,
+    access: ComputerAccessService,
 ) {
-    const forComputer = (id: string) => {
-        if (id !== computerId) {
-            throw new ComputerManagementError("computer_id_mismatch", "The computer is unavailable", 421);
-        }
-        return store;
-    };
-    const storage = new ComputerManagementStorage(accounts, { forProject: forComputer });
-    const control = new ComputerManagementService(storage);
     const sessionAccess = new SessionAccessService(
-        control,
+        access,
         new SessionAccessSigner(bindings.MORTY_SESSION_SIGNING_SECRET),
     );
     const pairings = new PairingDirectoryService({
         computerId,
         store,
         services: {
-            identities: new ComputerIdentityService(computerId, store, control),
-            computerAccounts: control,
+            identities: new ComputerIdentityService(computerId, store, access),
+            computerAccounts: access,
         },
     });
     const context = { services: { pairings, runtime } };

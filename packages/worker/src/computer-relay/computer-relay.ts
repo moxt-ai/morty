@@ -8,10 +8,10 @@ import type { ConfiguredRelayBindings } from "../contracts/relay-bindings.ts";
 import { logger } from "../infra/logger.ts";
 import { relayErrorHandler } from "../middleware/error-middleware.ts";
 import { ComputerBackendService } from "./components/computer/service/computer-backend-service.ts";
-import { ComputerInternalService } from "./components/management/service/computer-internal-service.ts";
-import type { ComputerManagementStore } from "./components/management/storage/computer-management-store.ts";
+import { ComputerAccessService } from "./components/management/service/computer-access-service.ts";
+import { ComputerRelayStore } from "./components/management/storage/computer-relay-store.ts";
 import { DurableComputerAccount } from "./components/management/storage/durable-computer-account.ts";
-import { SqliteComputerManagementStore } from "./components/management/storage/sqlite-computer-management-store.ts";
+import { IdentityStorage } from "./components/management/storage/identity-storage.ts";
 import { DaemonWebSocketRoutes } from "./components/runtime/daemon-websocket-routes.ts";
 import { SessionAccessSigner } from "./components/runtime/entity/session-access-credential.ts";
 import { WebSocketUploadBudget } from "./components/runtime/http/websocket-http-transport.ts";
@@ -26,7 +26,7 @@ import { DurableObjectDatabase } from "./infra/durable-object-database.ts";
 
 const REAUTHORIZATION_INTERVAL_MILLISECONDS = 60_000;
 
-type Store = ComputerManagementStore;
+type Store = ComputerRelayStore;
 type ComputerHttpEnvironment = ComputerRouteHttpEnvironment;
 
 /**
@@ -43,7 +43,7 @@ export class ComputerRelay extends DurableObject<ConfiguredRelayBindings> {
         (change) => this.#endAccess(change),
         (computerId) => this.#backendServices(computerId),
         () => this.#computerDatabase,
-        (computerId, signal) => this.#account.readActiveComputerScope(computerId, signal),
+        this.#account,
     );
 
     readonly #uploads = new WebSocketUploadBudget();
@@ -87,7 +87,7 @@ export class ComputerRelay extends DurableObject<ConfiguredRelayBindings> {
             if (store === null) {
                 throw new ComputerManagementError("computer_id_mismatch", "The computer is unavailable", 421);
             }
-            context.set("computerInternal", new ComputerInternalService(computerId, store, this.#account));
+            context.set("computerAccount", this.#account);
             await next();
         };
         return new Hono<ComputerHttpEnvironment>()
@@ -117,8 +117,7 @@ export class ComputerRelay extends DurableObject<ConfiguredRelayBindings> {
     #createConnections() {
         const context = createRelayDurableObjectContext(this.ctx, {
             database: this.#computerDatabase,
-            accounts: this.#account,
-            storeFor: (computerId) => this.#operate(computerId),
+            access: (computerId) => this.#accessFor(computerId),
         });
         return {
             context,
@@ -151,9 +150,7 @@ export class ComputerRelay extends DurableObject<ConfiguredRelayBindings> {
             return null;
         }
         if (this.#store === null) {
-            this.#store = new SqliteComputerManagementStore(computerId, this.#computerDatabase, (holder, signal) =>
-                this.#browserServices.holdsAccess(computerId, holder, signal),
-            );
+            this.#store = new ComputerRelayStore(computerId, this.#computerDatabase);
         }
         return this.#store;
     }
@@ -192,14 +189,27 @@ export class ComputerRelay extends DurableObject<ConfiguredRelayBindings> {
         return response;
     }
 
+    #access: ComputerAccessService | undefined;
+    /** The access of the computer this object holds; `computerId` must name that computer. */
+    #accessFor(computerId: string): ComputerAccessService {
+        const store = this.#operate(computerId);
+        this.#access ??= new ComputerAccessService(
+            computerId,
+            store,
+            this.#account,
+            new IdentityStorage(this.#computerDatabase, computerId),
+        );
+        return this.#access;
+    }
+
     #servicesCache: ReturnType<typeof createComputerRelayServices> | undefined;
-    #services(computerId: string, store: ComputerManagementStore) {
+    #services(computerId: string, store: Store) {
         this.#servicesCache ??= createComputerRelayServices(
             this.env,
             computerId,
             store,
             this.#connectionsForComputer.context.services.runtime,
-            this.#account,
+            this.#accessFor(computerId),
         );
         return this.#servicesCache;
     }

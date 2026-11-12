@@ -115,18 +115,6 @@ function classifyCredential(stored: StoredCredential): CredentialLookup {
     }
 }
 
-/**
- * Whether `holder`'s access to the computer holds now, by the same rules that authenticate its credentials: a browser
- * device's until its term unless it was ended, the local credential's until it was revoked.
- */
-export async function holdsAccess(
-    identities: Pick<IdentityStorage, "holdsAccess">,
-    holder: SessionAccessHolder,
-    signal: AbortSignal,
-): Promise<boolean> {
-    return await identities.holdsAccess(holder, Date.now(), signal);
-}
-
 /** Outside the session check, revoked access answers like unknown access, so a retry after a lost reply stays safe. */
 function refused(access: { readonly kind: "unauthenticated" | "revoked" | "forbidden" }) {
     return { kind: access.kind === "forbidden" ? "forbidden" : "unauthenticated" } as const;
@@ -177,7 +165,7 @@ export class AuthenticationService {
             case "active":
                 return {
                     kind: "authenticated",
-                    session: { authentication: { kind: "anonymous" }, computerId: this.#computerId },
+                    session: { computerId: this.#computerId },
                     accessExpiresAt: found.credential.kind === "browser" ? found.credential.accessExpiresAt : null,
                     holder: accessHolder(found.credential),
                     credentialKind: found.credential.kind,
@@ -195,7 +183,7 @@ export class AuthenticationService {
         signal: AbortSignal,
         token: string,
     ): Promise<AnonymousIdentity> => {
-        const identity = await this.identities.createComputer(computerId, Date.now(), signal, token);
+        const identity = await this.identities.createComputer(computerId, signal, token);
         if (identity === null) {
             throw new ManagementError("LOCAL_CREDENTIAL_UNAVAILABLE", "The credential is no longer available.", 409);
         }

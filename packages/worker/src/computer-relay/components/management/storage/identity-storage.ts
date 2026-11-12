@@ -162,7 +162,6 @@ export class IdentityStorage {
 
     readonly createComputer = async (
         computerId: string,
-        now: number,
         signal: AbortSignal,
         token: string,
     ): Promise<AnonymousIdentity | null> => {
@@ -176,7 +175,7 @@ export class IdentityStorage {
         const database = requireIdentityDatabase(this.#database);
         await database
             .insert(ownerCredential)
-            .values({ id: credentialId, tokenHash, createdAt: now })
+            .values({ id: credentialId, tokenHash })
             .onConflictDoNothing({ target: ownerCredential.tokenHash })
             .run();
         signal.throwIfAborted();
@@ -364,9 +363,7 @@ export class IdentityStorage {
                         database
                             .select({
                                 id: sql<string>`${`cred_${crypto.randomUUID()}`}`.as("id"),
-                                retainedOwnerReference: sql<null>`null`.as("user_id"),
                                 tokenHash: sql<string>`${successorHash}`.as("token_hash"),
-                                createdAt: sql<number>`${now}`.as("created_at"),
                                 revokedAt: sql<null>`null`.as("revoked_at"),
                             })
                             .from(ownerCredential)
@@ -465,7 +462,6 @@ export class IdentityStorage {
             id: sql<string>`${`transfer_${crypto.randomUUID()}`}`.as("id"),
             codeHash: sql<string>`${codeHash}`.as("code_hash"),
             requestHash: sql<string>`${operation.requestHash}`.as("request_hash"),
-            retainedOwnerReference: sql<null>`null`.as("user_id"),
             expiresAt: sql<number>`${terms.expiresAt}`.as("expires_at"),
             accessExpiresAt: sql<number>`${terms.accessExpiresAt}`.as("access_expires_at"),
             createdAt: sql<number>`${now}`.as("created_at"),
@@ -597,11 +593,9 @@ export class IdentityStorage {
             database
                 .select({
                     id: sql<string>`${credentialId}`.as("id"),
-                    retainedOwnerReference: sql<null>`null`.as("user_id"),
                     tokenHash: sql<string>`${tokenHash}`.as("token_hash"),
                     deviceId: sql<string>`${deviceId}`.as("device_id"),
                     transferId: continueLink.id,
-                    createdAt: sql<number>`${now}`.as("created_at"),
                     replacedAt: sql<null>`null`.as("replaced_at"),
                 })
                 .from(continueLink)
@@ -611,7 +605,6 @@ export class IdentityStorage {
             database
                 .select({
                     id: sql<string>`${newDeviceId}`.as("id"),
-                    retainedOwnerReference: sql<null>`null`.as("user_id"),
                     joinedAt: sql<number>`${now}`.as("joined_at"),
                     label: sql<string | null>`${joining.label}`.as("label"),
                     joinedCity: sql<string | null>`${joining.location?.city ?? null}`.as("joined_city"),

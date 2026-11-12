@@ -2,7 +2,6 @@ import {
     decodeDaemonToRelayMessage,
     decodeSessionEvent,
     decodeSessionLiveEvent,
-    encodeSessionEvent,
     type SessionEvent,
     type SessionLiveEvent,
 } from "@morty-build/client/protocol";
@@ -77,7 +76,6 @@ describe("Session Event V2 contracts", () => {
         };
 
         expect(decodeSessionEvent(event)).toEqual(event);
-        expect(JSON.parse(encodeSessionEvent(event))).toEqual(event);
     });
 
     it.each(["running", "completed", "failed", "stopped", "unknown"])(
@@ -243,7 +241,7 @@ describe("Session Event V2 contracts", () => {
         };
 
         it("Given a message that asks questions, When it crosses the recorded and live boundaries, Then the questions survive", () => {
-            expect(decodeSessionEvent(JSON.parse(encodeSessionEvent(asking)))).toEqual(asking);
+            expect(decodeSessionEvent(JSON.parse(JSON.stringify(asking)))).toEqual(asking);
             expect(decodeSessionLiveEvent({ ...asking, position: "1" })).toEqual({ ...asking, position: "1" });
         });
     });

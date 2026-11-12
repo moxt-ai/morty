@@ -42,7 +42,6 @@ export const localSession = (operation: LocalOperation) =>
         switch (result.kind) {
             case "authorized":
                 context.set("session", {
-                    authentication: { kind: "anonymous" },
                     computerId: context.var.application.identity.computerId,
                 });
                 context.set("accessExpiresAt", null);

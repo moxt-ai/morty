@@ -1,14 +1,12 @@
-import type { SessionAccessHolder } from "@morty-build/client/protocol";
 import * as v from "valibot";
 import type { CloudBindings } from "../../contracts/cloud-bindings.ts";
-import type { ComputerAccounts } from "../../contracts/computer-accounts.ts";
 import { computerBootstrap } from "../../contracts/computer-bootstrap.ts";
 import { relayIdentifier } from "../../contracts/computer-management.ts";
 import { ManagementError } from "../../contracts/management-error.ts";
 import { ManagedSessionOperations } from "../components/chat/infra/managed-session-operations.ts";
 import type { ComputerBackendService } from "../components/computer/service/computer-backend-service.ts";
-import { holdsAccess } from "../components/management/service/authentication-service.ts";
 import type { IdentityOperations } from "../components/management/service/identity-operations.ts";
+import type { DurableComputerAccount } from "../components/management/storage/durable-computer-account.ts";
 import { IdentityStorage } from "../components/management/storage/identity-storage.ts";
 import type { DurableObjectDatabase } from "../infra/durable-object-database.ts";
 import { type ApplicationContext, createApplicationDependencies } from "./application-context.ts";
@@ -23,7 +21,7 @@ export class ComputerServices {
     readonly #endAccess: IdentityOperations["commitAccessEnd"];
     readonly #runtime: (computerId: string) => ComputerBackendService;
     readonly #database: () => DurableObjectDatabase;
-    readonly #readAccount: ComputerAccounts["readActiveComputerScope"];
+    readonly #account: Pick<DurableComputerAccount, "isActive">;
     /** Commits access changes with their connection checks inside the owning object. */
     constructor(
         storage: DurableObjectStorage,
@@ -31,30 +29,15 @@ export class ComputerServices {
         endAccess: IdentityOperations["commitAccessEnd"],
         runtime: (computerId: string) => ComputerBackendService,
         database: () => DurableObjectDatabase,
-        readAccount: ComputerAccounts["readActiveComputerScope"],
+        account: Pick<DurableComputerAccount, "isActive">,
     ) {
         this.#storage = storage;
         this.#owns = owns;
         this.#endAccess = endAccess;
         this.#runtime = runtime;
         this.#database = database;
-        this.#readAccount = readAccount;
+        this.#account = account;
     }
-
-    /** Whether `holder`'s access to this computer holds now; the Relay honors a Session credential only while it does. */
-    readonly holdsAccess = async (
-        computerId: string,
-        holder: SessionAccessHolder,
-        signal: AbortSignal,
-    ): Promise<boolean> => {
-        if (!this.#owns(computerId)) {
-            throw new Error("Durable Object computer identity does not match the request.");
-        }
-        if ((await this.#readAccount(computerId, signal)) === null) {
-            return false;
-        }
-        return await holdsAccess(new IdentityStorage(this.#database(), computerId), holder, signal);
-    };
 
     readonly #sessionOperations = new ManagedSessionOperations();
 
@@ -78,7 +61,7 @@ export class ComputerServices {
     readonly bootstrap = async (input: unknown, env: CloudBindings, signal: AbortSignal) => {
         signal.throwIfAborted();
         const parsed = v.parse(computerBootstrap, input);
-        if ((await this.#readAccount(parsed.computer.computerId, signal)) === null) {
+        if (!(await this.#account.isActive(parsed.computer.computerId, signal))) {
             throw new ManagementError("PROJECT_NOT_FOUND", "The Morty computer does not exist.", 404);
         }
         await this.#bindComputer(parsed.computer.computerId);
@@ -131,7 +114,7 @@ export class ComputerServices {
         env: CloudBindings,
         signal: AbortSignal,
     ): Promise<ApplicationContext> => {
-        if ((await this.#readAccount(computerId, signal)) === null) {
+        if (!(await this.#account.isActive(computerId, signal))) {
             throw new ManagementError("PROJECT_NOT_FOUND", "The Morty computer does not exist.", 404);
         }
         return createApplicationDependencies({

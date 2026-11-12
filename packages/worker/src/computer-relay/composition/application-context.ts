@@ -10,7 +10,7 @@ import type { IdentityOperations } from "../components/management/service/identi
 import { LocalComputerService } from "../components/management/service/local-computer-service.ts";
 import { ManagementService } from "../components/management/service/management-service.ts";
 import type { IdentityStorage } from "../components/management/storage/identity-storage.ts";
-import { accountProvisioner } from "./computer-directory.ts";
+import { accountProvisioner } from "../gateway/computer-relay.ts";
 
 // One logger, whose error serializer keeps credentials and request input out of the logs.
 export { logger };
