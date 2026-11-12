@@ -13,6 +13,8 @@ export class TestApiTransport {
     };
     readonly disconnect = () => this.#current.dispose(new ApiConnectionError("Network disconnected."));
     readonly dispose = this.disconnect;
+    readonly computerTransport: WorkerApiTransport["computerTransport"] = (computerId) =>
+        this.#current.computerTransport(computerId);
     readonly fetch: WorkerApiTransport["fetch"] = (request) => this.#current.fetch(request);
     readonly measureMortyLatency: WorkerApiTransport["measureMortyLatency"] = (signal) =>
         this.#current.measureMortyLatency(signal);

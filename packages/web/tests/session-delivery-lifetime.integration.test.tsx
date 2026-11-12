@@ -167,7 +167,7 @@ function sessionEntry(app: TestApp, title: string): HTMLElement {
     return entry;
 }
 
-test("Given completed Sessions on one Computer, When I switch between them and New Session, Then shared browser connections carry the correct history and new replies", {
+test("Given completed Sessions on one Computer, When I switch between them and New Session, Then one browser connection carries Computer requests, history and new replies", {
     timeout: dedicatedEnvironmentTimeout,
 }, async () => {
     const environment = await createChatWorkerEnvironment(true);
@@ -188,9 +188,8 @@ test("Given completed Sessions on one Computer, When I switch between them and N
             expect(app.elementsByTestId(dataTestId.agentResponse).at(-1)?.textContent).toContain(title);
             expect(app.optionalElementByTestId(dataTestId.workingIndicator)).toBeNull();
         });
-        // One Computer API connection and one shared Session connection survive navigation.
-        await network.waitForBrowserConnections(2, AbortSignal.timeout(10_000));
-        expect(network.browserConnectionsOpened).toBe(2);
+        await network.waitForBrowserConnections(1, AbortSignal.timeout(10_000));
+        expect(network.browserConnectionsOpened).toBe(1);
         await app.user.click(await app.queryElementByTestId(dataTestId.newConversation));
     }
     for (const title of ["First completed Session", "Fourth completed Session", "First completed Session"]) {
@@ -203,14 +202,14 @@ test("Given completed Sessions on one Computer, When I switch between them and N
             );
             expect(app.elementByTestId(dataTestId.messageComposer)).toHaveProperty("disabled", false);
         });
-        expect(network.browserConnectionsOpened).toBe(2);
+        expect(network.browserConnectionsOpened).toBe(1);
     }
     await sendPrompt(app, await app.queryElementByTestId(dataTestId.messageComposer), "Reply after switching");
     await app.waitForView(() => {
         expect(app.elementsByTestId(dataTestId.agentResponse).at(-1)?.textContent).toContain("Reply after switching");
         expect(app.optionalElementByTestId(dataTestId.workingIndicator)).toBeNull();
     });
-    expect(network.browserConnectionsOpened).toBe(2);
+    expect(network.browserConnectionsOpened).toBe(1);
     await app.close();
     await network.waitForBrowserConnections(0, AbortSignal.timeout(10_000));
 });

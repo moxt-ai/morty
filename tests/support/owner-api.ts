@@ -11,6 +11,7 @@ export function createOwnerApi(options: {
 }) {
     const transport = new WorkerApiTransport(options.origin);
     const api = new BotChatApi({
+        sessionTransport: () => transport.computerTransport(options.computerId),
         origin: options.origin,
         computerId: options.computerId,
         fetchRequest: options.request,

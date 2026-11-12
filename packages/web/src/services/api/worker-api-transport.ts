@@ -1,4 +1,5 @@
-import { computerRequestTarget, WsTransport } from "@morty-build/client";
+import { computerRequestTarget, MortyValidationError, WsTransport } from "@morty-build/client";
+import { isIdentifier } from "@morty-build/client/protocol";
 import { recordBrowserDiagnostic } from "../diagnostics/browser-diagnostics.ts";
 import { systemClock } from "../time/clock.ts";
 import type { ApiResponseSnapshot } from "./api-transport.ts";
@@ -30,17 +31,21 @@ export class WorkerApiTransport {
         }
         this.#computers.clear();
     };
-    readonly #request = async (request: Request): Promise<Response> => {
-        const target = computerRequestTarget(request);
-        if (target === null) {
-            return await fetch(request);
+    readonly computerTransport = (computerId: string): WsTransport => {
+        this.#lifetime.signal.throwIfAborted();
+        if (!isIdentifier(computerId)) {
+            throw new MortyValidationError("The Computer identifier is invalid");
         }
-        let transport = this.#computers.get(target.computerId);
+        let transport = this.#computers.get(computerId);
         if (transport === undefined) {
             transport = new WsTransport();
-            this.#computers.set(target.computerId, transport);
+            this.#computers.set(computerId, transport);
         }
-        return await transport.fetch(request);
+        return transport;
+    };
+    readonly #request = async (request: Request): Promise<Response> => {
+        const target = computerRequestTarget(request);
+        return target === null ? await fetch(request) : await this.computerTransport(target.computerId).fetch(request);
     };
     readonly #key = (request: Request) => JSON.stringify([request.url, request.headers.get("authorization")]);
     readonly fetch = async (request: Request): Promise<Response> => {
