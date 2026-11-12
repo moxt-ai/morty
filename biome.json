@@ -140,7 +140,6 @@
                 "**/packages/web/**",
                 "**/packages/worker/**",
                 "**/packages/e2e/**",
-                "**/packages/local-state/**",
                 "**/scripts/**",
                 "!**/packages/cli/src/engine/acp/harness/*/upstream/**"
             ]

@@ -1,4 +1,5 @@
-import { mortyStateDirectory } from "@morty-build/local-state";
+import { homedir } from "node:os";
+import { isAbsolute, join } from "node:path";
 import { z } from "zod";
 
 const stateRootSchema = z.string().brand<"StateRoot">();
@@ -6,6 +7,36 @@ const stateRootSchema = z.string().brand<"StateRoot">();
 /** The Morty state root contains configuration, the default workspace, and the computer directory. */
 export type StateRoot = z.infer<typeof stateRootSchema>;
 
+class MortyPathError extends Error {
+    readonly code = "morty_state_directory_invalid";
+}
+
+/** Each installation has one computer account and one local daemon. */
 export function readStateDirectory(environment: Readonly<NodeJS.ProcessEnv> = process.env): StateRoot {
-    return stateRootSchema.parse(mortyStateDirectory(environment));
+    return stateRootSchema.parse(stateDirectoryPath(environment));
+}
+
+function stateDirectoryPath(environment: Readonly<NodeJS.ProcessEnv>): string {
+    const configured = environment["MORTY_STATE_DIRECTORY"]?.trim();
+    if (configured) {
+        if (!isAbsolute(configured)) {
+            throw new MortyPathError("MORTY_STATE_DIRECTORY must be absolute");
+        }
+        return configured;
+    }
+    switch (process.platform) {
+        case "win32": {
+            const local = environment["LOCALAPPDATA"];
+            if (!local || !isAbsolute(local)) {
+                throw new MortyPathError("LOCALAPPDATA must be absolute");
+            }
+            return join(local, "Morty", "v3");
+        }
+        case "darwin":
+            return join(homedir(), "Library", "Application Support", "Morty", "v3");
+        default: {
+            const state = environment["XDG_STATE_HOME"];
+            return join(state && isAbsolute(state) ? state : join(homedir(), ".local", "state"), "morty", "v3");
+        }
+    }
 }
