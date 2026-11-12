@@ -6,7 +6,7 @@ import { SessionAccessSigner } from "../../src/computer-relay/components/runtime
 import { acceptWebSocketHttpTransport } from "../../src/computer-relay/components/runtime/http/websocket-http-transport.ts";
 import { createLocalSessionOperations } from "../../src/computer-relay/components/runtime/service/local-session-operations.ts";
 import { SessionAccessService } from "../../src/computer-relay/components/runtime/service/session-access-service.ts";
-import { createBrowserWebSocketRoutes } from "../../src/computer-relay/components/runtime/websocket/browser-websocket-routes.ts";
+import { createSessionWebSocketRoutes } from "../../src/computer-relay/components/runtime/websocket/session-websocket-routes.ts";
 import { createRelayDurableObjectContext } from "../../src/computer-relay/composition/relay-durable-object-context.ts";
 import { DurableObjectDatabase } from "../../src/computer-relay/infra/durable-object-database.ts";
 import { RequestDeadline } from "../../src/http/request-deadline.ts";
@@ -38,14 +38,16 @@ it("Given a Computer API with a 120-second deadline mounted beside Session route
                 access: () => access,
             });
             const api = new PendingComputerApiBoundary();
-            const router = createBrowserWebSocketRoutes({
-                computerId: owner.computerId,
+            const router = createSessionWebSocketRoutes({
+                ownsComputer: (computerId) => computerId === owner.computerId,
                 services: {
-                    sessions: new SessionAccessService(
-                        access,
-                        new SessionAccessSigner(env.MORTY_SESSION_SIGNING_SECRET),
-                    ),
-                    operations: createLocalSessionOperations(runtime, owner.computerId),
+                    forComputer: (computerId) => ({
+                        sessions: new SessionAccessService(
+                            access,
+                            new SessionAccessSigner(env.MORTY_SESSION_SIGNING_SECRET),
+                        ),
+                        operations: createLocalSessionOperations(runtime, computerId),
+                    }),
                 },
             }).route(
                 "/",
@@ -57,7 +59,7 @@ it("Given a Computer API with a 120-second deadline mounted beside Session route
                 request: new Request(`${ownerOrigin}/morty/api/v1/computers/${owner.computerId}/transport`, {
                     headers: { Upgrade: "websocket" },
                 }),
-                dispatch: async (request) => await router.fetch(request),
+                dispatch: async (operation) => await router.fetch(operation.request, { operation }),
             });
             const socket = response.webSocket;
             if (socket === null) {
