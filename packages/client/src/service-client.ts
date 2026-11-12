@@ -21,6 +21,8 @@ import {
     SessionPromptDisposition,
     type Turn,
 } from "@morty-build/client/protocol";
+import type { MortyEndpointCall } from "./calls/call.ts";
+import { sessionEndpoints } from "./calls/session.ts";
 import {
     MortyApiError,
     MortyCancellationError,
@@ -38,10 +40,6 @@ import type {
     SubmitMortyTurnRequest,
 } from "./resources.ts";
 import type { MortyTransportSessionEvent, WsTransport } from "./transport/ws-transport.ts";
-import { type MortyEndpointCall, sessionEndpoints } from "./transport/session-endpoints.ts";
-
-const DEFAULT_OPERATION_TIMEOUT_MILLISECONDS = 20_000;
-const STREAM_CONNECTION_TIMEOUT_MILLISECONDS = 15_000;
 
 function sanitizedConnectionCauseMessage(value: string): string {
     return Array.from(value, (character) => {
@@ -301,7 +299,7 @@ class LiveEventConnection {
 export class MortyRequestExecutor {
     readonly #credentialProvider: MortyCredentialProvider;
     readonly #endpoint: URL;
-    readonly #operationTimeoutMilliseconds: number;
+    readonly #operationTimeoutMilliseconds: number | undefined;
     readonly #observeResponse: ((metadata: MortyResponseMetadata) => void) | undefined;
     readonly #transport: WsTransport;
     readonly #lifetime = new AbortController();
@@ -310,10 +308,10 @@ export class MortyRequestExecutor {
         this.#transport = transport;
         this.#credentialProvider = options.credentialProvider;
         this.#endpoint = normalizeEndpoint(options.endpoint);
-        this.#operationTimeoutMilliseconds = validatePositiveInteger(
-            options.operationTimeoutMilliseconds ?? DEFAULT_OPERATION_TIMEOUT_MILLISECONDS,
-            "operation timeout",
-        );
+        this.#operationTimeoutMilliseconds =
+            options.operationTimeoutMilliseconds === undefined
+                ? undefined
+                : validatePositiveInteger(options.operationTimeoutMilliseconds, "operation timeout");
         this.#observeResponse = options.observeResponse;
     }
 
@@ -334,7 +332,7 @@ export class MortyRequestExecutor {
     }> => {
         const deadline = new RequestDeadline(
             AbortSignal.any([signal, this.#lifetime.signal]),
-            this.#operationTimeoutMilliseconds,
+            this.#operationTimeoutMilliseconds ?? endpoint.timeoutMilliseconds,
         );
         try {
             const credential = validateCredential(await this.#credentialProvider.credential(deadline.signal));
@@ -414,7 +412,7 @@ export class MortyRequestExecutor {
     ): Promise<unknown> => {
         const deadline = new RequestDeadline(
             AbortSignal.any([signal, this.#lifetime.signal]),
-            this.#operationTimeoutMilliseconds,
+            this.#operationTimeoutMilliseconds ?? endpoint.timeoutMilliseconds,
         );
         try {
             const credential = validateCredential(await this.#credentialProvider.credential(deadline.signal));
@@ -461,7 +459,7 @@ export class MortyRequestExecutor {
         signal.addEventListener("abort", abort, { once: true });
         const timeoutId = globalThis.setTimeout(
             () => controller.abort(new Error("The live Session event connection timed out")),
-            STREAM_CONNECTION_TIMEOUT_MILLISECONDS,
+            endpoint.timeoutMilliseconds,
         );
         const release = (): void => {
             globalThis.clearTimeout(timeoutId);
@@ -498,7 +496,7 @@ export class MortyRequestExecutor {
     ): Promise<unknown> => {
         const deadline = new RequestDeadline(
             AbortSignal.any([signal, this.#lifetime.signal]),
-            this.#operationTimeoutMilliseconds,
+            this.#operationTimeoutMilliseconds ?? endpoint.timeoutMilliseconds,
         );
         try {
             const credential = validateCredential(await this.#credentialProvider.credential(deadline.signal));
@@ -602,7 +600,7 @@ export class MortySessionResources {
         decodeSessionConfigUpdatedEvent(
             JSON.stringify(
                 await this.#executor.post(
-                    sessionEndpoints.updateConfiguration(this.#computerId, target),
+                    sessionEndpoints.updateConfiguration({ computerId: this.#computerId, target }),
                     request,
                     signal,
                 ),
@@ -612,14 +610,21 @@ export class MortySessionResources {
     readonly readConfiguration = async (target: NativeSessionTarget, signal: AbortSignal) =>
         decodeSessionConfigReadResult(
             JSON.stringify(
-                await this.#executor.get(sessionEndpoints.readConfiguration(this.#computerId, target), signal),
+                await this.#executor.get(
+                    sessionEndpoints.readConfiguration({ computerId: this.#computerId, target }),
+                    signal,
+                ),
             ),
         );
 
     readonly rename = async (target: NativeSessionTarget, title: string, signal: AbortSignal) =>
         decodeSessionRenamedEvent(
             JSON.stringify(
-                await this.#executor.post(sessionEndpoints.rename(this.#computerId, target), { title }, signal),
+                await this.#executor.post(
+                    sessionEndpoints.rename({ computerId: this.#computerId, target }),
+                    { title },
+                    signal,
+                ),
             ),
         );
 
@@ -641,10 +646,14 @@ export class MortySessionResources {
         if (input.bytes.byteLength < 1 || input.bytes.byteLength > CONTENT_WRITE_MAX_BYTES) {
             throw new MortyValidationError("The content size is invalid");
         }
-        const query = new URLSearchParams({ uri: input.uri });
         return decodePromptAttachment(
             await this.#executor.putContent(
-                sessionEndpoints.uploadContent(input.contentKey)(this.#computerId, sessionTarget, query),
+                sessionEndpoints.uploadContent({
+                    computerId: this.#computerId,
+                    target: sessionTarget,
+                    key: input.contentKey,
+                    uri: input.uri,
+                }),
                 input.bytes,
                 { contentKind: input.kind, mediaType: input.mediaType, name: input.name },
                 signal,
@@ -669,9 +678,8 @@ export class MortySessionResources {
         if (!Number.isSafeInteger(maximumBytes) || maximumBytes < 1 || maximumBytes > 128 * 1024 * 1024) {
             throw new MortyValidationError("The file size limit is invalid");
         }
-        const query = new URLSearchParams({ maxBytes: maximumBytes.toString(), path });
         return await this.#executor.getFile(
-            sessionEndpoints.readFile(this.#computerId, sessionTarget, query),
+            sessionEndpoints.readFile({ computerId: this.#computerId, target: sessionTarget, path, maximumBytes }),
             maximumBytes,
             signal,
         );
@@ -692,14 +700,14 @@ export class MortySessionResources {
             "turn" | "queued" | "command" | "lastTurn" | "queuedCancellation" | "interactionState" | "executionPosition"
         >
     > => {
-        const query = new URLSearchParams();
-        if (commandId !== undefined) {
-            query.set("commandId", commandId);
-        }
         const result = decodeNativeSessionResult(
             JSON.stringify(
                 await this.#executor.get(
-                    sessionEndpoints.readExecution(this.#computerId, sessionTarget, query),
+                    sessionEndpoints.readExecution({
+                        computerId: this.#computerId,
+                        target: sessionTarget,
+                        ...(commandId === undefined ? {} : { commandId }),
+                    }),
                     signal,
                 ),
             ),
@@ -734,7 +742,11 @@ export class MortyTurnResources {
         signal: AbortSignal,
     ): Promise<Turn> => {
         const turn = decodeTurn(
-            await this.#executor.post(sessionEndpoints.submitTurn(this.#computerId, sessionTarget), request, signal),
+            await this.#executor.post(
+                sessionEndpoints.submitTurn({ computerId: this.#computerId, target: sessionTarget }),
+                request,
+                signal,
+            ),
         );
         if (turn === null) {
             throw new MortyProtocolError("The service returned an invalid Turn");
@@ -748,7 +760,11 @@ export class MortyTurnResources {
         signal: AbortSignal,
     ): Promise<MortyTurnCancellation> =>
         decodeTurnCancellation(
-            await this.#executor.post(sessionEndpoints.cancelTurn(turnId)(this.#computerId, sessionTarget), {}, signal),
+            await this.#executor.post(
+                sessionEndpoints.cancelTurn({ computerId: this.#computerId, target: sessionTarget, turnId }),
+                {},
+                signal,
+            ),
             turnId,
         );
 
@@ -759,7 +775,7 @@ export class MortyTurnResources {
         signal: AbortSignal,
     ): Promise<void> => {
         const result = await this.#executor.post(
-            sessionEndpoints.cancelQueuedTurn(turnId)(this.#computerId, sessionTarget),
+            sessionEndpoints.cancelQueuedTurn({ computerId: this.#computerId, target: sessionTarget, turnId }),
             {},
             signal,
         );
@@ -774,7 +790,7 @@ export class MortyTurnResources {
         signal: AbortSignal,
     ): Promise<{ readonly turnId: string }> => {
         const result = await this.#executor.put(
-            sessionEndpoints.steerTurn(turnId)(this.#computerId, sessionTarget),
+            sessionEndpoints.steerTurn({ computerId: this.#computerId, target: sessionTarget, turnId }),
             { disposition: SessionPromptDisposition.Steer },
             signal,
         );
@@ -803,7 +819,7 @@ export class MortyInteractionResources {
         signal: AbortSignal,
     ): Promise<void> => {
         const result = await this.#executor.post(
-            sessionEndpoints.respond(interactionId)(this.#computerId, sessionTarget),
+            sessionEndpoints.respond({ computerId: this.#computerId, target: sessionTarget, interactionId }),
             request,
             signal,
         );
@@ -955,7 +971,7 @@ export class MortyEventResources {
     ): Promise<MortyLiveEventSubscription> => {
         const subscription = new MortyLiveEventSubscription(
             this.#executor,
-            sessionEndpoints.events(this.#computerId, sessionTarget),
+            sessionEndpoints.liveEvents({ computerId: this.#computerId, target: sessionTarget }),
             observer,
             signal,
         );
@@ -970,12 +986,16 @@ export class MortyEventResources {
         page: MortyPageRequest,
         signal: AbortSignal,
     ): Promise<SessionEventLogPage> => {
-        const query = new URLSearchParams({ limit: page.limit.toString() });
-        if (page.cursor.length > 0) {
-            query.set("cursor", page.cursor);
-        }
         return decodeKnownSessionEventLogPage(
-            await this.#executor.get(sessionEndpoints.events(this.#computerId, sessionTarget, query), signal),
+            await this.#executor.get(
+                sessionEndpoints.listEvents({
+                    computerId: this.#computerId,
+                    target: sessionTarget,
+                    limit: page.limit,
+                    cursor: page.cursor,
+                }),
+                signal,
+            ),
         );
     };
 

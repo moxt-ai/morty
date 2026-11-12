@@ -1,25 +1,10 @@
 import type { WsTransport } from "@morty-build/client";
+import type { ApiCall } from "./calls/call.ts";
 
 export interface ApiResponseSnapshot {
     readonly status: number;
     readonly headers: Headers;
     readonly body: string;
-}
-
-export interface ApiEndpoint {
-    readonly target: { readonly kind: "worker" } | { readonly kind: "computer"; readonly computerId: string };
-    readonly url: URL;
-    readonly method: "GET" | "POST" | "DELETE";
-    readonly operation: string;
-    readonly watch: "snapshot" | "none";
-}
-
-export interface ApiCall {
-    readonly endpoint: ApiEndpoint;
-    readonly headers: Readonly<Record<string, string>>;
-    readonly body?: string | null;
-    readonly signal: AbortSignal;
-    readonly redirect?: RequestRedirect;
 }
 
 export interface ApiTransport {

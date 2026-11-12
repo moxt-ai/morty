@@ -1,7 +1,8 @@
 import { decodeIdentifier, type Identifier, isIdentifier } from "@morty-build/client/protocol";
 import * as v from "valibot";
-import { managementEndpoint } from "../api/api-endpoints.ts";
 import type { ApiTransport } from "../api/api-transport.ts";
+import type { ApiRequest } from "../api/calls/call.ts";
+import { managementCalls } from "../api/calls/management.ts";
 
 const identifier = v.custom<Identifier>(isIdentifier);
 const computerSchema = v.pipe(v.object({ computerId: identifier }), v.readonly());
@@ -38,22 +39,31 @@ export class ManagementApi {
     }
 
     readonly readComputer = async (signal: AbortSignal): Promise<ManagedComputer | null> =>
-        v.parse(v.object({ computer: v.nullable(computerSchema) }), await this.#request("/computer", signal)).computer;
+        v.parse(
+            v.object({ computer: v.nullable(computerSchema) }),
+            await this.#request(
+                managementCalls.readComputer({ origin: this.#origin, computerId: this.#computerId }),
+                signal,
+            ),
+        ).computer;
 
     readonly readComputerPairing = async (signal: AbortSignal): Promise<ComputerPairing> =>
-        v.parse(pairingStateSchema, await this.#request("/computer/pairing-state", signal)).computerPairing;
+        v.parse(
+            pairingStateSchema,
+            await this.#request(
+                managementCalls.readComputerPairing({ origin: this.#origin, computerId: this.#computerId }),
+                signal,
+            ),
+        ).computerPairing;
 
-    readonly #request = async (
-        path: "/computer" | "/computer/pairing-state",
-        requestSignal: AbortSignal,
-    ): Promise<unknown> => {
-        const signal = AbortSignal.any([requestSignal, AbortSignal.timeout(15_000)]);
+    readonly #request = async (request: ApiRequest, requestSignal: AbortSignal): Promise<unknown> => {
+        const signal = AbortSignal.any([requestSignal, AbortSignal.timeout(request.endpoint.timeoutMilliseconds)]);
         const token = await this.#getToken(signal);
         if (token === null) {
             throw new CloudApiError("UNAUTHENTICATED", "Your session is unavailable.");
         }
         const response = await this.#fetchRequest({
-            endpoint: managementEndpoint(this.#origin, this.#computerId, path),
+            ...request,
             signal,
             headers: { authorization: `Bearer ${token}` },
         });

@@ -1,6 +1,7 @@
 import * as v from "valibot";
-import { type IdentityOperation, identityEndpoint } from "../api/api-endpoints.ts";
 import type { ApiTransport } from "../api/api-transport.ts";
+import type { ApiRequest } from "../api/calls/call.ts";
+import { identityCalls } from "../api/calls/identity.ts";
 import { browserAccessEntry } from "../local-storage/central-local-storage.ts";
 import { CloudApiError, ManagementApi } from "../management/management-api.ts";
 import { centralSessionStorage, transferRedemptionEntry } from "../session-storage/central-session-storage.ts";
@@ -109,9 +110,7 @@ interface Options {
 }
 
 interface IdentityRequest {
-    readonly computerId?: string;
     readonly headers: Readonly<Record<string, string>>;
-    readonly body?: string;
 }
 
 /**
@@ -221,17 +220,18 @@ export class AnonymousIdentityApi {
         v.parse(
             transferSchema,
             await this.#request(
-                "/identity/transfers",
+                identityCalls.createTransfer({
+                    origin: this.#origin,
+                    computerId: this.#computerId(),
+                    operationId: terms.operationId,
+                    accessDuration: terms.accessDuration,
+                    replaces: terms.replaces,
+                }),
                 {
                     headers: {
                         authorization: `Bearer ${v.parse(tokenSchema, token)}`,
                         "content-type": "application/json",
                     },
-                    body: JSON.stringify({
-                        operationId: terms.operationId,
-                        ...(terms.accessDuration === null ? {} : { accessDuration: terms.accessDuration }),
-                        ...(terms.replaces === null ? {} : { replaces: terms.replaces }),
-                    }),
                 },
                 signal,
             ),
@@ -255,15 +255,16 @@ export class AnonymousIdentityApi {
         const identity = v.parse(
             identitySchema,
             await this.#request(
-                "/identity/transfers/redeem",
+                identityCalls.redeemTransfer({
+                    origin: this.#origin,
+                    computerId: null,
+                    code,
+                    replaces,
+                    device: describeBrowser(navigator.userAgent),
+                    redemptionKey,
+                }),
                 {
                     headers: { "content-type": "application/json" },
-                    body: JSON.stringify({
-                        code,
-                        ...(replaces === null ? {} : { replaces }),
-                        device: describeBrowser(navigator.userAgent),
-                        redemptionKey,
-                    }),
                 },
                 signal,
             ),
@@ -280,7 +281,7 @@ export class AnonymousIdentityApi {
         signal: AbortSignal,
     ): Promise<void> =>
         await waitForChange({
-            endpoint: this.#endpoint("/identity/devices"),
+            ...identityCalls.linkedDevices({ origin: this.#origin, computerId: this.#computerId() }),
             headers: { authorization: `Bearer ${v.parse(tokenSchema, token)}` },
             signal,
         });
@@ -290,7 +291,7 @@ export class AnonymousIdentityApi {
         v.parse(
             accessTermSchema,
             await this.#request(
-                "/session",
+                identityCalls.session({ origin: this.#origin, computerId: this.#computerId() }),
                 { headers: { authorization: `Bearer ${v.parse(tokenSchema, token)}` } },
                 signal,
             ),
@@ -301,7 +302,7 @@ export class AnonymousIdentityApi {
         v.parse(
             linkedDevicesSchema,
             await this.#request(
-                "/identity/devices",
+                identityCalls.linkedDevices({ origin: this.#origin, computerId: this.#computerId() }),
                 { headers: { authorization: `Bearer ${v.parse(tokenSchema, token)}` } },
                 signal,
             ),
@@ -315,7 +316,7 @@ export class AnonymousIdentityApi {
         v.parse(
             otherBrowserAccessEndedSchema,
             await this.#request(
-                "/identity/v1/other-browser-access",
+                identityCalls.endOtherBrowserAccess({ origin: this.#origin, computerId: this.#computerId() }),
                 { headers: { authorization: `Bearer ${v.parse(tokenSchema, token)}` } },
                 signal,
             ),
@@ -327,7 +328,7 @@ export class AnonymousIdentityApi {
         v.parse(
             deviceAccessEndedSchema,
             await this.#request(
-                `/identity/v1/devices/${encodeURIComponent(deviceId)}`,
+                identityCalls.endDeviceAccess({ origin: this.#origin, computerId: this.#computerId(), deviceId }),
                 { headers: { authorization: `Bearer ${v.parse(tokenSchema, token)}` } },
                 signal,
             ),
@@ -340,11 +341,19 @@ export class AnonymousIdentityApi {
         access: StoredAccessWriter,
     ): Promise<void> => {
         const headers = { authorization: `Bearer ${v.parse(tokenSchema, token)}` };
-        const session = await this.#response("/session", { headers }, signal);
+        const session = await this.#response(
+            identityCalls.session({ origin: this.#origin, computerId: this.#computerId() }),
+            { headers },
+            signal,
+        );
         await session.body?.cancel();
         // The Worker names the deletion that ends this credential's kind.
         const path = v.parse(credentialRevocationPathSchema, session.headers.get("Morty-Credential-Revocation"));
-        await this.#request(path, { headers }, signal);
+        const request =
+            path === "/identity/v1/local-credential"
+                ? identityCalls.endLocalCredential({ origin: this.#origin, computerId: this.#computerId() })
+                : identityCalls.endBrowserAccess({ origin: this.#origin, computerId: this.#computerId() });
+        await this.#request(request, { headers }, signal);
         const scope = readIdentityScope();
         if (scope !== null) {
             access.forget(scope);
@@ -366,9 +375,8 @@ export class AnonymousIdentityApi {
             return v.parse(
                 anonymousSessionSchema,
                 await this.#request(
-                    "/session",
+                    identityCalls.session({ origin: this.#origin, computerId: identity.computerId }),
                     {
-                        computerId: identity.computerId,
                         headers: {
                             authorization: `Bearer ${identity.computerToken}`,
                         },
@@ -389,28 +397,32 @@ export class AnonymousIdentityApi {
     };
 
     readonly #request = async (
-        path: IdentityOperation,
+        request: ApiRequest,
         init: IdentityRequest,
         requestSignal: AbortSignal,
     ): Promise<unknown> => {
-        const response = await this.#response(path, init, requestSignal);
+        const response = await this.#response(request, init, requestSignal);
         const value: unknown = response.status === 204 ? null : await response.json();
         requestSignal.throwIfAborted();
         return value;
     };
 
-    readonly #endpoint = (path: IdentityOperation, computerId = readIdentityScope()?.computerId ?? null) =>
-        identityEndpoint(this.#origin, computerId, path);
+    readonly #computerId = (): string => {
+        const scope = readIdentityScope();
+        if (scope === null) {
+            throw new IdentityApiError("COMPUTER_REQUIRED", "Choose a Computer to continue.", 400);
+        }
+        return scope.computerId;
+    };
 
     readonly #response = async (
-        path: IdentityOperation,
+        request: ApiRequest,
         init: IdentityRequest,
         requestSignal: AbortSignal,
     ): Promise<Response> => {
-        const signal = AbortSignal.any([requestSignal, AbortSignal.timeout(30_000)]);
+        const signal = AbortSignal.any([requestSignal, AbortSignal.timeout(request.endpoint.timeoutMilliseconds)]);
         const response = await this.#fetchRequest({
-            endpoint: this.#endpoint(path, init.computerId),
-            body: init.body ?? null,
+            ...request,
             headers: init.headers,
             signal,
         });

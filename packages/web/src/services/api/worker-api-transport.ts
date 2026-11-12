@@ -2,7 +2,8 @@ import { MortyValidationError, WsTransport } from "@morty-build/client";
 import { isIdentifier } from "@morty-build/client/protocol";
 import { recordBrowserDiagnostic } from "../diagnostics/browser-diagnostics.ts";
 import { systemClock } from "../time/clock.ts";
-import type { ApiCall, ApiResponseSnapshot } from "./api-transport.ts";
+import type { ApiResponseSnapshot } from "./api-transport.ts";
+import type { ApiCall } from "./calls/call.ts";
 
 export class ApiConnectionError extends Error {}
 export function isApiConnectionError(error: unknown): error is ApiConnectionError {
@@ -52,8 +53,8 @@ export class WorkerApiTransport {
                         computerId: endpoint.target.computerId,
                         method: endpoint.method,
                         path: `${endpoint.url.pathname}${endpoint.url.search}`,
-                        transport: "websocket",
-                        scope: "computer",
+                        transport: endpoint.transport,
+                        timeoutMilliseconds: endpoint.timeoutMilliseconds,
                     },
                     origin: new URL(this.#origin),
                     headers: request.headers,

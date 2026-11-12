@@ -119,15 +119,15 @@ async function computerPeer() {
             init: {
                 readonly method?: MortyEndpointCall["method"];
                 readonly signal?: AbortSignal;
-                readonly transport?: MortyEndpointCall["transport"];
+                readonly transport?: "http" | "websocket";
             } = {},
         ): MortyTransportCall => ({
             endpoint: {
                 computerId: "computer-1",
-                scope: "computer",
                 method: init.method ?? "GET",
                 path: `/morty/api${path}`,
-                transport: init.transport ?? "websocket",
+                transport: init.transport === "http" ? { kind: "http" } : { kind: "websocket", cancellation: "remote" },
+                timeoutMilliseconds: 10_000,
             },
             origin: new URL(origin),
             headers: { authorization: "Bearer owner" },

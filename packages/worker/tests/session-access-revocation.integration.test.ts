@@ -143,7 +143,7 @@ test("Given a device with an open Session, When its owner disconnects it while t
         onTestFinished(() => transport.close());
         const readAccess = () =>
             transport.fetch({
-                endpoint: sessionEndpoints.readConfiguration(window.computerId, window.target),
+                endpoint: sessionEndpoints.readConfiguration({ computerId: window.computerId, target: window.target }),
                 origin: new URL("/morty/api/", cloud.origin),
                 headers: { authorization: `Bearer ${window.credential}` },
                 body: null,

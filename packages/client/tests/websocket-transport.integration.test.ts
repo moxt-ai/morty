@@ -43,11 +43,11 @@ function computerRequest(
     headers.set("authorization", `Bearer ${sessionCredential}`);
     return {
         endpoint: {
-            scope: "session",
             computerId,
             method: init?.method ?? "GET",
             path: `${url.pathname}${url.search}`,
-            transport: "websocket",
+            transport: { kind: "websocket", cancellation: "local" },
+            timeoutMilliseconds: 10_000,
         },
         origin: url,
         headers: Object.fromEntries(headers.entries()),

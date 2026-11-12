@@ -1,6 +1,6 @@
 import { CONTENT_CHUNK_MAX_BYTES, encodeContentChunkFrame, MORTY_API_PREFIX } from "@morty-build/client/protocol";
+import type { MortyTransportCall } from "../calls/call.ts";
 import { MortyApiError, MortyConnectionError, MortyProtocolError, MortyValidationError } from "../errors.ts";
-import type { MortyTransportCall } from "./http-transport.ts";
 
 const CONNECTION_TIMEOUT_MILLISECONDS = 15_000;
 const HEARTBEAT_INTERVAL_MILLISECONDS = 20_000;
@@ -163,13 +163,25 @@ export class WsTransport {
         this.#connector = options.connector ?? new RelayMortyWebSocketConnector();
     }
 
+    readonly #cancelRequest = (socket: WebSocket, requestId: string): void => {
+        if (socket.readyState !== WebSocket.OPEN) {
+            return;
+        }
+        try {
+            socket.send(JSON.stringify({ kind: "http.cancel", requestId }));
+        } catch {
+            // Cancellation is already final locally; never replay the operation.
+        }
+    };
+
     readonly fetch = async (request: MortyTransportCall): Promise<Response> => {
         request.signal.throwIfAborted();
         if (this.#state.kind === "closed") {
             throw new MortyConnectionError("The Morty WebSocket transport is closed");
         }
         const requestUrl = new URL(request.endpoint.path, request.origin);
-        if (request.endpoint.transport === "http") {
+        const transport = request.endpoint.transport;
+        if (transport.kind === "http") {
             return await globalThis.fetch(requestUrl, {
                 method: request.endpoint.method,
                 headers: request.headers,
@@ -187,12 +199,8 @@ export class WsTransport {
             const abort = (): void => {
                 this.#pending.delete(requestId);
                 reject(request.signal.reason);
-                if (request.endpoint.scope === "computer" && socket.readyState === WebSocket.OPEN) {
-                    try {
-                        socket.send(JSON.stringify({ kind: "http.cancel", requestId }));
-                    } catch {
-                        // Cancellation is already final locally; never replay the operation.
-                    }
+                if (transport.cancellation === "remote") {
+                    this.#cancelRequest(socket, requestId);
                 }
             };
             request.signal.addEventListener("abort", abort, { once: true });

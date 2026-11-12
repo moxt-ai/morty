@@ -121,7 +121,7 @@ const expected = createHmac("sha256", signingSecret).update(signed).digest();
 if (!timingSafeEqual(expected, Buffer.from(signature, "base64url"))) {
     throw new Error("The configured signing key was not used");
 }
-const readConfiguration = sessionEndpoints.readConfiguration(owner.computerId, access.target);
+const readConfiguration = sessionEndpoints.readConfiguration({ computerId: owner.computerId, target: access.target });
 await requestSession(readConfiguration, 200, access.credential);
 await requestSession(readConfiguration, 401, `${signed}.${Buffer.alloc(32).toString("base64url")}`);
 const successor = `morty_computer_v1_${randomBytes(32).toString("base64url")}`;
