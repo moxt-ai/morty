@@ -190,7 +190,6 @@ test.each(["fresh", "unknown", "revoked"] as const)(
                 {
                     env: {
                         ...process.env,
-                        MOBIUS_STATE_DIRECTORY: join(directory, "inherited-installation-data"),
                         MORTY_STATE_DIRECTORY: state,
                     },
                     stdio: ["ignore", "pipe", "pipe"],
@@ -270,7 +269,6 @@ process.exitCode = await runSetup(process.argv.slice(2), {
             env: {
                 ...process.env,
                 MORTY_STATE_DIRECTORY: state,
-                MOBIUS_STATE_DIRECTORY: join(directory, "morty-state"),
             },
             stdio: ["ignore", "pipe", "pipe"],
             windowsHide: true,
@@ -395,7 +393,6 @@ test.runIf(process.platform !== "win32")(
                 env: {
                     ...environment,
                     HOME: directory,
-                    MOBIUS_STATE_DIRECTORY: join(directory, "morty-state"),
                 },
                 stdio: ["ignore", "pipe", "pipe"],
                 signal: AbortSignal.timeout(SETUP_PROCESS_TIMEOUT_MS),
