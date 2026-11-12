@@ -1,6 +1,6 @@
 interface RequestOptions {
     readonly body?: unknown;
-    readonly project?: string;
+    readonly computer?: string;
     readonly token?: string;
     readonly signal: AbortSignal;
 }
@@ -29,14 +29,14 @@ export function anonymousCreationKey(): string {
     return Buffer.from(crypto.getRandomValues(new Uint8Array(32))).toString("base64url");
 }
 
-export async function jsonRequest(origin: string, path: string, { body, project, token, signal }: RequestOptions) {
+export async function jsonRequest(origin: string, path: string, { body, computer, token, signal }: RequestOptions) {
     const headers: Record<string, string> = { "content-type": "application/json" };
     if (token !== undefined) {
         headers["authorization"] = `Bearer ${token}`;
     }
     const scopedPath =
-        project !== undefined && path.startsWith("/morty/api/") && !path.startsWith("/morty/api/chat/computers/")
-            ? path.replace("/morty/api/", `/morty/api/computers/${encodeURIComponent(project)}/`)
+        computer !== undefined && path.startsWith("/morty/api/") && !path.startsWith("/morty/api/chat/computers/")
+            ? path.replace("/morty/api/", `/morty/api/computers/${encodeURIComponent(computer)}/`)
             : path;
     const response = await fetch(new URL(scopedPath, origin), {
         method: body === undefined ? "GET" : "POST",
@@ -129,7 +129,7 @@ export class ChatApi {
         const identity = this.#requireIdentity();
         return await jsonRequest(this.origin, path, {
             ...options,
-            project: identity.computerId,
+            computer: identity.computerId,
             token: identity.token,
             signal: this.signal,
         });

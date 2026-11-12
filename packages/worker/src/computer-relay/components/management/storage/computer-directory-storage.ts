@@ -67,7 +67,7 @@ export class ComputerDirectoryStorage {
     };
 
     /** The computer's current generation; null before it was ever paired. */
-    readonly readProjectPairing = async (signal: AbortSignal): Promise<PairingClaimRow | null> => {
+    readonly readCurrentPairing = async (signal: AbortSignal): Promise<PairingClaimRow | null> => {
         const rows = await this.generationQuery(relayDrizzle(this.#database, signal))
             .where(inArray(computerPairing.generation, currentGeneration(this.#computerId)))
             .limit(1);
@@ -198,7 +198,7 @@ export class ComputerDirectoryStorage {
 
     /** The computer's current generation as a Computer: its registration and revocation, if they happened. */
     readonly readComputer = async (signal: AbortSignal): Promise<ComputerPairingDirectoryRow | null> => {
-        const row = await this.readProjectPairing(signal);
+        const row = await this.readCurrentPairing(signal);
         return row === null
             ? null
             : { computer_id: row.computer_id, revoked_at: row.revoked_at, registration: row.registration };

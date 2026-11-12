@@ -95,7 +95,7 @@ const permittedKinds = {
     pairComputer: ["local"],
     verifyAgent: ["local"],
     revokeAllAccess: ["local"],
-    replaceProject: ["local"],
+    replaceComputer: ["local"],
     endBrowserAccess: ["browser"],
     endOtherBrowserAccess: ["browser"],
     endDeviceAccess: ["local", "browser"],

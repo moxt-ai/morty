@@ -37,51 +37,54 @@ export class ManagementService {
      * Every step reuses what an earlier attempt committed, and the credential derives from the bootstrap's origin, so
      * repeating the same bootstrap completes it and returns the same identity instead of creating another.
      */
-    readonly initializeComputer = async (project: ComputerManagement, signal: AbortSignal, origin: BootstrapOrigin) => {
-        const token = await bootstrapToken(this.#credentialKey, project.computerId, origin, signal);
-        const identity = await this.#authentication.createComputer(project.computerId, signal, token);
+    readonly initializeComputer = async (
+        computer: ComputerManagement,
+        signal: AbortSignal,
+        origin: BootstrapOrigin,
+    ) => {
+        const token = await bootstrapToken(this.#credentialKey, computer.computerId, origin, signal);
+        const identity = await this.#authentication.createComputer(computer.computerId, signal, token);
         return identity;
     };
 
     /** The owner's Computer: where its Runtime pairing stands, read from the Relay that owns it. */
     readonly readComputer = async (computerId: string, signal: AbortSignal) => {
-        const project = await this.readProject(computerId, signal);
-        if (project === null) {
+        const computer = await this.findComputer(computerId, signal);
+        if (computer === null) {
             throw new ManagementError("BOT_NOT_FOUND", "Computer is unavailable.", 404);
         }
-        return { computerPairing: await this.#relay.readComputerPairing(project.computerId, signal) };
+        return { computerPairing: await this.#relay.readComputerPairing(computer.computerId, signal) };
     };
 
-    readonly readProject = async (computerId: string, signal: AbortSignal) => {
+    readonly findComputer = async (computerId: string, signal: AbortSignal) => {
         signal.throwIfAborted();
         return this.#computerId !== computerId ? null : { computerId: this.#computerId };
     };
 
     /** The previous Computer names its successor so replacement retries reuse it. */
-    readonly replaceProject = async (computerId: string, signal: AbortSignal) => {
-        const previous = await this.readProject(computerId, signal);
+    readonly replaceComputer = async (computerId: string, signal: AbortSignal) => {
+        const previous = await this.findComputer(computerId, signal);
         if (previous === null) {
-            throw new ComputerManagementError("PROJECT_REQUIRED", "Finish Morty setup before replacing.", 409);
+            throw new ComputerManagementError("COMPUTER_REQUIRED", "Finish Morty setup before replacing.", 409);
         }
         // The predecessor fixes the successor's creation identity, so retries reach the same computer.
         const reference = `replacement_${previous.computerId}`;
         const placement = decodeComputerPlacement(previous.computerId);
         if (placement === null) {
-            throw new ComputerManagementError("INVALID_ACCOUNT_ID", "The Project ID is invalid.", 400);
+            throw new ComputerManagementError("INVALID_ACCOUNT_ID", "The Computer ID is invalid.", 400);
         }
-        const project = await this.#provisionAccount(reference, placement.locationHint, signal);
-        return project;
+        return await this.#provisionAccount(reference, placement.locationHint, signal);
     };
 
     readonly createComputerPairing = async (computerId: string, idempotencyKey: string, signal: AbortSignal) => {
-        const project = await this.#requireProject(computerId, signal);
-        const pairing = await this.#relay.createPairing(project.computerId, idempotencyKey, signal);
+        const computer = await this.#requireComputer(computerId, signal);
+        const pairing = await this.#relay.createPairing(computer.computerId, idempotencyKey, signal);
         return pairing;
     };
 
     readonly readComputerPairing = async (computerId: string, signal: AbortSignal) => {
-        const project = await this.#requireProject(computerId, signal);
-        return await this.#relay.readPairing(project.computerId, signal);
+        const computer = await this.#requireComputer(computerId, signal);
+        return await this.#relay.readPairing(computer.computerId, signal);
     };
 
     /**
@@ -108,12 +111,16 @@ export class ManagementService {
         return identity;
     };
 
-    readonly #requireProject = async (computerId: string, signal: AbortSignal) => {
-        const project = await this.readProject(computerId, signal);
-        if (project === null) {
-            throw new ComputerManagementError("PROJECT_REQUIRED", "Finish Morty setup before pairing a Computer.", 409);
+    readonly #requireComputer = async (computerId: string, signal: AbortSignal) => {
+        const computer = await this.findComputer(computerId, signal);
+        if (computer === null) {
+            throw new ComputerManagementError(
+                "COMPUTER_REQUIRED",
+                "Finish Morty setup before pairing a Computer.",
+                409,
+            );
         }
-        return project;
+        return computer;
     };
 }
 

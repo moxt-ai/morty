@@ -3,7 +3,7 @@ import { and, eq, exists, gt, inArray, isNull, max, ne, notExists, or, type SQL,
 import { alias, type SQLiteColumn } from "drizzle-orm/sqlite-core";
 import type { Credential, SharedLinkTerms } from "../../../../contracts/authentication/credential.ts";
 import type { ClientLocation } from "../../../../contracts/client-location.ts";
-import { readProjectCredential } from "../../../../contracts/project-credential.ts";
+import { readTransferCredential } from "../../../../contracts/transfer-credential.ts";
 import type { DurableObjectDatabase } from "../../../infra/durable-object-database.ts";
 import {
     browserCredential,
@@ -513,7 +513,7 @@ export class IdentityStorage {
     };
 
     /**
-     * Opens a link in a browser. `replaces` is the credential the browser already holds for this Project: a browser
+     * Opens a link in a browser. `replaces` is the credential the browser already holds for this Computer: a browser
      * keeps one credential, so the new one replaces it at once and belongs to the same device while that device still
      * holds access; the device keeps the later of its term and this link's. A browser holding none, or whose device's
      * access ended, becomes a new device, described by this joining.
@@ -530,7 +530,7 @@ export class IdentityStorage {
         now: number,
         signal: AbortSignal,
     ): Promise<AnonymousIdentity | null> => {
-        const parsed = readProjectCredential(code);
+        const parsed = readTransferCredential(code);
         if (parsed?.kind !== "morty_transfer_v1" || parsed.computerId !== this.#computerId) {
             return null;
         }
@@ -574,7 +574,7 @@ export class IdentityStorage {
         const replaced = eq(browserCredential.tokenHash, replacedHash ?? "");
         // The replaced credential may already be replaced by a concurrent or retried redemption in the same browser;
         // the device it belongs to is kept while that device holds access. The read and the writes below run with no
-        // other request in between: the Project's Durable Object runs its SQL synchronously.
+        // other request in between: the Computer's Durable Object runs its SQL synchronously.
         const kept =
             replacedHash === null
                 ? undefined

@@ -13,7 +13,7 @@ export function computerRevokedAt(value: unknown): number | null {
 
 // The v1 representation is a projection of facts. Passing the clock explicitly
 // makes expiry independent of polling, maintenance writes, and component order.
-export function projectComputerPairingStatus(row: PairingComputerRow, now: number): PairingStatus {
+export function computerPairingStatus(row: PairingComputerRow, now: number): PairingStatus {
     const revokedAt = computerRevokedAt(row.revoked_at);
     if (revokedAt !== null) {
         return { status: "revoked", revokedAt: new Date(revokedAt).toISOString() };

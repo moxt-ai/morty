@@ -119,7 +119,7 @@ export function createComputerHttpRoutes(
                 v.pipe(v.number(), v.safeInteger(), v.minValue(1), v.maxValue(128 * 1024 * 1024)),
                 Number(context.req.query("maxBytes") ?? String(32 * 1024 * 1024)),
             );
-            return context.var.sessionOperations.readProjectSessionFile(
+            return context.var.sessionOperations.readSessionFile(
                 access.computerId,
                 decodeFileReadCommand(
                     JSON.stringify({

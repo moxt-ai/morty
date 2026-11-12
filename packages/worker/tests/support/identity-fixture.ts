@@ -70,7 +70,7 @@ async function startIdentityFixture(
         await relay.configure(baseConfiguration);
         let cloudBindings = await cloudflare.getBindings();
         let computerObjects = await cloudflare.getDurableObjectNamespace("COMPUTER_RELAY");
-        const chatProjects = {
+        const computerRelays = {
             getByName: (name: string, options?: Parameters<typeof computerObjects.get>[1]) =>
                 computerObjects.get(computerObjects.idFromName(name), options),
             idFromName: (name: string) => computerObjects.idFromName(name),
@@ -101,7 +101,7 @@ async function startIdentityFixture(
             ...baseConfiguration,
             APP_ORIGIN: appOrigin,
             ASSETS: { fetch: () => Promise.resolve(new Response()) },
-            COMPUTER_RELAY: chatProjects,
+            COMPUTER_RELAY: computerRelays,
         });
         /** Restarts the Worker with the changed deployment settings, keeping its storage. */
         const reconfigure = async () => {

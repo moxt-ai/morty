@@ -2,13 +2,13 @@ import * as v from "valibot";
 import type { AccountProvisioner } from "../../contracts/account-provisioning.ts";
 import type { CloudBindings } from "../../contracts/cloud-bindings.ts";
 import { accountComputerId, decodeComputerPlacement } from "../../contracts/computer-id.ts";
+import type { ComputerLocationHint } from "../../contracts/computer-location.ts";
 import {
     ComputerManagementError,
     computerManagementSchema,
     relayIdentifier,
 } from "../../contracts/computer-management.ts";
 import { computerAccountPath } from "../../contracts/computer-relay-http.ts";
-import type { ProjectLocationHint } from "../../contracts/project-location.ts";
 import { validateIdentifier } from "../../contracts/relay/pairing.ts";
 import { type ConfiguredRelayBindings, relayBindings } from "../../contracts/relay-bindings.ts";
 import { RequestDeadline } from "../../http/request-deadline.ts";
@@ -18,14 +18,14 @@ import { DatabaseError } from "../../infra/sql-database.ts";
 export class ComputerRelayGateway {
     readonly #bindings: ConfiguredRelayBindings;
     readonly #computerId: string;
-    readonly #locationHint: ProjectLocationHint;
+    readonly #locationHint: ComputerLocationHint;
 
     constructor(bindings: ConfiguredRelayBindings, computerId: string) {
         this.#bindings = bindings;
         this.#computerId = v.parse(relayIdentifier, computerId);
         const placement = decodeComputerPlacement(this.#computerId);
         if (placement === null) {
-            throw new ComputerManagementError("INVALID_ACCOUNT_ID", "The Project ID is invalid.", 400);
+            throw new ComputerManagementError("INVALID_ACCOUNT_ID", "The Computer ID is invalid.", 400);
         }
         this.#locationHint = placement.locationHint;
     }

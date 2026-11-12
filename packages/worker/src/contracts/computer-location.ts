@@ -1,5 +1,5 @@
 /** Where Cloudflare places a computer's Durable Object. */
-export type ProjectLocationHint = "wnam" | "apac" | "apac-ne" | "apac-se";
+export type ComputerLocationHint = "wnam" | "apac" | "apac-ne" | "apac-se";
 
 import * as v from "valibot";
 
@@ -7,7 +7,7 @@ const northeastAsia = new Set(["CN", "HK", "JP", "KP", "KR", "MO", "MN", "TW"]);
 const southeastAsia = new Set(["BN", "ID", "KH", "LA", "MM", "MY", "PH", "SG", "TH", "TL", "VN"]);
 
 // Use Cloudflare's request metadata, not client-supplied headers or JSON.
-export function projectLocationHint(request: Request): ProjectLocationHint | undefined {
+export function computerLocationHint(request: Request): ComputerLocationHint | undefined {
     const metadata = v.safeParse(
         v.object({
             continent: v.picklist(["AF", "AN", "AS", "EU", "NA", "OC", "SA"]),

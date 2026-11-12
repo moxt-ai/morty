@@ -5,8 +5,8 @@ it("Given a prompted local conversation, When the Session is renamed, Then the d
     const cancellation = new AbortController();
     await using relay = await startTestRelay();
     try {
-        const project = await relay.createOwner();
-        const runtime = await relay.connectAgent(project.computerId);
+        const owner = await relay.createOwner();
+        const runtime = await relay.connectAgent(owner.computerId);
         const { target: sessionTarget } = await runtime.createSession(
             {
                 harness: "claude",

@@ -7,7 +7,7 @@ import type { DurableObjectDatabase } from "../../../infra/durable-object-databa
 import { computerPairing, daemonCredential } from "../../../schema/pairing-do/index.ts";
 import { activeGeneration } from "./computer-generation.ts";
 
-/** The Projects in this storage whose credential matches. */
+/** The Computers in this storage whose credential matches. */
 export async function credentialMatches(
     database: DurableObjectDatabase,
     credential: ComputerIdentityCredential,

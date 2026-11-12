@@ -7,9 +7,9 @@ it("Given two harnesses create conversations, When I restore each conversation, 
     try {
         await using relay = await startTestRelay();
         const signal = AbortSignal.timeout(30_000);
-        const project = await relay.createOwner();
+        const owner = await relay.createOwner();
         const runtime = await relay.connectAgent(
-            project.computerId,
+            owner.computerId,
             ["claude", "codex"].map((harness) => ({
                 harness,
                 label: harness,
@@ -51,8 +51,8 @@ it("Given a harness announces its title during creation, When the caller creates
     try {
         await using relay = await startTestRelay();
         const signal = AbortSignal.timeout(30_000);
-        const project = await relay.createOwner();
-        const runtime = await relay.connectAgent(project.computerId, [
+        const owner = await relay.createOwner();
+        const runtime = await relay.connectAgent(owner.computerId, [
             {
                 harness: "claude",
                 label: "Controlled ACP",
@@ -88,10 +88,10 @@ it("Given two harnesses own the same native session ID without prior discovery, 
     try {
         await using relay = await startTestRelay();
         const signal = AbortSignal.timeout(30_000);
-        const project = await relay.createOwner();
+        const owner = await relay.createOwner();
         const sessionId = "same-native-session";
         const runtime = await relay.connectAgent(
-            project.computerId,
+            owner.computerId,
             [
                 { harness: "claude", label: "Claude Code" },
                 { harness: "codex", label: "Codex" },

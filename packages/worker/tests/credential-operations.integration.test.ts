@@ -95,8 +95,8 @@ test("Given a browser that joined through a link, When it asks for a Computer pa
             }),
             fixture.environment(),
         );
-    const project = `/computers/${owner.computerId}`;
-    const transfer = await request(`${project}/identity/transfers`, owner.token, "POST", {
+    const computerPath = `/computers/${owner.computerId}`;
+    const transfer = await request(`${computerPath}/identity/transfers`, owner.token, "POST", {
         operationId: crypto.randomUUID(),
     });
     const code = new URL(v.parse(v.object({ url: v.string() }), await transfer.json()).url).hash.slice(6);
@@ -112,7 +112,7 @@ test("Given a browser that joined through a link, When it asks for a Computer pa
 
     for (const token of [browser]) {
         for (const refused of [
-            await request(`${project}/management/pairing`, token, "POST", {
+            await request(`${computerPath}/management/pairing`, token, "POST", {
                 idempotencyKey: "shared-pairing",
             }),
             await request(`/chat/computers/${owner.computerId}/setup`, token, "POST", {
@@ -125,10 +125,11 @@ test("Given a browser that joined through a link, When it asks for a Computer pa
     }
     // Shared access still shares onward, as the sharing dialog offers, and still ends itself.
     expect(
-        (await request(`${project}/identity/transfers`, browser, "POST", { operationId: crypto.randomUUID() })).status,
+        (await request(`${computerPath}/identity/transfers`, browser, "POST", { operationId: crypto.randomUUID() }))
+            .status,
     ).toBe(201);
-    expect((await request(`${project}/identity/v1/browser-access`, browser, "DELETE")).status).toBe(204);
-    expect((await request(`${project}/session`, browser)).status).toBe(401);
+    expect((await request(`${computerPath}/identity/v1/browser-access`, browser, "DELETE")).status).toBe(204);
+    expect((await request(`${computerPath}/session`, browser)).status).toBe(401);
 });
 
 test("Given browser access granted through a link, When the access term its link granted passes, Then that access ends while the computer's own access stays", async () => {
@@ -206,14 +207,14 @@ test("Given browser access granted through a link, When that browser shares a ne
     expect(browserLink.accessExpiresAt).toBe(ownerLink.accessExpiresAt);
 });
 
-test("Given a well-formed Project identifier that was never created, When an unauthenticated request reaches it, Then it is not found and its Durable Object stores nothing", async () => {
+test("Given a well-formed Computer identifier that was never created, When an unauthenticated request reaches it, Then it is not found and its Durable Object stores nothing", async () => {
     const computerId = `prj_ap_01_${"N".repeat(24)}`;
     const response = await fetchPublicApplication(
         new Request(`${APP_ORIGIN}/morty/api/computers/${computerId}/session`),
         fixture.environment(),
     );
     expect(response.status).toBe(404);
-    expect(await response.json()).toMatchObject({ error: { code: "PROJECT_NOT_FOUND" } });
+    expect(await response.json()).toMatchObject({ error: { code: "COMPUTER_NOT_FOUND" } });
     const namespace = fixture.environment().COMPUTER_RELAY;
     const stored = await namespace
         .get(namespace.idFromName(computerId))

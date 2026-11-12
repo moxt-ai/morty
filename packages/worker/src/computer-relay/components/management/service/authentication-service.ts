@@ -14,7 +14,7 @@ import {
 import type { Session } from "../../../../contracts/authentication/session.ts";
 import type { ClientLocation } from "../../../../contracts/client-location.ts";
 import { ManagementError } from "../../../../contracts/management-error.ts";
-import { sharingOperationCredential } from "../../../../contracts/project-credential.ts";
+import { sharingOperationCredential } from "../../../../contracts/transfer-credential.ts";
 import type { ComputerIdentity } from "../entity/computer-identity.ts";
 import type {
     IdentityStorage,
@@ -40,7 +40,7 @@ type SessionResult =
       }
     | { readonly kind: "unauthenticated" }
     /**
-     * The credential was issued for this Project and no longer grants access: its access ended, or a newer credential
+     * The credential was issued for this Computer and no longer grants access: its access ended, or a newer credential
      * of its browser device replaced it. Both keep the response released pages read; the browser that holds a replaced
      * credential reads the newer one it stored.
      */
@@ -61,7 +61,7 @@ type Authorization<Operation extends CredentialOperation> =
           readonly token: string;
       }
     | { readonly kind: "unauthenticated" }
-    /** The credential was issued for this Project and its access was ended since. */
+    /** The credential was issued for this Computer and its access was ended since. */
     | { readonly kind: "revoked" }
     | { readonly kind: "forbidden" };
 
@@ -329,8 +329,8 @@ export class AuthenticationService {
     };
 
     /**
-     * Revokes all access except the computer's own credential. Project replacement keeps it until setup has saved the
-     * successor Project's identity, and then ends it.
+     * Revokes all access except the computer's own credential. Computer replacement keeps it until setup has saved the
+     * successor Computer's identity, and then ends it.
      */
     readonly revokeOtherAccess = async (
         token: string | undefined,

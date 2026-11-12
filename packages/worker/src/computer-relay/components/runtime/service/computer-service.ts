@@ -244,7 +244,7 @@ export class ComputerService {
 
     readonly revokeComputer = async (computerId: string, signal: AbortSignal): Promise<void> => {
         signal.throwIfAborted();
-        // The Project's Computer authority committed the revocation before notifying; acceptance and every
+        // The Computer's authority committed the revocation before notifying; acceptance and every
         // daemon message read that authority, so this notification only cleans up promptly. Its one fallible
         // step runs first, so a failed notification leaves this Relay unchanged for the caller to retry.
         // A delayed disconnect must not close the daemon that claimed a fresh authorization.
@@ -425,7 +425,7 @@ export class ComputerService {
         if (this.fenceDaemon(identity, socket)) {
             return false;
         }
-        // Disconnect delivery can fail after revocation commits in Project storage, and the Project can stop being
+        // Disconnect delivery can fail after revocation commits in Computer storage, and the Computer can stop being
         // served. Read that authority before every business message; the local connection fence alone is insufficient.
         try {
             if ((await this.#cx.services.credentials.activeGeneration(identity, signal)) === null) {

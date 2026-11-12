@@ -81,7 +81,7 @@ export class ComputerRelayStore {
     };
 
     readonly readComputerPairing = async (signal: AbortSignal): Promise<PairingComputerRow | null> =>
-        await this.#computers.readProjectPairing(signal);
+        await this.#computers.readCurrentPairing(signal);
 
     readonly readPairingCode = async (codeHash: string, signal: AbortSignal): Promise<PairingClaimRow | null> =>
         await this.#computers.readPairingCode(codeHash, signal);
@@ -96,7 +96,7 @@ export class ComputerRelayStore {
         }
         // Replays prove possession of the original code and must match the committed credential. Never rotate an
         // retired credential, extend the pairing deadline, or resurrect a revoked Computer.
-        const pairing = await this.#computers.readProjectPairing(signal);
+        const pairing = await this.#computers.readCurrentPairing(signal);
         return (
             pairing !== null &&
             pairing.expires_at > value.now &&

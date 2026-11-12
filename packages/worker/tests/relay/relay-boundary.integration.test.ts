@@ -1593,7 +1593,7 @@ describe.sequential("Relay Turn submission", () => {
     );
     // @no-uc: Technical regression; issuance tolerance must remain bounded and never extend expiry.
     it.each([
-        { offset: -30_001, code: "project_credential_invalid" },
+        { offset: -30_001, code: "credential_invalid" },
         { offset: 900_000, code: "credential_expired" },
     ])("refuses a credential at verifier offset $offset with $code", async ({ offset, code }) => {
         const runtime = await connectComputerDaemon(`clock-rejected-${Math.abs(offset)}`);
@@ -1614,7 +1614,7 @@ describe.sequential("Relay Turn submission", () => {
             vi.setSystemTime(Date.now() - 900);
             expect(
                 await responseJson(await runtime.submitComputerTurn("invalid-lifetime", () => credential), 401),
-            ).toMatchObject({ error: { code: "project_credential_invalid" } });
+            ).toMatchObject({ error: { code: "credential_invalid" } });
         } finally {
             runtime.daemon.close(1000, "Test complete");
         }
@@ -1666,13 +1666,13 @@ describe.sequential("Relay Turn submission", () => {
                     await runtime.submitComputerTurn("forged", (credential) => `${credential.slice(0, -6)}AAAAAA`),
                     401,
                 ),
-            ).toMatchObject({ error: { code: "project_credential_invalid" } });
+            ).toMatchObject({ error: { code: "credential_invalid" } });
             expect(
                 await responseJson(
                     await runtime.submitComputerTurn("wrong-session", (credential) => credential, "different-session"),
                     403,
                 ),
-            ).toMatchObject({ error: { code: "project_permission_denied" } });
+            ).toMatchObject({ error: { code: "session_permission_denied" } });
             vi.setSystemTime(new Date("2026-09-18T00:16:00.000Z"));
             expect(await responseJson(await runtime.submitComputerTurn("expired"), 401)).toMatchObject({
                 error: { code: "credential_expired" },
@@ -1687,7 +1687,7 @@ describe.sequential("Relay Turn submission", () => {
             const forged = await runtime.resignCredential(storedDigestSigner);
             expect(
                 await responseJson(await runtime.submitComputerTurn("stored-digest", () => forged), 401),
-            ).toMatchObject({ error: { code: "project_credential_invalid" } });
+            ).toMatchObject({ error: { code: "credential_invalid" } });
         } finally {
             runtime.daemon.close(1000, "Test complete");
         }

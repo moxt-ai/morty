@@ -11,8 +11,8 @@ export async function followSetupInstructions(options: {
     readonly harness: string;
     readonly instructionUrl: string;
     readonly runtime: SetupRuntime;
-    /** The user explicitly approved replacing this Project and revoking its shared access. */
-    readonly replaceProject?: string;
+    /** The user explicitly approved replacing this Computer and revoking its shared access. */
+    readonly replaceComputer?: string;
     /** The calling agent's shell environment, where its harness exposes the current session. */
     readonly agentEnvironment: Readonly<Record<string, string>>;
     readonly signal: AbortSignal;
@@ -33,7 +33,7 @@ export async function followSetupInstructions(options: {
     );
     const events: Readonly<Record<string, unknown>>[] = [];
     const exitCode = await runSetup(
-        [...args, ...(options.replaceProject === undefined ? [] : ["--replace-computer", options.replaceProject])],
+        [...args, ...(options.replaceComputer === undefined ? [] : ["--replace-computer", options.replaceComputer])],
         {
             ...(options.clock === undefined ? {} : { clock: options.clock }),
             state: options.state,

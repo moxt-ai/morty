@@ -41,11 +41,11 @@ async function responseJson(response: Response, status: number): Promise<Readonl
 async function pairedComputer(name: string) {
     const worker = createTestMortyRelayApp(new RelayAuthenticationConfiguration());
     const environment = bindings();
-    const project = await createOwner();
-    const headers = new Headers({ authorization: `Bearer ${project.token}`, "content-type": "application/json" });
+    const owner = await createOwner();
+    const headers = new Headers({ authorization: `Bearer ${owner.token}`, "content-type": "application/json" });
     const pairing = await responseJson(
         await ownerRequest(
-            new Request(`${relayOrigin}${MORTY_API_PREFIX}/computers/${project.computerId}/management/pairing`, {
+            new Request(`${relayOrigin}${MORTY_API_PREFIX}/computers/${owner.computerId}/management/pairing`, {
                 body: JSON.stringify({ idempotencyKey: name }),
                 headers,
                 method: "POST",

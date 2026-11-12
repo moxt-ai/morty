@@ -5,13 +5,13 @@ import type {
     RelayProtocolEnvironment as RelayHttpEnvironment,
     RelayRouteMiddleware,
 } from "../../../http/environment.ts";
+import { createComputerPairingRoutes } from "./computer-pairing-routes.ts";
 import { createComputerRoutes } from "./computer-routes.ts";
-import { createProjectComputerPairingRoutes } from "./project-computer-pairing-routes.ts";
 
 export function createRelayProtocolRoutes(middleware: RelayRouteMiddleware, runtimeMiddleware: RelayRouteMiddleware) {
     return new Hono<RelayHttpEnvironment>()
         .basePath(MORTY_API_PREFIX)
         .onError(rethrowHonoError)
-        .route("/v1", createProjectComputerPairingRoutes(middleware, runtimeMiddleware))
+        .route("/v1", createComputerPairingRoutes(middleware, runtimeMiddleware))
         .route("/channels", createComputerRoutes(...middleware));
 }
