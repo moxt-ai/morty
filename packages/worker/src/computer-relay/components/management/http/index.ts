@@ -1,15 +1,15 @@
-import { Hono, type MiddlewareHandler } from "hono";
+import { Hono } from "hono";
 import { bodyLimit } from "hono/body-limit";
 import { ManagementError } from "../../../../contracts/management-error.ts";
 import { computerFromPath } from "../../../../http/computer-target.ts";
 import { errorHandler } from "../../../../http/error-middleware.ts";
 import { requestTimeoutMiddleware } from "../../../../middleware/request-timeout-middleware.ts";
-import { requestHeaders } from "../../../middleware/request-headers.ts";
 import { createAuthenticationRoutes } from "./authentication-routes.ts";
 import { createComputerManagementRoutes } from "./computer-management-routes.ts";
 import type { ManagementHttpEnvironment } from "./management-http-environment.ts";
+import type { ManagementRouteContext } from "./route-context.ts";
 
-export function createManagementApplication(initialize: MiddlewareHandler<ManagementHttpEnvironment>) {
+export function createManagementApplication(ctx: ManagementRouteContext) {
     return new Hono<ManagementHttpEnvironment>()
         .onError(errorHandler)
         .use(
@@ -17,12 +17,10 @@ export function createManagementApplication(initialize: MiddlewareHandler<Manage
             requestTimeoutMiddleware<ManagementHttpEnvironment>(30_000),
             computerFromPath,
             bodyLimit({ maxSize: 3 * 1_024 * 1_024 }),
-            initialize,
-            requestHeaders,
         )
         .notFound(() => {
             throw new ManagementError("NOT_FOUND", "Not found.", 404);
         })
-        .route("/", createAuthenticationRoutes())
-        .route("/management", createComputerManagementRoutes());
+        .route("/", createAuthenticationRoutes(ctx))
+        .route("/management", createComputerManagementRoutes(ctx));
 }

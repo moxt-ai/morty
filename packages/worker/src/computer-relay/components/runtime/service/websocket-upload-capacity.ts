@@ -22,8 +22,8 @@ class UploadAdmissionError extends Error implements HttpError {
     });
 }
 
-/** One Computer application's authorized uploads share capacity across all browser connections. */
-export class BrowserUploadCapacity {
+/** One Computer application's authorized uploads share capacity across all WebSocket connections. */
+export class WebSocketUploadCapacity {
     #bytes = 0;
     #uploads = 0;
 
