@@ -152,6 +152,7 @@ test("Given an active Agent session holding an exclusive writer lock, When a pub
                 peer.send(
                     encodeSessionPromptCommand({
                         commandId: promptCommandId,
+                        requestId: promptCommandId,
                         disposition: SessionPromptDisposition.Append,
                         attachments: [],
                         kind: "session.prompt",

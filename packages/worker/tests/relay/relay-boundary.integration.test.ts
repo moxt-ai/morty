@@ -1501,6 +1501,7 @@ describe.sequential("Relay Turn submission", () => {
                 attachments: [{ byteLength: bytes.byteLength, contentKey, ...attachmentMetadata }],
                 kind: "session.prompt",
                 commandId: idempotencyKey,
+                requestId: idempotencyKey,
             });
             runtime.startTurn(idempotencyKey, "1");
             expect(await responseJson(await response, 200)).toMatchObject({ turnId: idempotencyKey });
@@ -1584,6 +1585,7 @@ describe.sequential("Relay Turn submission", () => {
                 expect(decodeServiceToDaemonMessage(first.message)).toMatchObject({
                     kind: "session.prompt",
                     commandId: "skewed-command",
+                    requestId: "skewed-command",
                 });
                 runtime.startTurn("skewed-command", "1");
                 expect(await responseJson(await submitted, 200)).toMatchObject({
@@ -1758,6 +1760,7 @@ describe.sequential("Relay Turn submission", () => {
             expect(decodeServiceToDaemonMessage(first.message)).toMatchObject({
                 kind: "session.prompt",
                 commandId: "direct-command",
+                requestId: "direct-command",
             });
             runtime.startTurn("direct-command", "1");
             expect(await responseJson(await submitted, 200)).toMatchObject({ state: { kind: "running" } });
@@ -1839,6 +1842,7 @@ describe.sequential("Relay Turn submission", () => {
                 throw new Error("Expected the long Turn to reach the Computer");
             }
             expect(delivered.prompt).toBe(longPrompt);
+            expect(delivered.requestId).toBe(delivered.commandId);
             daemon.send(
                 encodeSessionPromptAcceptedEvent({
                     kind: "session.prompt.accepted",
@@ -2186,6 +2190,7 @@ describe.sequential("Relay Turn submission", () => {
             const delivered = runtime.submitTurn("heartbeating-turn");
             expect(decodeServiceToDaemonMessage(await runtime.daemonMessages.next())).toMatchObject({
                 commandId: "heartbeating-turn",
+                requestId: "heartbeating-turn",
                 kind: "session.prompt",
             });
             runtime.startTurn("heartbeating-turn", "1");
@@ -2196,6 +2201,7 @@ describe.sequential("Relay Turn submission", () => {
             const stranded = runtime.submitTurn("stranded-turn");
             expect(decodeServiceToDaemonMessage(await runtime.daemonMessages.next())).toMatchObject({
                 commandId: "stranded-turn",
+                requestId: "stranded-turn",
                 kind: "session.prompt",
             });
 
@@ -2611,6 +2617,7 @@ describe("Computer prompt acknowledgements", () => {
             const first = runtime.submitComputerTurn("retried-command");
             expect(decodeServiceToDaemonMessage(await runtime.daemonMessages.next())).toMatchObject({
                 commandId: "retried-command",
+                requestId: "retried-command",
                 kind: "session.prompt",
             });
             runtime.startTurn("retried-command", "1");
@@ -2626,6 +2633,7 @@ describe("Computer prompt acknowledgements", () => {
             const retry = runtime.submitComputerTurn("retried-command");
             expect(decodeServiceToDaemonMessage(await runtime.daemonMessages.next())).toMatchObject({
                 commandId: "retried-command",
+                requestId: "retried-command",
                 kind: "session.prompt",
             });
             runtime.daemon.send(
@@ -2648,6 +2656,7 @@ describe("Computer prompt acknowledgements", () => {
             const retry = runtime.submitComputerTurn("settled-command");
             expect(decodeServiceToDaemonMessage(await runtime.daemonMessages.next())).toMatchObject({
                 commandId: "settled-command",
+                requestId: "settled-command",
                 kind: "session.prompt",
             });
             runtime.daemon.send(
@@ -2675,6 +2684,7 @@ describe("Computer prompt acknowledgements", () => {
             const submission = runtime.submitTurn("preparing-command");
             expect(decodeServiceToDaemonMessage(await runtime.daemonMessages.next())).toMatchObject({
                 commandId: "preparing-command",
+                requestId: "preparing-command",
                 kind: "session.prompt",
             });
             const cancel = runtime.sessionControlRequest("/turns/preparing-command/cancel", {});
